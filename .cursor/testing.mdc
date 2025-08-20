@@ -1,0 +1,15 @@
+---
+globs: test_*
+alwaysApply: false
+---
+No mocking data
+Test actual system behavior
+Quasi integration style testing
+Use pytest-watch in visible terminal
+Test real API endpoints and agent responses
+Use real tools and actual LangGraph executionNo mocking data
+Test actual system behavior
+Quasi integration style testing
+Use pytest-watch in visible terminal
+Test real API endpoints and agent responses
+Use real tools and actual LangGraph execution

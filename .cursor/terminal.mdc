@@ -1,0 +1,9 @@
+---
+alwaysApply: true
+---
+Observe these paths for using `cd`
+
+~/repos/yeshuman_agent_stack_clients/yeshuman = project root
+~/repos/yeshuman_agent_stack_clients/yeshuman/api = API directory
+~/repos/yeshuman_agent_stack_clients/talentco = neighbor project
+~/repos/yeshuman_agent_stack_clients/lumie = neighbor project

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "yeshuman-tools": {
+      "command": "python3",
+      "args": [
+        "/home/daryl/repos/yeshuman_agent_stack_clients/yeshuman/api/mcp_client.py"
+      ]
+    }
+  }
+}

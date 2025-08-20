@@ -1,0 +1,9 @@
+---
+description: managing python dependencies with uv (not pip)
+alwaysApply: false
+---
+Use uv commands exclusively
+uv add package-name (not uv pip install)
+uv remove package-name (not uv pip uninstall)
+uv sync (to install dependencies)
+uv run command (to run commands in venv)
