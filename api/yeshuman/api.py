@@ -33,17 +33,6 @@ class HealthResponse(Schema):
     agent_ready: bool
 
 
-class MCPRequest(Schema):
-    method: str
-    params: Dict[str, Any] = {}
-
-
-class MCPResponse(Schema):
-    success: bool
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-
-
 class A2ARequest(Schema):
     agent_id: str
     message: str
@@ -97,61 +86,18 @@ def chat(request, payload: ChatRequest):
         )
 
 
-# MCP Server endpoints
-@api.post("/mcp", response=MCPResponse)
-def mcp_handler(request, payload: MCPRequest):
-    """Handle MCP (Model Context Protocol) requests."""
-    try:
-        # **Question: What specific MCP methods do you want to support?**
-        # Common ones: list_tools, call_tool, list_resources, read_resource
-        
-        method = payload.method
-        params = payload.params
-        
-        if method == "list_tools":
-            # Return available tools
-            from tools.utilities import AVAILABLE_TOOLS
-            tools = [
-                {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "schema": tool.args_schema.model_json_schema() if tool.args_schema else {}
-                }
-                for tool in AVAILABLE_TOOLS
-            ]
-            return MCPResponse(success=True, result={"tools": tools})
-        
-        elif method == "call_tool":
-            # Call a specific tool
-            tool_name = params.get("name")
-            tool_args = params.get("arguments", {})
-            
-            from tools.utilities import AVAILABLE_TOOLS
-            tool = next((t for t in AVAILABLE_TOOLS if t.name == tool_name), None)
-            
-            if not tool:
-                return MCPResponse(success=False, error=f"Tool '{tool_name}' not found")
-            
-            result = tool.run(tool_args)
-            return MCPResponse(success=True, result={"output": result})
-        
-        else:
-            return MCPResponse(success=False, error=f"Unsupported method: {method}")
-    
-    except Exception as e:
-        return MCPResponse(success=False, error=str(e))
+# MCP endpoints are handled by the dedicated MCP API at /mcp/
+# See mcp/api.py for full MCP protocol implementation
 
 
-# A2A (Agent-to-Agent) endpoints
-@api.post("/a2a", response=A2AResponse)
-def a2a_handler(request, payload: A2ARequest):
-    """Handle Agent-to-Agent communication."""
+# A2A endpoints are handled by the dedicated A2A API at /a2a/
+# See a2a/api.py for full Agent-to-Agent protocol implementation
+# This endpoint remains for simple A2A message integration with the main agent
+
+@api.post("/a2a/simple", response=A2AResponse)
+def simple_a2a_handler(request, payload: A2ARequest):
+    """Simple A2A message handler that integrates with the main agent."""
     try:
-        # **Question: What A2A patterns do you want to support?**
-        # - Direct message passing?
-        # - Task delegation?
-        # - Resource sharing?
-        
         # Format message with agent context
         formatted_message = f"Message from agent '{payload.agent_id}': {payload.message}"
         if payload.context:

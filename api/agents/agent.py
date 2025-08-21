@@ -2,10 +2,14 @@
 YesHuman Agent - Simple functional approach using create_react_agent.
 """
 import os
+from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import SystemMessage
 from tools.utilities import AVAILABLE_TOOLS
+
+# Load environment variables
+load_dotenv()
 
 
 # System prompt for the agent

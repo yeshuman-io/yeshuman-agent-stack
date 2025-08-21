@@ -49,8 +49,90 @@ class EchoTool(BaseTool):
         return f"Echo: {message}"
 
 
-# Export available tools
-AVAILABLE_TOOLS = [
+class WeatherInput(BaseModel):
+    """Input for weather tool."""
+    location: str = Field(description="City name or location to get weather for")
+
+
+class WeatherTool(BaseTool):
+    """Mock weather tool for demonstration."""
+    
+    name: str = "weather"
+    description: str = "Get current weather information for a location. Returns mock weather data for demonstration."
+    args_schema: type[BaseModel] = WeatherInput
+    
+    def _run(self, location: str, run_manager: Optional = None) -> str:
+        """Execute the weather tool."""
+        # Mock weather data for demonstration
+        import random
+        
+        weather_conditions = ["sunny", "cloudy", "rainy", "partly cloudy", "windy"]
+        condition = random.choice(weather_conditions)
+        temperature = random.randint(15, 35)  # Celsius
+        
+        return f"Weather in {location}: {condition}, {temperature}°C"
+
+
+class TextAnalysisInput(BaseModel):
+    """Input for text analysis tool."""
+    text: str = Field(description="Text to analyze")
+    analysis_type: str = Field(default="summary", description="Type of analysis: 'summary', 'sentiment', 'wordcount'")
+
+
+class TextAnalysisTool(BaseTool):
+    """Text analysis tool for various text operations."""
+    
+    name: str = "text_analysis"
+    description: str = "Analyze text for various metrics like word count, sentiment, or generate summaries."
+    args_schema: type[BaseModel] = TextAnalysisInput
+    
+    def _run(self, text: str, analysis_type: str = "summary", run_manager: Optional = None) -> str:
+        """Execute the text analysis tool."""
+        if analysis_type == "wordcount":
+            word_count = len(text.split())
+            char_count = len(text)
+            return f"Word count: {word_count}, Character count: {char_count}"
+        
+        elif analysis_type == "sentiment":
+            # Simple mock sentiment analysis
+            positive_words = ["good", "great", "excellent", "amazing", "wonderful", "fantastic"]
+            negative_words = ["bad", "terrible", "awful", "horrible", "disappointing"]
+            
+            text_lower = text.lower()
+            positive_score = sum(1 for word in positive_words if word in text_lower)
+            negative_score = sum(1 for word in negative_words if word in text_lower)
+            
+            if positive_score > negative_score:
+                sentiment = "Positive"
+            elif negative_score > positive_score:
+                sentiment = "Negative"
+            else:
+                sentiment = "Neutral"
+                
+            return f"Sentiment: {sentiment} (Positive: {positive_score}, Negative: {negative_score})"
+        
+        elif analysis_type == "summary":
+            # Simple mock summary
+            sentences = text.split('.')
+            first_sentence = sentences[0].strip() if sentences else text[:100]
+            return f"Summary: {first_sentence}{'...' if len(text) > 100 else ''}"
+        
+        else:
+            return f"Unknown analysis type: {analysis_type}. Available types: wordcount, sentiment, summary"
+
+
+# Basic utility tools
+BASIC_TOOLS = [
     CalculatorTool(),
     EchoTool(),
+    WeatherTool(),
+    TextAnalysisTool(),
 ]
+
+# Export available tools (including agent tools if no circular import)
+try:
+    from tools.agent_tools import AGENT_TOOLS
+    AVAILABLE_TOOLS = BASIC_TOOLS + AGENT_TOOLS
+except ImportError:
+    # Fallback if circular import
+    AVAILABLE_TOOLS = BASIC_TOOLS

@@ -18,9 +18,11 @@ from django.contrib import admin
 from django.urls import path
 from .api import api
 from mcp.api import mcp_api
+from a2a.api import a2a_api
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', api.urls),
     path('mcp/', mcp_api.urls),
+    path('a2a/', a2a_api.urls),
 ]

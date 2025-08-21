@@ -62,11 +62,16 @@ Build applications for clients (and myself) using a set of opinions and rules em
 - **Python Environment**: Python 3.13.2 (latest available via UV)
 - **Django Project**: Django 5.2.5 initialized and tested
 - **Package Management**: UV virtual environment configured
-- **Project Structure**: Basic Django project created in `/api` directory
-- **MCP Server**: Model Context Protocol server implementation with Django Ninja
+- **Project Structure**: Complete Django project with organized API modules
+- **MCP Server**: Full Model Context Protocol implementation with JSON-RPC 2.0
 - **MCP Client**: Stdio-based MCP client for integration with MCP-compatible tools
-- **Tool System**: LangChain BaseTool integration with calculator and echo tools
-- **Testing Suite**: Comprehensive pytest test coverage for MCP functionality
+- **A2A Server**: Complete Agent-to-Agent communication protocol with REST API
+- **Tool System**: LangChain BaseTool integration (Calculator, Echo, Weather, Text Analysis, Agent Chat, Agent Capabilities)
+- **Agent Integration**: LangGraph ReAct agent with automatic tool discovery
+- **Testing Suite**: Comprehensive pytest test coverage (43 tests passing)
+- **Multi-Platform Access**: MCP, A2A, and REST API endpoints all functional
+- **Real-time Features**: SSE (Server-Sent Events) streaming for live updates
+- **API Structure**: Clean separation of concerns across three well-organized API modules
 
 ### 🔄 Current Structure
 ```
@@ -78,27 +83,38 @@ yeshuman/
     ├── mcp_client.py       # MCP stdio client for tool integration
     ├── mcp/                # MCP server implementation
     │   ├── server.py       # MCP protocol server logic
-    │   ├── api.py          # Django Ninja MCP endpoints
+    │   ├── api.py          # Django Ninja MCP endpoints (JSON-RPC 2.0)
     │   └── sse.py          # Server-Sent Events support
+    ├── a2a/                # Agent-to-Agent communication
+    │   ├── models.py       # Django ORM (Agent, A2AMessage, Task, Conversation)
+    │   ├── api.py          # A2A REST API endpoints
+    │   └── apps.py         # Django app configuration
+    ├── agents/             # LangGraph agent implementation
+    │   └── agent.py        # ReAct agent with tool integration
     ├── tools/              # Tool implementations
-    │   └── utilities.py    # Calculator and echo tools
-    ├── tests/              # Test suite
+    │   ├── utilities.py    # Calculator, Echo, Weather, Text Analysis
+    │   └── agent_tools.py  # Agent Chat, Agent Capabilities
+    ├── tests/              # Comprehensive test suite (43 tests)
     │   ├── test_mcp_server.py    # MCP server tests
-    │   └── test_mcp_sse.py       # SSE endpoint tests
+    │   ├── test_mcp_sse.py       # SSE endpoint tests
+    │   ├── test_a2a.py           # A2A protocol tests
+    │   ├── test_agent.py         # Agent functionality tests
+    │   └── test_api.py           # Main API tests
     └── yeshuman/           # Django project directory
         ├── settings.py     # Django configuration
         ├── urls.py         # URL routing
+        ├── api.py          # Main agent chat API
         ├── asgi.py         # ASGI config
         └── wsgi.py         # WSGI config
 ```
 
 ### 🎯 Next Steps
-1. Add essential dependencies (LangGraph, PostgreSQL)
-2. Configure Django settings for production readiness
-3. Create Django apps structure (core, api, etc.)
-4. Implement basic LangGraph agent
-5. Add A2A server capabilities
-6. Set up synthetic data generation
+1. **A2A Authentication**: Implement OAuth2 and API key authentication
+2. **Agent Cards**: Add A2A Agent Cards for enhanced discovery
+3. **Async Tasks**: Support long-running operations (>30s timeouts)
+4. **Enhanced Security**: TLS, rate limiting, and security headers
+5. **Production Config**: PostgreSQL, Redis, and deployment settings
+6. **Tool Expansion**: Add more LangChain BaseTools to the ecosystem
 
 ## Quick Start
 
@@ -113,9 +129,10 @@ python manage.py runserver      # Start development server
 
 ### Overview
 The YesHuman stack includes a complete MCP implementation:
-- **MCP Server**: Django-hosted server exposing tools via MCP protocol
+- **MCP Server**: Django-hosted server exposing tools via MCP protocol with JSON-RPC 2.0
 - **MCP Client**: Stdio-based client for integration with MCP-compatible tools (like Cursor IDE)
-- **Available Tools**: Calculator and Echo tools with full schema validation
+- **Available Tools**: Calculator, Echo, Weather, Text Analysis, Agent Chat, and Agent Capabilities
+- **Real-time Features**: SSE streaming support for live updates
 
 ### Starting the MCP Server
 
@@ -172,6 +189,30 @@ echo '{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "echo", "arg
 - **Input**: `{"message": "text_to_echo"}`
 - **Example**: `{"message": "Hello World"}` → `"Echo: Hello World"`
 
+#### Weather Tool
+- **Name**: `weather`
+- **Description**: Get current weather information for a location
+- **Input**: `{"location": "city_name"}`
+- **Example**: `{"location": "London"}` → Mock weather data
+
+#### Text Analysis Tool
+- **Name**: `text_analysis`
+- **Description**: Analyze text for sentiment, word count, or generate summaries
+- **Input**: `{"text": "text_to_analyze", "analysis_type": "summary|sentiment|wordcount"}`
+- **Example**: Provides detailed text analysis results
+
+#### Agent Chat Tool
+- **Name**: `agent_chat`
+- **Description**: Chat directly with the YesHuman LangGraph agent
+- **Input**: `{"message": "question_or_request"}`
+- **Example**: Direct conversation with your intelligent agent
+
+#### Agent Capabilities Tool
+- **Name**: `agent_capabilities`
+- **Description**: Get information about the agent's capabilities and features
+- **Input**: `{"detail_level": "summary|detailed"}`
+- **Example**: Returns comprehensive agent capability information
+
 ### Error Handling
 
 The MCP implementation handles various error conditions:
@@ -218,6 +259,44 @@ curl -X POST http://localhost:8000/mcp/tools/call \
   -d '{"tool_name": "calculator", "arguments": {"expression": "2+2"}}'
 ```
 
+## A2A (Agent-to-Agent) Communication
+
+### Overview
+The YesHuman stack includes a complete A2A server implementation for agent-to-agent communication:
+- **REST API**: Full CRUD operations for agents, messages, and tasks
+- **Agent Registry**: Dynamic agent registration and discovery
+- **Message System**: Asynchronous message passing between agents
+- **Task Management**: Task delegation and completion tracking
+- **Real-time Updates**: SSE streaming for live message feeds
+
+### Key Features
+- **Agent Registration**: Agents can register/unregister dynamically
+- **Capability Discovery**: Find agents by specific capabilities
+- **Message Queuing**: Persistent message storage and delivery
+- **Task Tracking**: Full lifecycle management of delegated tasks
+- **Heartbeat System**: Agent presence and health monitoring
+
+### API Endpoints
+```bash
+# Agent Management
+POST /a2a/agents/register          # Register new agent
+DELETE /a2a/agents/unregister/{name} # Unregister agent
+POST /a2a/agents/{name}/heartbeat  # Update agent heartbeat
+GET /a2a/discover                  # Discover available agents
+
+# Messaging
+POST /a2a/messages/send            # Send message to agent
+GET /a2a/messages/{agent_id}       # Get agent's messages
+POST /a2a/messages/{id}/read       # Mark message as read
+
+# Task Management
+POST /a2a/tasks/create             # Create new task
+GET /a2a/tasks/{agent_id}          # Get agent's tasks
+
+# Real-time Updates
+GET /a2a/stream/{agent_id}         # SSE stream of messages
+```
+
 ## Testing
 
 ### Running All Tests
@@ -229,11 +308,13 @@ pytest -v                      # Verbose output
 pytest tests/test_mcp_server.py # Run specific test file
 ```
 
-### Test Coverage
+### Test Coverage (43 Tests Passing)
 - **MCP Server Tests**: Protocol compliance, tool execution, error handling
-- **MCP SSE Tests**: Server-Sent Events functionality
-- **Tool Tests**: Individual tool functionality and validation
+- **MCP SSE Tests**: Server-Sent Events functionality  
+- **A2A Tests**: Agent registration, discovery, messaging, task management
+- **Agent Tests**: LangGraph agent functionality and tool integration
 - **API Tests**: Django Ninja endpoint testing
+- **Tool Tests**: Individual tool functionality and validation
 
 ### Continuous Testing
 ```bash
@@ -257,10 +338,15 @@ python manage.py migrate
 python manage.py runserver
 
 # Testing
-pytest                         # Run all tests
+pytest                         # Run all tests (43 tests)
 pytest -v                      # Verbose testing
 ptw                           # Watch mode testing
 
 # MCP client testing
 python mcp_client.py          # Interactive MCP client (expects stdin)
+echo '{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}' | python mcp_client.py
+
+# A2A testing
+curl -X GET http://localhost:8000/a2a/discover
+curl -X POST http://localhost:8000/a2a/agents/register -H "Content-Type: application/json" -d '{"name": "test-agent", "capabilities": ["test"]}'
 ```

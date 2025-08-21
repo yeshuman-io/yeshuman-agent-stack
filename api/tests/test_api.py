@@ -47,44 +47,14 @@ class TestAPI(TestCase):
         self.assertIn('response', data)
         self.assertIn('session_id', data)
     
-    def test_mcp_list_tools_endpoint(self):
-        """Test MCP list tools endpoint."""
-        payload = {"method": "list_tools"}
-        response = self.client.post(
-            '/api/mcp',
-            data=json.dumps(payload),
-            content_type='application/json'
-        )
-        self.assertEqual(response.status_code, 200)
-        
-        data = response.json()
-        self.assertTrue(data['success'])
-        self.assertIn('result', data)
-        self.assertIn('tools', data['result'])
-        self.assertGreater(len(data['result']['tools']), 0)
-    
-    def test_mcp_invalid_method(self):
-        """Test MCP with invalid method."""
-        payload = {"method": "invalid_method"}
-        response = self.client.post(
-            '/api/mcp',
-            data=json.dumps(payload),
-            content_type='application/json'
-        )
-        self.assertEqual(response.status_code, 200)
-        
-        data = response.json()
-        self.assertFalse(data['success'])
-        self.assertIn('error', data)
-    
-    def test_a2a_endpoint_structure(self):
-        """Test A2A endpoint returns proper structure."""
+    def test_simple_a2a_endpoint_structure(self):
+        """Test simple A2A endpoint returns proper structure."""
         payload = {
             "agent_id": "test-agent",
             "message": "Hello from another agent"
         }
         response = self.client.post(
-            '/api/a2a',
+            '/api/a2a/simple',
             data=json.dumps(payload),
             content_type='application/json'
         )
@@ -95,6 +65,19 @@ class TestAPI(TestCase):
         self.assertIn('response', data)
         self.assertIn('agent_id', data)
         self.assertEqual(data['agent_id'], 'test-agent')
+    
+    def test_api_structure_documentation(self):
+        """Test that API structure is properly documented."""
+        # MCP endpoints are now at /mcp/ (handled by mcp/api.py)
+        # A2A endpoints are now at /a2a/ (handled by a2a/api.py)
+        # Main API focuses on direct agent interaction
+        
+        # Test main API still has essential endpoints
+        response = self.client.get('/api/health')
+        self.assertEqual(response.status_code, 200)
+        
+        response = self.client.get('/api/test')
+        self.assertEqual(response.status_code, 200)
     
     def test_test_endpoint(self):
         """Test the test endpoint."""
