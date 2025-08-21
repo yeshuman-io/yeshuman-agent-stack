@@ -284,6 +284,11 @@ DELETE /a2a/agents/unregister/{name} # Unregister agent
 POST /a2a/agents/{name}/heartbeat  # Update agent heartbeat
 GET /a2a/discover                  # Discover available agents
 
+# Agent Cards (A2A Specification Compliance)
+GET /a2a/agent-card                # Get YesHuman agent card
+GET /a2a/agent-card/{agent_name}   # Get agent card by name
+POST /a2a/capability-match         # Match agent capabilities
+
 # Messaging
 POST /a2a/messages/send            # Send message to agent
 GET /a2a/messages/{agent_id}       # Get agent's messages
@@ -297,6 +302,26 @@ GET /a2a/tasks/{agent_id}          # Get agent's tasks
 GET /a2a/stream/{agent_id}         # SSE stream of messages
 ```
 
+### Agent Cards
+Following A2A specification standards, the YesHuman agent provides structured **Agent Cards** that describe:
+- **Capabilities**: Detailed specifications with input/output schemas
+- **Endpoints**: Available protocols (MCP, A2A, REST) with authentication methods
+- **Metadata**: Version, owner, documentation, SLA information  
+- **Tags**: Discovery and capability matching
+- **Status**: Real-time operational information
+
+Example agent card request:
+```bash
+curl http://localhost:8000/a2a/agent-card
+```
+
+Example capability matching:
+```bash
+curl -X POST http://localhost:8000/a2a/capability-match \
+  -H "Content-Type: application/json" \
+  -d '{"required_capabilities": ["calculation"], "required_tags": ["langgraph"]}'
+```
+
 ## Testing
 
 ### Running All Tests
@@ -308,7 +333,7 @@ pytest -v                      # Verbose output
 pytest tests/test_mcp_server.py # Run specific test file
 ```
 
-### Test Coverage (43 Tests Passing)
+### Test Coverage (46 Tests Passing)
 - **MCP Server Tests**: Protocol compliance, tool execution, error handling
 - **MCP SSE Tests**: Server-Sent Events functionality  
 - **A2A Tests**: Agent registration, discovery, messaging, task management
@@ -338,7 +363,7 @@ python manage.py migrate
 python manage.py runserver
 
 # Testing
-pytest                         # Run all tests (43 tests)
+pytest                         # Run all tests (46 tests)
 pytest -v                      # Verbose testing
 ptw                           # Watch mode testing
 
@@ -348,5 +373,7 @@ echo '{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}' | pytho
 
 # A2A testing
 curl -X GET http://localhost:8000/a2a/discover
+curl -X GET http://localhost:8000/a2a/agent-card
+curl -X POST http://localhost:8000/a2a/capability-match -H "Content-Type: application/json" -d '{"required_capabilities": ["calculation"]}'
 curl -X POST http://localhost:8000/a2a/agents/register -H "Content-Type: application/json" -d '{"name": "test-agent", "capabilities": ["test"]}'
 ```

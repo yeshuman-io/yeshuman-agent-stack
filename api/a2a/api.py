@@ -10,6 +10,8 @@ import json
 import uuid
 
 from .models import Agent, A2AMessage, Conversation, Task
+from .agent_cards import AgentCard, create_yeshuman_agent_card
+from .async_tasks import async_task_manager, TaskStatus
 
 # Create A2A API instance
 a2a_api = NinjaAPI(
@@ -420,3 +422,276 @@ def agent_discovery_stream(request):
     response['Access-Control-Allow-Origin'] = '*'
     
     return response
+
+
+# Agent Cards - A2A Specification Compliance
+class AgentCardResponse(Schema):
+    """Agent card response schema."""
+    agent_card: Dict[str, Any]
+    
+
+@a2a_api.get("/agent-card", response=AgentCardResponse, summary="Get YesHuman Agent Card")
+def get_agent_card(request):
+    """
+    Get the standardized A2A Agent Card for the YesHuman agent.
+    
+    Agent Cards provide a comprehensive description of agent capabilities,
+    endpoints, and metadata following A2A specification standards.
+    """
+    try:
+        agent_card = create_yeshuman_agent_card()
+        return {"agent_card": agent_card.model_dump()}
+    except Exception as e:
+        return a2a_api.create_response(
+            request,
+            {"error": f"Failed to generate agent card: {str(e)}"},
+            status=500
+        )
+
+
+@a2a_api.get("/agent-card/{agent_name}", response=AgentCardResponse, summary="Get Agent Card by Name")
+def get_agent_card_by_name(request, agent_name: str):
+    """
+    Get agent card for a specific registered agent.
+    
+    For now, this only supports the YesHuman agent, but could be extended
+    to support multiple agents in a multi-agent system.
+    """
+    try:
+        if agent_name.lower() in ["yeshuman", "yeshuman-agent"]:
+            agent_card = create_yeshuman_agent_card()
+            return {"agent_card": agent_card.model_dump()}
+        else:
+            return a2a_api.create_response(
+                request,
+                {"error": f"Agent '{agent_name}' not found"},
+                status=404
+            )
+    except Exception as e:
+        return a2a_api.create_response(
+            request,
+            {"error": f"Failed to get agent card: {str(e)}"},
+            status=500
+        )
+
+
+class CapabilityMatchRequest(Schema):
+    """Request schema for capability matching."""
+    required_capabilities: List[str] = []
+    required_tags: List[str] = []
+    
+
+class CapabilityMatchResponse(Schema):
+    """Response schema for capability matching."""
+    matches: bool
+    agent_card: Optional[Dict[str, Any]] = None
+    matching_capabilities: List[str] = []
+    matching_tags: List[str] = []
+
+
+@a2a_api.post("/capability-match", response=CapabilityMatchResponse, summary="Match Agent Capabilities")
+def match_capabilities(request, payload: CapabilityMatchRequest):
+    """
+    Check if the YesHuman agent matches specific capability requirements.
+    
+    This is useful for agent discovery and task routing in multi-agent systems.
+    """
+    try:
+        agent_card = create_yeshuman_agent_card()
+        
+        # Check capability matches
+        matching_capabilities = []
+        for req_cap in payload.required_capabilities:
+            if agent_card.matches_capability(req_cap):
+                matching_capabilities.append(req_cap)
+        
+        # Check tag matches
+        matching_tags = []
+        if payload.required_tags:
+            matching_tags = list(set(payload.required_tags) & set(agent_card.tags))
+        
+        # Determine if it's a match
+        caps_match = len(matching_capabilities) == len(payload.required_capabilities) if payload.required_capabilities else True
+        tags_match = len(matching_tags) > 0 if payload.required_tags else True
+        
+        matches = caps_match and tags_match
+        
+        return {
+            "matches": matches,
+            "agent_card": agent_card.model_dump() if matches else None,
+            "matching_capabilities": matching_capabilities,
+            "matching_tags": matching_tags
+        }
+        
+    except Exception as e:
+        return a2a_api.create_response(
+            request,
+            {"error": f"Capability matching failed: {str(e)}"},
+            status=500
+        )
+
+
+# Async Task Management - Long-running Operations
+class AsyncTaskRequest(Schema):
+    """Request schema for creating async tasks."""
+    task_type: str
+    params: Dict[str, Any] = {}
+    callback_url: Optional[str] = None
+
+
+class AsyncTaskResponse(Schema):
+    """Response schema for async task operations."""
+    task_id: str
+    status: str
+    message: str
+
+
+class TaskStatusResponse(Schema):
+    """Response schema for task status queries."""
+    task_id: str
+    status: str
+    progress: float
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+@a2a_api.post("/async-tasks", response=AsyncTaskResponse, summary="Create Async Task")
+def create_async_task(request, payload: AsyncTaskRequest):
+    """
+    Create a long-running async task that can exceed normal HTTP timeouts.
+    
+    Supports task types:
+    - long_calculation: Extended mathematical computations
+    - data_analysis: Large dataset processing
+    - web_research: Multi-source information gathering
+    - file_processing: Large file analysis
+    """
+    try:
+        task_id = async_task_manager.create_task(
+            task_type=payload.task_type,
+            params=payload.params,
+            callback_url=payload.callback_url
+        )
+        
+        return {
+            "task_id": task_id,
+            "status": "created",
+            "message": f"Async task '{payload.task_type}' created successfully"
+        }
+        
+    except ValueError as e:
+        return a2a_api.create_response(
+            request,
+            {"error": str(e)},
+            status=400
+        )
+    except Exception as e:
+        return a2a_api.create_response(
+            request,
+            {"error": f"Failed to create async task: {str(e)}"},
+            status=500
+        )
+
+
+@a2a_api.get("/async-tasks/{task_id}", response=TaskStatusResponse, summary="Get Task Status")
+def get_task_status(request, task_id: str):
+    """
+    Get the current status and progress of an async task.
+    
+    Returns real-time progress updates and results when completed.
+    """
+    try:
+        task_result = async_task_manager.get_task_status(task_id)
+        
+        if not task_result:
+            return a2a_api.create_response(
+                request,
+                {"error": f"Task '{task_id}' not found"},
+                status=404
+            )
+        
+        return {
+            "task_id": task_result.task_id,
+            "status": task_result.status.value,
+            "progress": task_result.progress,
+            "result": task_result.result,
+            "error": task_result.error,
+            "started_at": task_result.started_at.isoformat() if task_result.started_at else None,
+            "completed_at": task_result.completed_at.isoformat() if task_result.completed_at else None
+        }
+        
+    except Exception as e:
+        return a2a_api.create_response(
+            request,
+            {"error": f"Failed to get task status: {str(e)}"},
+            status=500
+        )
+
+
+@a2a_api.delete("/async-tasks/{task_id}", response=AsyncTaskResponse, summary="Cancel Task")
+def cancel_task(request, task_id: str):
+    """
+    Cancel a running async task.
+    
+    Tasks that are already completed cannot be cancelled.
+    """
+    try:
+        success = async_task_manager.cancel_task(task_id)
+        
+        if success:
+            return {
+                "task_id": task_id,
+                "status": "cancelled",
+                "message": "Task cancelled successfully"
+            }
+        else:
+            return a2a_api.create_response(
+                request,
+                {"error": f"Task '{task_id}' not found or cannot be cancelled"},
+                status=404
+            )
+            
+    except Exception as e:
+        return a2a_api.create_response(
+            request,
+            {"error": f"Failed to cancel task: {str(e)}"},
+            status=500
+        )
+
+
+class TaskTypesResponse(Schema):
+    """Response schema for available task types."""
+    task_types: List[Dict[str, str]]
+
+
+@a2a_api.get("/task-types", response=TaskTypesResponse, summary="List Available Task Types")
+def list_task_types(request):
+    """
+    List all available async task types and their descriptions.
+    """
+    task_types = [
+        {
+            "type": "long_calculation",
+            "description": "Extended mathematical computations that may take several minutes",
+            "example_params": '{"expression": "2+2", "iterations": 1000}'
+        },
+        {
+            "type": "data_analysis", 
+            "description": "Large dataset processing and statistical analysis",
+            "example_params": '{"data_size": 10000, "analysis_type": "statistical"}'
+        },
+        {
+            "type": "web_research",
+            "description": "Multi-source information gathering and research",
+            "example_params": '{"query": "artificial intelligence", "num_sources": 10}'
+        },
+        {
+            "type": "file_processing",
+            "description": "Large file analysis and content extraction",
+            "example_params": '{"file_type": "text", "file_size_mb": 100}'
+        }
+    ]
+    
+    return {"task_types": task_types}

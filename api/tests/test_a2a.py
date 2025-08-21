@@ -336,3 +336,167 @@ class TestA2AModels(TestCase):
         self.assertEqual(task.progress, 100)
         self.assertEqual(task.result, result_data)
         self.assertIsNotNone(task.completed_at)
+
+
+class TestA2AAgentCards(TestCase):
+    """Test A2A Agent Cards functionality."""
+    
+    def setUp(self):
+        """Set up test client."""
+        self.client = Client()
+    
+    def test_agent_card_endpoint(self):
+        """Test agent card endpoint returns YesHuman agent card."""
+        response = self.client.get('/a2a/agent-card')
+        self.assertEqual(response.status_code, 200)
+        
+        data = response.json()
+        self.assertIn('agent_card', data)
+        
+        agent_card = data['agent_card']
+        self.assertEqual(agent_card['name'], 'YesHuman Agent')
+        self.assertIn('capabilities', agent_card)
+        self.assertIn('endpoints', agent_card)
+        self.assertIn('tags', agent_card)
+        
+        # Check that it has expected capabilities
+        capability_names = [cap['name'] for cap in agent_card['capabilities']]
+        self.assertIn('calculation', capability_names)
+        self.assertIn('conversation', capability_names)
+        self.assertIn('weather_lookup', capability_names)
+        self.assertIn('text_analysis', capability_names)
+    
+    def test_agent_card_by_name(self):
+        """Test getting agent card by name."""
+        # Test YesHuman agent
+        response = self.client.get('/a2a/agent-card/yeshuman')
+        self.assertEqual(response.status_code, 200)
+        
+        data = response.json()
+        self.assertIn('agent_card', data)
+        self.assertEqual(data['agent_card']['name'], 'YesHuman Agent')
+        
+        # Test non-existent agent
+        response = self.client.get('/a2a/agent-card/nonexistent')
+        self.assertEqual(response.status_code, 404)
+    
+    def test_capability_matching(self):
+        """Test capability matching endpoint."""
+        import json
+        
+        # Test matching existing capabilities
+        payload = {
+            "required_capabilities": ["calculation", "conversation"],
+            "required_tags": ["calculation", "conversation"]
+        }
+        response = self.client.post(
+            '/a2a/capability-match',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        data = response.json()
+        self.assertTrue(data['matches'])
+        self.assertIn('agent_card', data)
+        self.assertEqual(len(data['matching_capabilities']), 2)
+        self.assertGreater(len(data['matching_tags']), 0)
+        
+        # Test non-matching capabilities
+        payload = {
+            "required_capabilities": ["nonexistent_capability"],
+            "required_tags": []
+        }
+        response = self.client.post(
+            '/a2a/capability-match',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        data = response.json()
+        self.assertFalse(data['matches'])
+        self.assertIsNone(data['agent_card'])
+        self.assertEqual(len(data['matching_capabilities']), 0)
+
+
+class TestA2AAsyncTasks(TestCase):
+    """Test A2A Async Tasks functionality."""
+    
+    def setUp(self):
+        """Set up test client."""
+        self.client = Client()
+    
+    def test_list_task_types(self):
+        """Test listing available task types."""
+        response = self.client.get('/a2a/task-types')
+        self.assertEqual(response.status_code, 200)
+        
+        data = response.json()
+        self.assertIn('task_types', data)
+        
+        task_types = data['task_types']
+        self.assertGreater(len(task_types), 0)
+        
+        # Check required fields
+        for task_type in task_types:
+            self.assertIn('type', task_type)
+            self.assertIn('description', task_type)
+            self.assertIn('example_params', task_type)
+    
+    def test_create_async_task(self):
+        """Test creating an async task."""
+        import json
+        
+        payload = {
+            "task_type": "long_calculation",
+            "params": {"expression": "2+2", "iterations": 5}
+        }
+        response = self.client.post(
+            '/a2a/async-tasks',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        data = response.json()
+        self.assertIn('task_id', data)
+        self.assertEqual(data['status'], 'created')
+        self.assertIn('message', data)
+        
+        # Test task status endpoint
+        task_id = data['task_id']
+        status_response = self.client.get(f'/a2a/async-tasks/{task_id}')
+        self.assertEqual(status_response.status_code, 200)
+        
+        status_data = status_response.json()
+        self.assertEqual(status_data['task_id'], task_id)
+        self.assertIn(status_data['status'], ['pending', 'running', 'completed'])
+        self.assertGreaterEqual(status_data['progress'], 0.0)
+        self.assertLessEqual(status_data['progress'], 100.0)
+    
+    def test_invalid_task_type(self):
+        """Test creating task with invalid type."""
+        import json
+        
+        payload = {
+            "task_type": "nonexistent_task",
+            "params": {}
+        }
+        response = self.client.post(
+            '/a2a/async-tasks',
+            data=json.dumps(payload),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400)
+        
+        data = response.json()
+        self.assertIn('error', data)
+    
+    def test_nonexistent_task_status(self):
+        """Test getting status of nonexistent task."""
+        response = self.client.get('/a2a/async-tasks/nonexistent-task-id')
+        self.assertEqual(response.status_code, 404)
+        
+        data = response.json()
+        self.assertIn('error', data)
