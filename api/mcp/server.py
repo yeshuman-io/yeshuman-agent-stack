@@ -2,24 +2,24 @@
 MCP Server implementation using Django Ninja and BaseTool tools.
 """
 from ninja import NinjaAPI, Schema
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from tools.utilities import AVAILABLE_TOOLS
 from langchain_core.tools import BaseTool
 import json
-
 
 class MCPRequest(Schema):
     """Base MCP request schema."""
     method: str
     params: Optional[Dict[str, Any]] = {}
-    id: Optional[str] = None
+    id: Optional[Union[str, int]] = None
 
 
 class MCPResponse(Schema):
     """Base MCP response schema."""
+    jsonrpc: str = "2.0"
     result: Optional[Dict[str, Any]] = None
     error: Optional[Dict[str, Any]] = None
-    id: Optional[str] = None
+    id: Optional[Union[str, int]] = None
 
 
 class MCPServer:
@@ -79,14 +79,30 @@ class MCPServer:
     def handle_request(self, request: MCPRequest) -> MCPResponse:
         """Handle an MCP request."""
         try:
-            if request.method == "tools/list":
+            if request.method == "initialize":
+                # Handle MCP initialization
+                result = {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "tools": {}
+                    },
+                    "serverInfo": {
+                        "name": "YesHuman",
+                        "version": "1.0.0"
+                    }
+                }
+            elif request.method == "tools/list":
                 result = self.list_tools()
             elif request.method == "tools/call":
                 name = request.params.get("name")
                 arguments = request.params.get("arguments", {})
                 result = self.call_tool(name, arguments)
+            elif request.method == "notifications/initialized":
+                # Handle initialization complete notification
+                result = {}  # Empty response for notification
             else:
                 return MCPResponse(
+                    jsonrpc="2.0",
                     error={
                         "code": -32601,
                         "message": f"Method not found: {request.method}"
@@ -94,10 +110,11 @@ class MCPServer:
                     id=request.id
                 )
             
-            return MCPResponse(result=result, id=request.id)
+            return MCPResponse(jsonrpc="2.0", result=result, id=request.id)
         
         except Exception as e:
             return MCPResponse(
+                jsonrpc="2.0",
                 error={
                     "code": -32603,
                     "message": str(e)

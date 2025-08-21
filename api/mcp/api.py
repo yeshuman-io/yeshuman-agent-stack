@@ -36,7 +36,9 @@ def mcp_endpoint(request):
         
         # Return as streaming response for MCP compatibility
         def generate_response():
-            yield json.dumps(response.dict())
+            # Convert to dict and exclude None values
+            response_dict = response.dict(exclude_none=True)
+            yield json.dumps(response_dict)
         
         return StreamingHttpResponse(
             generate_response(),
@@ -45,6 +47,7 @@ def mcp_endpoint(request):
         
     except json.JSONDecodeError:
         error_response = {
+            "jsonrpc": "2.0",
             "error": {
                 "code": -32700,
                 "message": "Parse error"
@@ -57,6 +60,7 @@ def mcp_endpoint(request):
         )
     except Exception as e:
         error_response = {
+            "jsonrpc": "2.0",
             "error": {
                 "code": -32603,
                 "message": f"Internal error: {str(e)}"
