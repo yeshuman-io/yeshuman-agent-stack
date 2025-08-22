@@ -10,8 +10,10 @@ import json
 import uuid
 
 from .models import Agent, A2AMessage, Conversation, Task
+from django.db import models
 from .agent_cards import AgentCard, create_yeshuman_agent_card
 from .async_tasks import async_task_manager, TaskStatus
+from agents.agent import invoke_agent, astream_agent
 
 # Create A2A API instance
 a2a_api = NinjaAPI(
@@ -20,6 +22,183 @@ a2a_api = NinjaAPI(
     description="Agent-to-Agent communication server",
     urls_namespace="a2a"
 )
+# Minimal JSON-RPC 2.0 handler to support a2a-inspector chat
+class JSONRPCRequest(Schema):
+    jsonrpc: str
+    method: str
+    id: str
+    params: Dict[str, Any]
+
+
+@a2a_api.post("/", summary="A2A JSON-RPC endpoint (message/send)")
+def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
+    try:
+        if payload.jsonrpc != "2.0":
+            return {"jsonrpc": "2.0", "id": payload.id, "error": {"code": -32600, "message": "Invalid Request"}}
+
+        if payload.method == "message/send":
+            message = payload.params.get("message", {})
+            user_text = ""
+            for part in message.get("parts", []):
+                if isinstance(part, dict) and part.get("kind") == "text":
+                    user_text = part.get("text", "")
+                    break
+
+            result = invoke_agent(user_text)
+            if not result.get("success"):
+                return {"jsonrpc": "2.0", "id": payload.id, "error": {"code": -32000, "message": result.get("error", "Agent error")}}
+
+            response_message = {
+                "messageId": str(uuid.uuid4()),
+                "role": "agent",
+                "parts": [{"kind": "text", "text": result["response"]}],
+            }
+            return {"jsonrpc": "2.0", "id": payload.id, "result": response_message}
+
+        elif payload.method == "message/stream":
+            message = payload.params.get("message", {})
+            user_text = ""
+            for part in message.get("parts", []):
+                if isinstance(part, dict) and part.get("kind") == "text":
+                    user_text = part.get("text", "")
+                    break
+
+            def event_stream():
+                try:
+                    # First, send initial Task object
+                    task_id = str(uuid.uuid4())
+                    context_id = str(uuid.uuid4())
+                    
+                    initial_task = {
+                        "kind": "task",
+                        "id": task_id,
+                        "contextId": context_id,
+                        "status": {
+                            "state": "working",
+                            "timestamp": timezone.now().isoformat()
+                        },
+                        "history": [
+                            {
+                                "messageId": message.get("messageId", str(uuid.uuid4())),
+                                "role": "user", 
+                                "parts": [{"kind": "text", "text": user_text}]
+                            }
+                        ]
+                    }
+                    obj = {"jsonrpc": "2.0", "id": payload.id, "result": initial_task}
+                    yield f"data: {json.dumps(obj)}\n\n"
+                    
+                    # Stream agent response token by token
+                    import asyncio
+                    
+                    async def async_streaming():
+                        try:
+                            async for token in astream_agent(user_text):
+                                response_message = {
+                                    "kind": "message",
+                                    "messageId": str(uuid.uuid4()),
+                                    "role": "agent",
+                                    "parts": [{"kind": "text", "text": token}],
+                                    "taskId": task_id
+                                }
+                                obj = {"jsonrpc": "2.0", "id": payload.id, "result": response_message}
+                                yield f"data: {json.dumps(obj)}\n\n"
+                        except Exception as stream_e:
+                            error_obj = {"jsonrpc": "2.0", "id": payload.id, "error": {"code": -32000, "message": f"Streaming error: {str(stream_e)}"}}
+                            yield f"data: {json.dumps(error_obj)}\n\n"
+                    
+                    # Run async streaming in the sync context
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        async_gen = async_streaming()
+                        while True:
+                            try:
+                                chunk = loop.run_until_complete(async_gen.__anext__())
+                                yield chunk
+                            except StopAsyncIteration:
+                                break
+                    finally:
+                        loop.close()
+                    
+                    # Send final status update
+                    status_update = {
+                        "kind": "status-update",
+                        "taskId": task_id,
+                        "contextId": context_id,
+                        "final": True,
+                        "status": {
+                            "state": "completed",
+                            "timestamp": timezone.now().isoformat()
+                        }
+                    }
+                    obj = {"jsonrpc": "2.0", "id": payload.id, "result": status_update}
+                    yield f"data: {json.dumps(obj)}\n\n"
+                    
+                except Exception as inner_e:
+                    error_obj = {"jsonrpc": "2.0", "id": payload.id, "error": {"code": -32603, "message": f"Internal error: {str(inner_e)}"}}
+                    yield f"data: {json.dumps(error_obj)}\n\n"
+
+            response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+            response['Cache-Control'] = 'no-cache'
+            response['Connection'] = 'keep-alive'
+            return response
+
+        return {"jsonrpc": "2.0", "id": payload.id, "error": {"code": -32601, "message": "Method not found"}}
+    except Exception as e:
+        return {"jsonrpc": "2.0", "id": payload.id, "error": {"code": -32603, "message": f"Internal error: {str(e)}"}}
+
+
+@a2a_api.post("/stream", summary="A2A JSON-RPC streaming endpoint (message/stream)")
+def a2a_jsonrpc_stream_handler(request):
+    try:
+        body = json.loads(request.body.decode("utf-8")) if request.body else {}
+        jsonrpc = body.get("jsonrpc")
+        method = body.get("method")
+        request_id = body.get("id", str(uuid.uuid4()))
+        params = body.get("params", {})
+
+        if jsonrpc != "2.0" or method != "message/stream":
+            return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": "Method not found"}}
+
+        message = params.get("message", {})
+        user_text = ""
+        for part in message.get("parts", []):
+            if isinstance(part, dict) and part.get("type") in ["text", "text/plain"]:
+                user_text = part.get("text") or part.get("data") or ""
+                break
+
+        def event_stream():
+            try:
+                result = invoke_agent(user_text)
+                if not result.get("success"):
+                    error_obj = {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32000, "message": result.get("error", "Agent error")}}
+                    yield f"data: {json.dumps(error_obj)}\n\n"
+                    return
+
+                full_text = str(result["response"]) if result.get("response") is not None else ""
+
+                # Stream in simple chunks to demonstrate streaming compatibility
+                chunks = [full_text[i:i+200] for i in range(0, len(full_text), 200)] or [""]
+                for idx, chunk in enumerate(chunks):
+                    response_message = {
+                        "id": str(uuid.uuid4()),
+                        "role": "assistant",
+                        "parts": [{"type": "text/plain", "data": chunk}],
+                        "is_final": idx == len(chunks) - 1,
+                    }
+                    obj = {"jsonrpc": "2.0", "id": request_id, "result": response_message}
+                    yield f"data: {json.dumps(obj)}\n\n"
+            except Exception as inner_e:
+                error_obj = {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32603, "message": f"Internal error: {str(inner_e)}"}}
+                yield f"data: {json.dumps(error_obj)}\n\n"
+
+        response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+        response['Cache-Control'] = 'no-cache'
+        response['Connection'] = 'keep-alive'
+        return response
+    except Exception as e:
+        return {"jsonrpc": "2.0", "id": str(uuid.uuid4()), "error": {"code": -32603, "message": f"Internal error: {str(e)}"}}
 
 
 # Schemas
@@ -48,6 +227,7 @@ class MessageRequest(Schema):
     priority: int = 3
     response_required: bool = False
     conversation_id: Optional[str] = None
+    callback_url: Optional[str] = None
 
 
 class MessageResponse(Schema):
@@ -60,6 +240,8 @@ class MessageResponse(Schema):
     status: str
     priority: int
     created_at: str
+    delivered_at: Optional[str] = None
+    read_at: Optional[str] = None
     conversation_id: Optional[str]
 
 
@@ -207,9 +389,15 @@ def send_message(request, payload: MessageRequest):
             subject=payload.subject,
             payload=payload.payload,
             priority=payload.priority,
-            response_required=payload.response_required
+            response_required=payload.response_required,
+            callback_url=payload.callback_url
         )
         
+        # Trigger callback (sent) in background if provided
+        if message.callback_url:
+            import threading
+            threading.Thread(target=_send_message_callback_safe, args=(str(message.id), 'sent')).start()
+
         return MessageResponse(
             id=str(message.id),
             from_agent=message.from_agent.name,
@@ -220,6 +408,8 @@ def send_message(request, payload: MessageRequest):
             status=message.status,
             priority=message.priority,
             created_at=message.created_at.isoformat(),
+            delivered_at=message.delivered_at.isoformat() if message.delivered_at else None,
+            read_at=message.read_at.isoformat() if message.read_at else None,
             conversation_id=str(message.conversation.id) if message.conversation else None
         )
     except Exception as e:
@@ -261,9 +451,47 @@ def mark_message_read(request, message_id: str):
     try:
         message = get_object_or_404(A2AMessage, id=message_id)
         message.mark_read()
+        # Callback for read
+        if message.callback_url:
+            import threading
+            threading.Thread(target=_send_message_callback_safe, args=(str(message.id), 'read')).start()
         return {"success": True, "status": message.status}
     except Exception as e:
         return {"error": str(e)}
+
+
+# --- Message Callback Utilities ---
+def _send_message_callback_safe(message_id: str, event: str):
+    """Send callback notification safely, updating delivery attempts and errors."""
+    try:
+        from .models import A2AMessage
+        import requests
+        from django.db import transaction
+        msg = A2AMessage.objects.get(id=message_id)
+        if not msg.callback_url:
+            return
+        payload = {
+            "message_id": str(msg.id),
+            "event": event,
+            "status": msg.status,
+            "from_agent": msg.from_agent.name,
+            "to_agent": msg.to_agent.name if msg.to_agent else None,
+            "message_type": msg.message_type,
+            "subject": msg.subject,
+            "created_at": msg.created_at.isoformat(),
+            "delivered_at": msg.delivered_at.isoformat() if msg.delivered_at else None,
+            "read_at": msg.read_at.isoformat() if msg.read_at else None,
+        }
+        try:
+            requests.post(msg.callback_url, json=payload, timeout=5)
+            with transaction.atomic():
+                A2AMessage.objects.filter(id=message_id).update(delivery_attempts=models.F('delivery_attempts') + 1, last_error="")
+        except Exception as cb_err:
+            with transaction.atomic():
+                A2AMessage.objects.filter(id=message_id).update(delivery_attempts=models.F('delivery_attempts') + 1, last_error=str(cb_err))
+    except Exception:
+        # Fail silently; we do not want callbacks to crash the request
+        pass
 
 
 # Task Management Endpoints
@@ -376,6 +604,10 @@ def agent_message_stream(request, agent_name: str):
                 
                 # Mark as delivered
                 message.mark_delivered()
+                # Callback for delivered
+                if message.callback_url:
+                    import threading
+                    threading.Thread(target=_send_message_callback_safe, args=(str(message.id), 'delivered')).start()
                 
         except Agent.DoesNotExist:
             error_data = {'type': 'error', 'message': f'Agent {agent_name} not found'}
@@ -447,6 +679,62 @@ def get_agent_card(request):
             {"error": f"Failed to generate agent card: {str(e)}"},
             status=500
         )
+
+
+@a2a_api.get("/agent-card/a2a", summary="Get A2A-spec Agent Card (for inspector)")
+def get_agent_card_a2a(request):
+    """Return an A2A-spec AgentCard shape expected by a2a-inspector."""
+    try:
+        card = {
+            "name": "YesHuman Agent",
+            "version": "1.0.0",
+            "description": "Multi-platform LangGraph ReAct agent with comprehensive tool integration and protocol support",
+            "url": "http://localhost:8000/a2a/",
+            "preferredTransport": "JSONRPC",
+            "protocolVersion": "0.3.0",
+            "capabilities": {"streaming": True},
+            "defaultInputModes": ["text/plain"],
+            "defaultOutputModes": ["text/plain"],
+            "skills": [
+                {
+                    "id": "conversation",
+                    "name": "Conversation",
+                    "description": "Natural language conversation and question answering",
+                    "tags": ["nlp", "chat", "qa"],
+                    "inputModes": ["text/plain"],
+                    "outputModes": ["text/plain"],
+                },
+                {
+                    "id": "calculation",
+                    "name": "Calculation",
+                    "description": "Perform mathematical calculations and computations",
+                    "tags": ["math", "computation"],
+                    "inputModes": ["text/plain"],
+                    "outputModes": ["text/plain"],
+                },
+                {
+                    "id": "weather_lookup",
+                    "name": "Weather Lookup",
+                    "description": "Get weather information for locations",
+                    "tags": ["weather", "lookup", "external-data"],
+                    "inputModes": ["text/plain"],
+                    "outputModes": ["text/plain"],
+                },
+                {
+                    "id": "text_analysis",
+                    "name": "Text Analysis",
+                    "description": "Analyze text for sentiment, word count, and summaries",
+                    "tags": ["nlp", "analysis", "sentiment"],
+                    "inputModes": ["text/plain"],
+                    "outputModes": ["text/plain"],
+                },
+            ],
+            "documentationUrl": "https://github.com/yeshuman-io/yeshuman-agent-stack",
+            "provider": {"organization": "YesHuman.io", "url": "https://yeshuman.io"},
+        }
+        return card
+    except Exception as e:
+        return a2a_api.create_response(request, {"error": f"Failed to generate A2A card: {str(e)}"}, status=500)
 
 
 @a2a_api.get("/agent-card/{agent_name}", response=AgentCardResponse, summary="Get Agent Card by Name")

@@ -104,10 +104,13 @@ class A2AMessage(models.Model):
     message_type = models.CharField(max_length=20, choices=MESSAGE_TYPES, default='request')
     subject = models.CharField(max_length=255, blank=True, help_text="Message subject/title")
     payload = models.JSONField(help_text="Message content and data")
+    callback_url = models.URLField(max_length=500, blank=True, null=True, help_text="Optional callback URL for delivery/read notifications")
     
     # Message properties
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     priority = models.IntegerField(choices=PRIORITY_CHOICES, default=3)
+    delivery_attempts = models.IntegerField(default=0, help_text="Number of callback delivery attempts")
+    last_error = models.TextField(blank=True, help_text="Last delivery error, if any")
     
     # Response tracking
     response_required = models.BooleanField(default=False)
