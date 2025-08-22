@@ -68,15 +68,22 @@ Build applications for clients (and myself) using a set of opinions and rules em
 - **A2A Server**: Complete Agent-to-Agent communication protocol with REST API
 - **Tool System**: LangChain BaseTool integration (Calculator, Echo, Weather, Text Analysis, Agent Chat, Agent Capabilities)
 - **Agent Integration**: LangGraph ReAct agent with automatic tool discovery
-- **Testing Suite**: Comprehensive pytest test coverage (43 tests passing)
+- **Testing Suite**: Comprehensive pytest test coverage (50 tests passing)
 - **Multi-Platform Access**: MCP, A2A, and REST API endpoints all functional
 - **Real-time Features**: SSE (Server-Sent Events) streaming for live updates
+- **Streaming LLM**: Token-by-token streaming with word grouping for optimal UX
+- **A2A Protocol Compliance**: Full JSON-RPC 2.0 implementation with streaming support
+- **A2A Inspector Integration**: Visual debugging and testing tool for A2A communication
 - **API Structure**: Clean separation of concerns across three well-organized API modules
 
 ### 🔄 Current Structure
 ```
 yeshuman/
 ├── README.md               # This specification
+├── a2a-inspector/          # A2A debugging and testing tool
+│   ├── frontend/           # React frontend for visual testing
+│   ├── backend/            # FastAPI backend for A2A communication
+│   └── run.sh              # Start script for inspector
 └── api/                    # Django + LangGraph backend
     ├── .venv/              # UV virtual environment (Python 3.13.2)
     ├── manage.py           # Django management script
@@ -87,14 +94,16 @@ yeshuman/
     │   └── sse.py          # Server-Sent Events support
     ├── a2a/                # Agent-to-Agent communication
     │   ├── models.py       # Django ORM (Agent, A2AMessage, Task, Conversation)
-    │   ├── api.py          # A2A REST API endpoints
+    │   ├── api.py          # A2A JSON-RPC endpoints with streaming
+    │   ├── agent_cards.py  # A2A Agent Card specifications
+    │   ├── async_tasks.py  # Long-running task management
     │   └── apps.py         # Django app configuration
     ├── agents/             # LangGraph agent implementation
-    │   └── agent.py        # ReAct agent with tool integration
+    │   └── agent.py        # ReAct agent with streaming support
     ├── tools/              # Tool implementations
     │   ├── utilities.py    # Calculator, Echo, Weather, Text Analysis
     │   └── agent_tools.py  # Agent Chat, Agent Capabilities
-    ├── tests/              # Comprehensive test suite (43 tests)
+    ├── tests/              # Comprehensive test suite (50 tests)
     │   ├── test_mcp_server.py    # MCP server tests
     │   ├── test_mcp_sse.py       # SSE endpoint tests
     │   ├── test_a2a.py           # A2A protocol tests
@@ -110,19 +119,43 @@ yeshuman/
 
 ### 🎯 Next Steps
 1. **A2A Authentication**: Implement OAuth2 and API key authentication
-2. **Agent Cards**: Add A2A Agent Cards for enhanced discovery
-3. **Async Tasks**: Support long-running operations (>30s timeouts)
-4. **Enhanced Security**: TLS, rate limiting, and security headers
-5. **Production Config**: PostgreSQL, Redis, and deployment settings
-6. **Tool Expansion**: Add more LangChain BaseTools to the ecosystem
+2. **Enhanced Security**: TLS, rate limiting, and security headers
+3. **Production Config**: PostgreSQL, Redis, and deployment settings
+4. **Tool Expansion**: Add more LangChain BaseTools to the ecosystem
+5. **Performance Optimization**: Caching, database optimization, and scaling
+6. **Client SDKs**: Generate client libraries for different programming languages
 
 ## Quick Start
+
+### 1. Start the YesHuman Agent Stack
 
 ```bash
 cd api
 source .venv/bin/activate
 python manage.py check          # Verify Django setup
-python manage.py runserver      # Start development server
+python manage.py runserver      # Start development server at http://localhost:8000
+```
+
+### 2. Start the A2A Inspector (Optional)
+
+In a separate terminal window:
+
+```bash
+# From the root directory
+./a2a-inspector/run.sh          # Start A2A Inspector at http://localhost:3000
+```
+
+### 3. Test the Stack
+
+```bash
+# Test MCP functionality
+echo '{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}' | python mcp_client.py
+
+# Test A2A functionality
+curl http://localhost:8000/a2a/agent-card/a2a
+
+# Run comprehensive tests
+pytest                          # All 50 tests should pass
 ```
 
 ## MCP (Model Context Protocol) Usage
@@ -263,8 +296,9 @@ curl -X POST http://localhost:8000/mcp/tools/call \
 
 ### Overview
 The YesHuman stack includes a complete A2A server implementation for agent-to-agent communication:
-- **REST API**: Full CRUD operations for agents, messages, and tasks
-- **Agent Registry**: Dynamic agent registration and discovery
+- **JSON-RPC 2.0 Protocol**: Full compliance with A2A specification
+- **Streaming Support**: Token-by-token LLM streaming with word grouping
+- **Agent Cards**: Structured capability descriptions for discovery
 - **Message System**: Asynchronous message passing between agents
 - **Task Management**: Task delegation and completion tracking
 - **Real-time Updates**: SSE streaming for live message feeds
@@ -322,6 +356,169 @@ curl -X POST http://localhost:8000/a2a/capability-match \
   -d '{"required_capabilities": ["calculation"], "required_tags": ["langgraph"]}'
 ```
 
+### A2A Streaming Protocol
+
+The YesHuman agent supports streaming communication via JSON-RPC 2.0:
+
+#### Non-Streaming Messages
+```bash
+curl -X POST http://localhost:8000/a2a/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Calculate 25 + 17"}]
+      }
+    }
+  }'
+```
+
+#### Streaming Messages (SSE)
+```bash
+curl -X POST http://localhost:8000/a2a/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1", 
+    "method": "message/stream",
+    "params": {
+      "message": {
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Tell me about the weather"}]
+      }
+    }
+  }'
+```
+
+The streaming response includes:
+1. **Initial Task**: Status and context information
+2. **Message Chunks**: Word-by-word streaming for optimal UX
+3. **Status Updates**: Task completion notifications
+
+## A2A Inspector - Visual Testing Tool
+
+### Overview
+The A2A Inspector provides a web-based interface for testing and debugging A2A communication:
+- **Visual Chat Interface**: Real-time conversation with streaming support
+- **Protocol Validation**: Automatic compliance checking with A2A specification
+- **Message Inspection**: Raw JSON-RPC message viewing and debugging
+- **Agent Discovery**: Browse and connect to available A2A agents
+- **Streaming Support**: Visual representation of token-by-token streaming
+
+### Prerequisites
+- Node.js and npm installed
+- Python 3.13+ with uv package manager
+- YesHuman Agent Stack running on http://localhost:8000
+
+### Installation & Setup
+
+The A2A Inspector is automatically cloned and configured when you first run:
+
+```bash
+# From the project root directory
+./a2a-inspector/run.sh
+```
+
+If you need to manually install:
+
+```bash
+# Clone the inspector (if not already present)
+git clone https://github.com/a2aproject/a2a-inspector.git
+
+# Install dependencies and start
+cd a2a-inspector
+uv sync                    # Install Python dependencies
+cd frontend && npm install # Install Node.js dependencies
+cd .. && chmod +x run.sh   # Make run script executable
+./run.sh                   # Start the inspector
+```
+
+### Using the A2A Inspector
+
+1. **Start the YesHuman Agent Stack**:
+   ```bash
+   cd api && source .venv/bin/activate && python manage.py runserver
+   ```
+
+2. **Start the A2A Inspector** (in a separate terminal):
+   ```bash
+   ./a2a-inspector/run.sh
+   ```
+
+3. **Open the Inspector**: Navigate to http://localhost:3000
+
+4. **Connect to YesHuman Agent**:
+   - Click "Add Agent" or "Connect to Agent"
+   - Enter the Agent Card URL: `http://localhost:8000/a2a/agent-card/a2a`
+   - Click "Connect"
+
+5. **Test Streaming Communication**:
+   - Type a message like "Calculate 25 + 17 and explain the result"
+   - Toggle streaming mode to see word-by-word responses
+   - Each word/phrase appears as a separate message bubble (A2A protocol compliant)
+
+### Inspector Features
+
+#### Agent Discovery
+- **Auto-Detection**: Automatically discovers agents from Agent Card URLs
+- **Capability Matching**: Browse agent skills and capabilities
+- **Connection Status**: Real-time connection monitoring
+
+#### Message Testing
+- **Chat Interface**: Natural conversation flow with the agent
+- **Streaming Toggle**: Switch between streaming and non-streaming modes
+- **Message Validation**: Automatic A2A protocol compliance checking
+- **Raw JSON View**: Inspect underlying JSON-RPC messages
+
+#### Debugging Tools
+- **Protocol Inspector**: View raw A2A messages and responses
+- **Error Handling**: Clear error messages for debugging
+- **Performance Metrics**: Response times and streaming performance
+- **Connection Logs**: Detailed communication logs
+
+### Streaming Behavior
+
+When streaming is enabled, you'll see:
+- ✅ **Compliant Messages**: Each word/phrase as a separate bubble
+- ✅ **Tool Usage Indicators**: "[Using calculator tool...]" messages
+- ✅ **Progressive Responses**: Real-time token-by-token delivery
+- ✅ **Task Status Updates**: Start/completion notifications
+
+This behavior follows the A2A specification where each message chunk is a separate protocol message.
+
+### Troubleshooting
+
+#### Inspector Won't Start
+```bash
+# Check if ports are available
+lsof -i :3000  # Frontend port
+lsof -i :8001  # Backend port
+
+# Restart with clean install
+rm -rf a2a-inspector
+git clone https://github.com/a2aproject/a2a-inspector.git
+cd a2a-inspector && ./run.sh
+```
+
+#### Connection Issues
+```bash
+# Verify YesHuman agent is running
+curl http://localhost:8000/a2a/agent-card/a2a
+
+# Check agent card format
+curl -s http://localhost:8000/a2a/agent-card/a2a | jq .
+```
+
+#### Streaming Not Working
+- Ensure both services are running (Django + Inspector)
+- Check that `streaming: true` in the agent card capabilities
+- Verify browser supports Server-Sent Events
+
 ## Testing
 
 ### Running All Tests
@@ -333,13 +530,14 @@ pytest -v                      # Verbose output
 pytest tests/test_mcp_server.py # Run specific test file
 ```
 
-### Test Coverage (46 Tests Passing)
+### Test Coverage (50 Tests Passing)
 - **MCP Server Tests**: Protocol compliance, tool execution, error handling
 - **MCP SSE Tests**: Server-Sent Events functionality  
-- **A2A Tests**: Agent registration, discovery, messaging, task management
+- **A2A Tests**: Agent registration, discovery, messaging, task management, streaming
 - **Agent Tests**: LangGraph agent functionality and tool integration
 - **API Tests**: Django Ninja endpoint testing
 - **Tool Tests**: Individual tool functionality and validation
+- **Streaming Tests**: Token-by-token streaming and word grouping validation
 
 ### Continuous Testing
 ```bash
@@ -363,7 +561,7 @@ python manage.py migrate
 python manage.py runserver
 
 # Testing
-pytest                         # Run all tests (46 tests)
+pytest                         # Run all tests (50 tests)
 pytest -v                      # Verbose testing
 ptw                           # Watch mode testing
 
@@ -373,7 +571,12 @@ echo '{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}' | pytho
 
 # A2A testing
 curl -X GET http://localhost:8000/a2a/discover
-curl -X GET http://localhost:8000/a2a/agent-card
+curl -X GET http://localhost:8000/a2a/agent-card/a2a
 curl -X POST http://localhost:8000/a2a/capability-match -H "Content-Type: application/json" -d '{"required_capabilities": ["calculation"]}'
-curl -X POST http://localhost:8000/a2a/agents/register -H "Content-Type: application/json" -d '{"name": "test-agent", "capabilities": ["test"]}'
+
+# A2A streaming testing
+curl -X POST http://localhost:8000/a2a/ -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "id": "1", "method": "message/send", "params": {"message": {"role": "user", "parts": [{"kind": "text", "text": "Hello!"}]}}}'
+
+# A2A Inspector testing
+./a2a-inspector/run.sh        # Start visual testing tool at http://localhost:3000
 ```
