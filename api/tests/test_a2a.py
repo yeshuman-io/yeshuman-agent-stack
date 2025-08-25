@@ -41,7 +41,8 @@ class TestA2AAPI(TestCase):
         response = self.client.post(
             '/a2a/agents/register',
             data=json.dumps(payload),
-            content_type='application/json'
+            content_type='application/json',
+            HTTP_X_API_KEY='test-key-789'  # Use test key from .env
         )
         
         self.assertEqual(response.status_code, 200)
@@ -171,7 +172,8 @@ class TestA2AAPI(TestCase):
             '/a2a/tasks/create',
             data=json.dumps(payload),
             content_type='application/json',
-            HTTP_X_AGENT_NAME='test-agent-1'
+            HTTP_X_AGENT_NAME='test-agent-1',
+            HTTP_X_API_KEY='test-key-789'  # Use test key from .env
         )
         
         self.assertEqual(response.status_code, 200)

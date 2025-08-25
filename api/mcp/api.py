@@ -15,6 +15,7 @@ mcp_api = NinjaAPI(
 
 
 from django.http import StreamingHttpResponse
+from utils.sse import SSEHttpResponse
 import json
 
 

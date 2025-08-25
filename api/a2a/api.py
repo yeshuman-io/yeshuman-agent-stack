@@ -5,6 +5,7 @@ from ninja import NinjaAPI, Schema, Query
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.http import StreamingHttpResponse
+from utils.sse import SSEHttpResponse
 from typing import List, Optional, Dict, Any
 import json
 import uuid
@@ -14,6 +15,7 @@ from django.db import models
 from .agent_cards import AgentCard, create_yeshuman_agent_card
 from .async_tasks import async_task_manager, TaskStatus
 from agents.agent import invoke_agent, astream_agent
+
 
 # Create A2A API instance
 a2a_api = NinjaAPI(
@@ -32,6 +34,17 @@ class JSONRPCRequest(Schema):
 
 @a2a_api.post("/", summary="A2A JSON-RPC endpoint (message/send)")
 def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
+    # Check authentication
+    from auth.middleware import auth
+    is_authenticated, error_message = auth.authenticate_a2a(request)
+    if not is_authenticated:
+        from django.http import JsonResponse
+        response = JsonResponse({
+            'error': 'Authentication failed',
+            'message': error_message
+        }, status=401)
+        return response
+    
     try:
         if payload.jsonrpc != "2.0":
             return {"jsonrpc": "2.0", "id": payload.id, "error": {"code": -32600, "message": "Invalid Request"}}
@@ -139,10 +152,7 @@ def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
                     error_obj = {"jsonrpc": "2.0", "id": payload.id, "error": {"code": -32603, "message": f"Internal error: {str(inner_e)}"}}
                     yield f"data: {json.dumps(error_obj)}\n\n"
 
-            response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
-            response['Cache-Control'] = 'no-cache'
-            response['Connection'] = 'keep-alive'
-            return response
+            return SSEHttpResponse(event_stream())
 
         return {"jsonrpc": "2.0", "id": payload.id, "error": {"code": -32601, "message": "Method not found"}}
     except Exception as e:
@@ -151,6 +161,16 @@ def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
 
 @a2a_api.post("/stream", summary="A2A JSON-RPC streaming endpoint (message/stream)")
 def a2a_jsonrpc_stream_handler(request):
+    # Check authentication
+    from auth.middleware import auth
+    is_authenticated, error_message = auth.authenticate_a2a(request)
+    if not is_authenticated:
+        from django.http import JsonResponse
+        return JsonResponse({
+            'error': 'Authentication failed',
+            'message': error_message
+        }, status=401)
+    
     try:
         body = json.loads(request.body.decode("utf-8")) if request.body else {}
         jsonrpc = body.get("jsonrpc")
@@ -193,10 +213,7 @@ def a2a_jsonrpc_stream_handler(request):
                 error_obj = {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32603, "message": f"Internal error: {str(inner_e)}"}}
                 yield f"data: {json.dumps(error_obj)}\n\n"
 
-        response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
-        response['Cache-Control'] = 'no-cache'
-        response['Connection'] = 'keep-alive'
-        return response
+        return SSEHttpResponse(event_stream())
     except Exception as e:
         return {"jsonrpc": "2.0", "id": str(uuid.uuid4()), "error": {"code": -32603, "message": f"Internal error: {str(e)}"}}
 
@@ -272,6 +289,16 @@ class TaskResponse(Schema):
 @a2a_api.post("/agents/register", response=AgentResponse)
 def register_agent(request, payload: AgentRegisterRequest):
     """Register a new agent or update existing one."""
+    # Check authentication
+    from auth.middleware import auth
+    is_authenticated, error_message = auth.authenticate_a2a(request)
+    if not is_authenticated:
+        from django.http import JsonResponse
+        return JsonResponse({
+            'error': 'Authentication failed',
+            'message': error_message
+        }, status=401)
+    
     try:
         agent, created = Agent.objects.get_or_create(
             name=payload.name,
@@ -499,6 +526,16 @@ def _send_message_callback_safe(message_id: str, event: str):
 @a2a_api.post("/tasks/create", response=TaskResponse)
 def create_task(request, payload: TaskRequest):
     """Create a new task."""
+    # Check authentication
+    from auth.middleware import auth
+    is_authenticated, error_message = auth.authenticate_a2a(request)
+    if not is_authenticated:
+        from django.http import JsonResponse
+        return JsonResponse({
+            'error': 'Authentication failed',
+            'message': error_message
+        }, status=401)
+    
     try:
         # Get the creating agent
         creator_name = request.headers.get('X-Agent-Name', 'unknown')
@@ -613,15 +650,7 @@ def agent_message_stream(request, agent_name: str):
             error_data = {'type': 'error', 'message': f'Agent {agent_name} not found'}
             yield f"data: {json.dumps(error_data)}\n\n"
     
-    response = StreamingHttpResponse(
-        event_stream(),
-        content_type='text/event-stream'
-    )
-    response['Cache-Control'] = 'no-cache'
-    response['Connection'] = 'keep-alive'
-    response['Access-Control-Allow-Origin'] = '*'
-    
-    return response
+    return SSEHttpResponse(event_stream())
 
 
 @a2a_api.get("/stream/discovery")
@@ -645,15 +674,7 @@ def agent_discovery_stream(request):
         }
         yield f"data: {json.dumps(agents_data)}\n\n"
     
-    response = StreamingHttpResponse(
-        discovery_stream(),
-        content_type='text/event-stream'
-    )
-    response['Cache-Control'] = 'no-cache'
-    response['Connection'] = 'keep-alive'
-    response['Access-Control-Allow-Origin'] = '*'
-    
-    return response
+    return SSEHttpResponse(discovery_stream())
 
 
 # Agent Cards - A2A Specification Compliance

@@ -2,6 +2,7 @@
 SSE-based MCP server implementation for proper MCP client compatibility.
 """
 from django.http import StreamingHttpResponse
+from utils.sse import SSEHttpResponse
 from .server import mcp_server, MCPRequest
 import json
 import asyncio
@@ -73,16 +74,7 @@ def sse_mcp_endpoint(request):
                 }
                 yield f"data: {json.dumps(error_response)}\n\n"
     
-    response = StreamingHttpResponse(
-        event_stream(),
-        content_type='text/event-stream'
-    )
-    response['Cache-Control'] = 'no-cache'
-    response['Connection'] = 'keep-alive'
-    response['Access-Control-Allow-Origin'] = '*'
-    response['Access-Control-Allow-Headers'] = 'Cache-Control'
-    
-    return response
+    return SSEHttpResponse(event_stream())
 
 
 def mcp_tools_sse(request):
@@ -93,12 +85,4 @@ def mcp_tools_sse(request):
         yield "event: tools\n"
         yield f"data: {json.dumps(tools_data)}\n\n"
     
-    response = StreamingHttpResponse(
-        tools_stream(),
-        content_type='text/event-stream'
-    )
-    response['Cache-Control'] = 'no-cache'
-    response['Connection'] = 'keep-alive'
-    response['Access-Control-Allow-Origin'] = '*'
-    
-    return response
+    return SSEHttpResponse(tools_stream())
