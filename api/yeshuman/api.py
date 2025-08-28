@@ -4,7 +4,7 @@ Main API routes using Django Ninja.
 import os
 from ninja import NinjaAPI, Schema
 from typing import Dict, Any, Optional
-from agents.agent import invoke_agent, create_agent
+from agent.graph import ainvoke_agent, create_agent
 
 # Initialize the API
 api = NinjaAPI(
@@ -66,10 +66,10 @@ def health_check(request):
 
 # Chat endpoint
 @api.post("/chat", response=ChatResponse)
-def chat(request, payload: ChatRequest):
+async def chat(request, payload: ChatRequest):
     """Chat with the YesHuman agent."""
     try:
-        result = invoke_agent(payload.message)
+        result = await ainvoke_agent(payload.message)
         
         return ChatResponse(
             success=result["success"],
@@ -95,7 +95,7 @@ def chat(request, payload: ChatRequest):
 # This endpoint remains for simple A2A message integration with the main agent
 
 @api.post("/a2a/simple", response=A2AResponse)
-def simple_a2a_handler(request, payload: A2ARequest):
+async def simple_a2a_handler(request, payload: A2ARequest):
     """Simple A2A message handler that integrates with the main agent."""
     try:
         # Format message with agent context
@@ -103,7 +103,7 @@ def simple_a2a_handler(request, payload: A2ARequest):
         if payload.context:
             formatted_message += f"\nContext: {payload.context}"
         
-        result = invoke_agent(formatted_message)
+        result = await ainvoke_agent(formatted_message)
         
         return A2AResponse(
             success=result["success"],
@@ -123,10 +123,10 @@ def simple_a2a_handler(request, payload: A2ARequest):
 
 # Test endpoint for development
 @api.get("/test")
-def test_agent(request):
+async def test_agent(request):
     """Test endpoint to verify agent functionality."""
     try:
-        result = invoke_agent("Hello! Can you calculate 2 + 2 for me?")
+        result = await ainvoke_agent("Hello! Can you calculate 2 + 2 for me?")
         return {"test_result": result}
     except Exception as e:
         return {"error": str(e)}

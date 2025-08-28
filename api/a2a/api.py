@@ -14,7 +14,7 @@ from .models import Agent, A2AMessage, Conversation, Task
 from django.db import models
 from .agent_cards import AgentCard, create_yeshuman_agent_card
 from .async_tasks import async_task_manager, TaskStatus
-from agents.agent import invoke_agent, astream_agent
+from agent.graph import ainvoke_agent, astream_agent
 
 
 # Create A2A API instance
@@ -33,7 +33,7 @@ class JSONRPCRequest(Schema):
 
 
 @a2a_api.post("/", summary="A2A JSON-RPC endpoint (message/send)")
-def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
+async def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
     # Check authentication
     from auth.middleware import auth
     is_authenticated, error_message = auth.authenticate_a2a(request)
@@ -57,7 +57,7 @@ def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
                     user_text = part.get("text", "")
                     break
 
-            result = invoke_agent(user_text)
+            result = await ainvoke_agent(user_text)
             if not result.get("success"):
                 return {"jsonrpc": "2.0", "id": payload.id, "error": {"code": -32000, "message": result.get("error", "Agent error")}}
 
@@ -160,7 +160,7 @@ def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
 
 
 @a2a_api.post("/stream", summary="A2A JSON-RPC streaming endpoint (message/stream)")
-def a2a_jsonrpc_stream_handler(request):
+async def a2a_jsonrpc_stream_handler(request):
     # Check authentication
     from auth.middleware import auth
     is_authenticated, error_message = auth.authenticate_a2a(request)
@@ -188,9 +188,9 @@ def a2a_jsonrpc_stream_handler(request):
                 user_text = part.get("text") or part.get("data") or ""
                 break
 
-        def event_stream():
+        async def event_stream():
             try:
-                result = invoke_agent(user_text)
+                result = await ainvoke_agent(user_text)
                 if not result.get("success"):
                     error_obj = {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32000, "message": result.get("error", "Agent error")}}
                     yield f"data: {json.dumps(error_obj)}\n\n"

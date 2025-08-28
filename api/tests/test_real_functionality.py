@@ -4,7 +4,7 @@ Tests for real functionality - no mocking, just testing what actually works.
 import os
 import pytest
 from django.test import TestCase, Client
-from agents.agent import StreamingCallbackHandler, create_agent
+from agent.graph import create_agent, astream_agent
 
 
 class TestRealFunctionality(TestCase):
@@ -36,42 +36,34 @@ class TestRealFunctionality(TestCase):
             self.assertIn("name", skill)
             self.assertIn("description", skill)
     
-    def test_streaming_callback_handler_real_behavior(self):
-        """Test StreamingCallbackHandler with real token capture."""
-        handler = StreamingCallbackHandler()
+    @pytest.mark.asyncio
+    async def test_async_streaming_real_behavior(self):
+        """Test async streaming with real agent behavior."""
+        events = []
         
-        # Test real token capture
-        handler.on_llm_new_token("Hello")
-        handler.on_llm_new_token(" ")
-        handler.on_llm_new_token("world")
+        # Test real streaming
+        async for event in astream_agent("Say hello world"):
+            events.append(event)
+            if len(events) >= 3:  # Limit for test speed
+                break
         
-        # Should capture all tokens
-        self.assertEqual(len(handler.tokens), 3)
-        self.assertEqual("".join(handler.tokens), "Hello world")
-        
-        # Test tool tracking
-        serialized = {"name": "calculator"}
-        handler.on_tool_start(serialized, "2+2")
-        
-        # Should add tool indicator
-        self.assertEqual(len(handler.tokens), 4)
-        self.assertEqual(handler.tokens[-1], "[Using calculator tool...]")
-        self.assertIsNotNone(handler.current_tool_call)
-        
-        # Test tool end
-        handler.on_tool_end("Result: 4")
-        self.assertIsNone(handler.current_tool_call)
+        # Should capture real events
+        self.assertGreater(len(events), 0)
+        # Each event should be a dict with type
+        for event in events:
+            self.assertIsInstance(event, dict)
+            self.assertIn('type', event)
     
     @pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="No OpenAI API key")
     def test_agent_creation_real(self):
         """Test real agent creation (requires API key)."""
-        # Test non-streaming agent
-        agent = create_agent(streaming=False)
+        # Test agent creation (async-only now)
+        agent = create_agent()
         self.assertIsNotNone(agent)
         
-        # Test streaming agent
-        streaming_agent = create_agent(streaming=True)
-        self.assertIsNotNone(streaming_agent)
+        # Verify it has async methods
+        self.assertTrue(hasattr(agent, 'ainvoke'))
+        self.assertTrue(hasattr(agent, 'astream'))
     
     def test_a2a_jsonrpc_endpoint_structure(self):
         """Test A2A JSON-RPC endpoint returns proper structure (without mocking)."""

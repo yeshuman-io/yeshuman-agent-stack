@@ -4,7 +4,7 @@ Tests for the YesHuman agent functionality.
 import os
 import pytest
 from unittest.mock import patch
-from agents.agent import invoke_agent, create_agent
+from agent.graph import ainvoke_agent, create_agent
 from tools.utilities import AVAILABLE_TOOLS
 
 
@@ -24,20 +24,20 @@ class TestAgent:
             agent = create_agent()
             assert agent is not None
     
-    def test_invoke_agent_without_api_key(self):
-        """Test agent invocation without API key."""
-        # Test that create_agent properly validates API key
+    def test_create_agent_without_api_key(self):
+        """Test agent creation without API key."""
+        # Test that create_agent succeeds (validation happens at runtime)
         with patch.dict(os.environ, {}, clear=True):
-            try:
-                create_agent()
-                assert False, "Should have raised an error"
-            except ValueError as e:
-                assert "OPENAI_API_KEY" in str(e)
+            agent = create_agent()
+            # Agent creation should succeed, but using it without API key should fail
+            assert agent is not None
+            assert hasattr(agent, 'ainvoke')
     
+    @pytest.mark.asyncio
     @pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="No OpenAI API key")
-    def test_invoke_agent_with_real_key(self):
-        """Test agent invocation with real API key."""
-        result = invoke_agent("Echo back: test message")
+    async def test_ainvoke_agent_with_real_key(self):
+        """Test async agent invocation with real API key."""
+        result = await ainvoke_agent("Echo back: test message")
         assert result["success"] is True
         assert "response" in result
         assert len(result["response"]) > 0

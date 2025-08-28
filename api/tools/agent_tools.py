@@ -23,9 +23,16 @@ class AgentInteractionTool(BaseTool):
         """Execute the agent interaction tool."""
         try:
             # Import here to avoid circular imports
-            from agents.agent import invoke_agent
+            import asyncio
+            from agent.graph import ainvoke_agent
             
-            result = invoke_agent(message)
+            # Run async function in sync context
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(ainvoke_agent(message))
+            finally:
+                loop.close()
             
             if result["success"]:
                 return result["response"]
