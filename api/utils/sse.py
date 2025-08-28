@@ -32,8 +32,11 @@ class SSEHttpResponse(StreamingHttpResponse):
         # Set SSE specific headers for proper browser/client compatibility
         self.headers['Cache-Control'] = 'no-cache'
         self.headers['Connection'] = 'keep-alive'
+        
+        # Set CORS headers for cross-origin requests (Labs UI compatibility)
         self.headers['Access-Control-Allow-Origin'] = '*'
-        self.headers['Access-Control-Allow-Headers'] = 'Cache-Control'
+        self.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        self.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Authorization, X-API-Key, Cache-Control'
         self.headers['Access-Control-Expose-Headers'] = 'Cache-Control'
         
         # Optional: Add additional headers for better client compatibility

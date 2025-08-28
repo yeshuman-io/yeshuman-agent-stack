@@ -1,6 +1,9 @@
 """
-Authentication module for YesHuman Agent Stack.
-"""
-from .middleware import require_a2a_auth, require_mcp_auth, auth
+Simple authentication module for YesHuman Agent Stack.
 
-__all__ = ['require_a2a_auth', 'require_mcp_auth', 'auth']
+Provides environment variable-based API key authentication.
+"""
+from .middleware import require_a2a_auth, require_mcp_auth, require_api_key
+from .backends import APIKeyUser
+
+__all__ = ['require_a2a_auth', 'require_mcp_auth', 'require_api_key', 'APIKeyUser']

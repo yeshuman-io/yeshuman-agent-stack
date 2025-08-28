@@ -71,14 +71,14 @@ class TestStreamingAgent:
         async for event in astream_agent("What is 2+2?"):
             if event.get('type') == 'thinking':
                 thinking_found = True
-            elif event.get('type') == 'message':
+            elif event.get('type') == 'text':  # Updated to 'text'
                 message_found = True
             
             if thinking_found and message_found:
                 break
         
         assert thinking_found, "Should have thinking events"
-        assert message_found, "Should have message events"
+        assert message_found, "Should have text events"
 
     @pytest.mark.asyncio
     async def test_streaming_content_structure(self):

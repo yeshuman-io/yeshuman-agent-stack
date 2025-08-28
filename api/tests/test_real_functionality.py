@@ -130,30 +130,32 @@ class TestRealIntegration:
         for tool_name in expected_tools:
             assert tool_name in tool_names, f"Missing expected tool: {tool_name}"
     
-    def test_calculator_tool_real_functionality(self):
+    @pytest.mark.asyncio
+    async def test_calculator_tool_real_functionality(self):
         """Test calculator tool with real calculations."""
         from tools.utilities import AVAILABLE_TOOLS
         
         calc_tool = next(tool for tool in AVAILABLE_TOOLS if tool.name == "calculator")
         
         # Test real calculations
-        result = calc_tool._run("2 + 2")
+        result = await calc_tool._arun("2 + 2")
         assert "4" in result
         
-        result = calc_tool._run("10 * 5")
+        result = await calc_tool._arun("10 * 5")
         assert "50" in result
     
-    def test_echo_tool_real_functionality(self):
+    @pytest.mark.asyncio
+    async def test_echo_tool_real_functionality(self):
         """Test echo tool with real echoing."""
         from tools.utilities import AVAILABLE_TOOLS
         
         echo_tool = next(tool for tool in AVAILABLE_TOOLS if tool.name == "echo")
         
         # Test real echo
-        result = echo_tool._run("test message")
+        result = await echo_tool._arun("test message")
         assert result == "Echo: test message"
         
-        result = echo_tool._run("hello world")
+        result = await echo_tool._arun("hello world")
         assert result == "Echo: hello world"
 
 

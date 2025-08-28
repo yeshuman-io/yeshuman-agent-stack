@@ -1,92 +1,176 @@
 """
-Simple API Key authentication middleware for A2A and MCP protocols.
+Django middleware for API key authentication.
+
+This middleware works with the custom authentication backends to provide
+automatic authentication for API requests.
 """
-import os
+from django.contrib.auth import authenticate
 from django.http import JsonResponse
-from django.conf import settings
+from django.utils.deprecation import MiddlewareMixin
 
 
-class SimpleAPIKeyAuth:
-    """Simple API key authentication middleware."""
+class APIKeyAuthenticationMiddleware(MiddlewareMixin):
+    """
+    Django middleware that automatically authenticates API key requests.
     
-    def __init__(self):
-        """Initialize with API keys from environment."""
-        # Parse API keys from environment (format: "name:key,name2:key2")
-        a2a_keys_str = os.getenv('A2A_API_KEYS', '')
-        self.a2a_api_keys = {}
+    This middleware works with the authentication backends to automatically
+    authenticate requests that include valid API keys in the X-API-Key header.
+    """
+    
+    def process_request(self, request):
+        """
+        Process incoming request and attempt API key authentication.
         
-        if a2a_keys_str:
-            for key_pair in a2a_keys_str.split(','):
-                if ':' in key_pair:
-                    name, key = key_pair.strip().split(':', 1)
-                    self.a2a_api_keys[key] = name
+        Args:
+            request: Django HttpRequest object
+            
+        Returns:
+            None to continue processing, or HttpResponse to short-circuit
+        """
+        # Skip authentication for certain paths
+        if self._should_skip_auth(request):
+            return None
         
-        # MCP uses single key
-        self.mcp_api_key = os.getenv('MCP_API_KEY', '')
+        # Only attempt authentication if X-API-Key header is present
+        if 'HTTP_X_API_KEY' not in request.META:
+            return None
         
-        # Auth enablement flags
-        self.a2a_auth_enabled = os.getenv('A2A_AUTH_ENABLED', 'False').lower() == 'true'
-        self.mcp_auth_enabled = os.getenv('MCP_AUTH_ENABLED', 'False').lower() == 'true'
+        # Attempt authentication using the custom backends
+        user = authenticate(request)
+        if user:
+            request.user = user
+            # Add convenience attributes for backward compatibility
+            if hasattr(user, 'client_name'):
+                request.authenticated_client = user.client_name
+                request.api_key_type = user.api_key_type
+        
+        return None
     
-    def authenticate_a2a(self, request):
-        """Authenticate A2A requests."""
-        if not self.a2a_auth_enabled:
-            return True, None
+    def _should_skip_auth(self, request):
+        """
+        Determine if authentication should be skipped for this request.
+        
+        Args:
+            request: Django HttpRequest object
             
-        # Check X-API-Key header
-        api_key = request.headers.get('X-API-Key')
-        if not api_key:
-            return False, "Missing X-API-Key header"
-            
-        if api_key not in self.a2a_api_keys:
-            return False, "Invalid API key"
-            
-        # Add authenticated client name to request
-        request.authenticated_client = self.a2a_api_keys[api_key]
-        return True, None
-    
-    def authenticate_mcp(self, request):
-        """Authenticate MCP requests."""
-        if not self.mcp_auth_enabled:
-            return True, None
-            
-        # Check X-API-Key header
-        api_key = request.headers.get('X-API-Key')
-        if not api_key:
-            return False, "Missing X-API-Key header"
-            
-        if api_key != self.mcp_api_key:
-            return False, "Invalid API key"
-            
-        return True, None
-    
-    def create_auth_error_response(self, error_message):
-        """Create standardized auth error response."""
-        return JsonResponse({
-            'error': 'Authentication failed',
-            'message': error_message
-        }, status=401)
+        Returns:
+            bool: True if authentication should be skipped
+        """
+        # Skip authentication for Django admin and static files
+        skip_paths = [
+            '/admin/',
+            '/static/',
+            '/media/',
+        ]
+        
+        return any(request.path.startswith(path) for path in skip_paths)
 
 
-# Global auth instance
-auth = SimpleAPIKeyAuth()
+class APIKeyRequiredMixin:
+    """
+    Mixin for views that require API key authentication.
+    
+    Usage:
+        class MyAPIView(APIKeyRequiredMixin, View):
+            allowed_api_key_types = ['a2a', 'mcp']  # Optional: restrict to specific types
+            
+            def get(self, request):
+                # request.user will be an APIKeyUser instance
+                return JsonResponse({'client': request.user.client_name})
+    """
+    
+    allowed_api_key_types = None  # None means allow all types
+    
+    def dispatch(self, request, *args, **kwargs):
+        """
+        Check API key authentication before dispatching to view method.
+        
+        Args:
+            request: Django HttpRequest object
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+            
+        Returns:
+            HttpResponse from view method or authentication error
+        """
+        from auth.backends import APIKeyUser
+        
+        # Check if user is authenticated via API key
+        if not isinstance(request.user, APIKeyUser):
+            return JsonResponse({
+                'error': 'Authentication required',
+                'message': 'Valid X-API-Key header required'
+            }, status=401)
+        
+        # Check if API key type is allowed (if restriction is set)
+        if (self.allowed_api_key_types and 
+            request.user.api_key_type not in self.allowed_api_key_types):
+            return JsonResponse({
+                'error': 'Unauthorized',
+                'message': f'API key type "{request.user.api_key_type}" not allowed for this endpoint'
+            }, status=403)
+        
+        return super().dispatch(request, *args, **kwargs)
+
+
+# Decorator functions for backward compatibility
+def require_api_key(allowed_types=None):
+    """
+    Decorator that requires API key authentication for a view.
+    
+    Args:
+        allowed_types: List of allowed API key types (None for all)
+        
+    Returns:
+        Decorated view function
+    """
+    def decorator(view_func):
+        def wrapper(request, *args, **kwargs):
+            from auth.backends import APIKeyUser
+            
+            # Check if user is authenticated via API key
+            if not isinstance(request.user, APIKeyUser):
+                return JsonResponse({
+                    'error': 'Authentication required',
+                    'message': 'Valid X-API-Key header required'
+                }, status=401)
+            
+            # Check if API key type is allowed
+            if (allowed_types and 
+                request.user.api_key_type not in allowed_types):
+                return JsonResponse({
+                    'error': 'Unauthorized',
+                    'message': f'API key type "{request.user.api_key_type}" not allowed'
+                }, status=403)
+            
+            return view_func(request, *args, **kwargs)
+        return wrapper
+    return decorator
 
 
 def require_a2a_auth(view_func):
-    """Decorator to require A2A authentication."""
-    def wrapper(request, *args, **kwargs):
-        is_authenticated, error_message = auth.authenticate_a2a(request)
-        if not is_authenticated:
-            return auth.create_auth_error_response(error_message)
-        return view_func(request, *args, **kwargs)
-    return wrapper
+    """
+    Decorator that requires A2A API key authentication.
+    
+    Args:
+        view_func: View function to decorate
+        
+    Returns:
+        Decorated view function
+    """
+    return require_api_key(['a2a'])(view_func)
 
 
 def require_mcp_auth(view_func):
-    """Decorator to require MCP authentication."""
-    def wrapper(request, *args, **kwargs):
-        is_authenticated, error_message = auth.authenticate_mcp(request)
-        if not is_authenticated:
-            return auth.create_auth_error_response(error_message)
-        return view_func(request, *args, **kwargs)
-    return wrapper
+    """
+    Decorator that requires MCP API key authentication.
+    
+    Args:
+        view_func: View function to decorate
+        
+    Returns:
+        Decorated view function
+    """
+    return require_api_key(['mcp'])(view_func)
+
+

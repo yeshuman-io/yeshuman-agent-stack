@@ -173,3 +173,4 @@ def require_mcp_auth(view_func):
     """
     return require_api_key(['mcp'])(view_func)
 
+

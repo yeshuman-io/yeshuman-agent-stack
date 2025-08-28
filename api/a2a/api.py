@@ -35,15 +35,15 @@ class JSONRPCRequest(Schema):
 @a2a_api.post("/", summary="A2A JSON-RPC endpoint (message/send)")
 async def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
     # Check authentication
-    from auth.middleware import auth
-    is_authenticated, error_message = auth.authenticate_a2a(request)
-    if not is_authenticated:
+    from auth.backends import APIKeyUser
+    
+    # Check if user is authenticated via API key
+    if not isinstance(request.user, APIKeyUser):
         from django.http import JsonResponse
-        response = JsonResponse({
-            'error': 'Authentication failed',
-            'message': error_message
+        return JsonResponse({
+            'error': 'Authentication required',
+            'message': 'Valid X-API-Key header required'
         }, status=401)
-        return response
     
     try:
         if payload.jsonrpc != "2.0":
@@ -162,13 +162,14 @@ async def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
 @a2a_api.post("/stream", summary="A2A JSON-RPC streaming endpoint (message/stream)")
 async def a2a_jsonrpc_stream_handler(request):
     # Check authentication
-    from auth.middleware import auth
-    is_authenticated, error_message = auth.authenticate_a2a(request)
-    if not is_authenticated:
+    from auth.backends import APIKeyUser
+    
+    # Check if user is authenticated via API key
+    if not isinstance(request.user, APIKeyUser):
         from django.http import JsonResponse
         return JsonResponse({
-            'error': 'Authentication failed',
-            'message': error_message
+            'error': 'Authentication required',
+            'message': 'Valid X-API-Key header required'
         }, status=401)
     
     try:
@@ -290,13 +291,14 @@ class TaskResponse(Schema):
 def register_agent(request, payload: AgentRegisterRequest):
     """Register a new agent or update existing one."""
     # Check authentication
-    from auth.middleware import auth
-    is_authenticated, error_message = auth.authenticate_a2a(request)
-    if not is_authenticated:
+    from auth.backends import APIKeyUser
+    
+    # Check if user is authenticated via API key
+    if not isinstance(request.user, APIKeyUser):
         from django.http import JsonResponse
         return JsonResponse({
-            'error': 'Authentication failed',
-            'message': error_message
+            'error': 'Authentication required',
+            'message': 'Valid X-API-Key header required'
         }, status=401)
     
     try:
@@ -527,13 +529,14 @@ def _send_message_callback_safe(message_id: str, event: str):
 def create_task(request, payload: TaskRequest):
     """Create a new task."""
     # Check authentication
-    from auth.middleware import auth
-    is_authenticated, error_message = auth.authenticate_a2a(request)
-    if not is_authenticated:
+    from auth.backends import APIKeyUser
+    
+    # Check if user is authenticated via API key
+    if not isinstance(request.user, APIKeyUser):
         from django.http import JsonResponse
         return JsonResponse({
-            'error': 'Authentication failed',
-            'message': error_message
+            'error': 'Authentication required',
+            'message': 'Valid X-API-Key header required'
         }, status=401)
     
     try:

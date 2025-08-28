@@ -16,7 +16,10 @@ class TestAgent:
         assert len(AVAILABLE_TOOLS) > 0
         tool_names = [tool.name for tool in AVAILABLE_TOOLS]
         assert "calculator" in tool_names
-        assert "echo" in tool_names
+        assert "weather" in tool_names
+        assert "text_analysis" in tool_names
+        # Echo tool should not be in ReAct agent tools (removed for focused toolset)
+        assert "echo" not in tool_names
     
     def test_create_agent(self):
         """Test agent creation."""
@@ -42,14 +45,17 @@ class TestAgent:
         assert "response" in result
         assert len(result["response"]) > 0
     
-    def test_calculator_tool_directly(self):
+    @pytest.mark.asyncio
+    async def test_calculator_tool_directly(self):
         """Test calculator tool directly."""
         calc_tool = next(tool for tool in AVAILABLE_TOOLS if tool.name == "calculator")
-        result = calc_tool._run("2 + 2")
+        result = await calc_tool._arun("2 + 2")
         assert "4" in result
     
-    def test_echo_tool_directly(self):
-        """Test echo tool directly."""
-        echo_tool = next(tool for tool in AVAILABLE_TOOLS if tool.name == "echo")
-        result = echo_tool._run("test message")
-        assert result == "Echo: test message"
+    @pytest.mark.asyncio
+    async def test_weather_tool_directly(self):
+        """Test weather tool directly."""
+        weather_tool = next(tool for tool in AVAILABLE_TOOLS if tool.name == "weather")
+        result = await weather_tool._arun("New York")
+        assert "New York" in result
+        assert "°C" in result or "°F" in result  # Check for temperature symbol

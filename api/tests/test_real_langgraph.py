@@ -63,7 +63,7 @@ class TestRealLangGraph:
         
         # Should have events from thinking and response nodes
         thinking_events = [e for e in events if e.get('type') == 'thinking']
-        response_events = [e for e in events if e.get('type') == 'message']
+        response_events = [e for e in events if e.get('type') == 'text']  # Updated to 'text'
         
         assert len(thinking_events) > 0
         assert len(response_events) > 0

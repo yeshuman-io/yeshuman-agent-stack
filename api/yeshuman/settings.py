@@ -59,7 +59,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'auth.middleware_django.APIKeyAuthenticationMiddleware',  # API key authentication
+    'auth.middleware.APIKeyAuthenticationMiddleware',  # API key authentication
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

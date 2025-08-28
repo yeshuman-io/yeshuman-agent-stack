@@ -4,6 +4,7 @@ Utility tools for the YesHuman agent.
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 from typing import Optional
+import asyncio
 
 
 class CalculatorInput(BaseModel):
@@ -19,13 +20,27 @@ class CalculatorTool(BaseTool):
     args_schema: type[BaseModel] = CalculatorInput
     
     def _run(self, expression: str, run_manager: Optional = None) -> str:
-        """Execute the calculator tool."""
+        """Execute the calculator tool synchronously (wrapper for async version)."""
+        import asyncio
+        try:
+            # Check if we're in an async context
+            loop = asyncio.get_running_loop()
+            # We're in an async context, this shouldn't be called
+            return "Error: Synchronous tool execution not supported in async context"
+        except RuntimeError:
+            # No event loop running, safe to create one
+            return asyncio.run(self._arun(expression, run_manager))
+    
+    async def _arun(self, expression: str, run_manager: Optional = None) -> str:
+        """Execute the calculator tool asynchronously."""
         try:
             # Basic safety check - only allow basic math operations
             allowed_chars = set('0123456789+-*/.() ')
             if not all(c in allowed_chars for c in expression):
                 return "Error: Only basic mathematical operations are allowed"
             
+            # Use asyncio.sleep(0) to yield control in case of complex calculations
+            await asyncio.sleep(0)
             result = eval(expression)
             return f"Result: {result}"
         except Exception as e:
@@ -45,7 +60,20 @@ class EchoTool(BaseTool):
     args_schema: type[BaseModel] = EchoInput
     
     def _run(self, message: str, run_manager: Optional = None) -> str:
-        """Execute the echo tool."""
+        """Execute the echo tool synchronously (wrapper for async version)."""
+        import asyncio
+        try:
+            # Check if we're in an async context
+            loop = asyncio.get_running_loop()
+            # We're in an async context, this shouldn't be called
+            return "Error: Synchronous tool execution not supported in async context"
+        except RuntimeError:
+            # No event loop running, safe to create one
+            return asyncio.run(self._arun(message, run_manager))
+    
+    async def _arun(self, message: str, run_manager: Optional = None) -> str:
+        """Execute the echo tool asynchronously."""
+        await asyncio.sleep(0)  # Yield control
         return f"Echo: {message}"
 
 
@@ -62,9 +90,24 @@ class WeatherTool(BaseTool):
     args_schema: type[BaseModel] = WeatherInput
     
     def _run(self, location: str, run_manager: Optional = None) -> str:
-        """Execute the weather tool."""
+        """Execute the weather tool synchronously (wrapper for async version)."""
+        import asyncio
+        try:
+            # Check if we're in an async context
+            loop = asyncio.get_running_loop()
+            # We're in an async context, this shouldn't be called
+            return "Error: Synchronous tool execution not supported in async context"
+        except RuntimeError:
+            # No event loop running, safe to create one
+            return asyncio.run(self._arun(location, run_manager))
+    
+    async def _arun(self, location: str, run_manager: Optional = None) -> str:
+        """Execute the weather tool asynchronously."""
         # Mock weather data for demonstration
         import random
+        
+        # Simulate API call delay
+        await asyncio.sleep(0.1)
         
         weather_conditions = ["sunny", "cloudy", "rainy", "partly cloudy", "windy"]
         condition = random.choice(weather_conditions)
@@ -87,7 +130,22 @@ class TextAnalysisTool(BaseTool):
     args_schema: type[BaseModel] = TextAnalysisInput
     
     def _run(self, text: str, analysis_type: str = "summary", run_manager: Optional = None) -> str:
-        """Execute the text analysis tool."""
+        """Execute the text analysis tool synchronously (wrapper for async version)."""
+        import asyncio
+        try:
+            # Check if we're in an async context
+            loop = asyncio.get_running_loop()
+            # We're in an async context, this shouldn't be called
+            return "Error: Synchronous tool execution not supported in async context"
+        except RuntimeError:
+            # No event loop running, safe to create one
+            return asyncio.run(self._arun(text, analysis_type, run_manager))
+    
+    async def _arun(self, text: str, analysis_type: str = "summary", run_manager: Optional = None) -> str:
+        """Execute the text analysis tool asynchronously."""
+        # Simulate processing time for analysis
+        await asyncio.sleep(0.05)
+        
         if analysis_type == "wordcount":
             word_count = len(text.split())
             char_count = len(text)
@@ -121,18 +179,29 @@ class TextAnalysisTool(BaseTool):
             return f"Unknown analysis type: {analysis_type}. Available types: wordcount, sentiment, summary"
 
 
-# Basic utility tools
+# Basic utility tools for ReAct agent (focused, practical tools only)
 BASIC_TOOLS = [
+    CalculatorTool(),
+    WeatherTool(),
+    TextAnalysisTool(),
+]
+
+# All tools including echo (for MCP/testing)
+ALL_UTILITY_TOOLS = [
     CalculatorTool(),
     EchoTool(),
     WeatherTool(),
     TextAnalysisTool(),
 ]
 
-# Export available tools (including agent tools if no circular import)
+# Export available tools for ReAct agent (user conversation tools only)
+# Note: agent_chat and agent_capabilities are excluded as they're for MCP/A2A use
+AVAILABLE_TOOLS = BASIC_TOOLS
+
+# MCP/A2A tools include all tools including agent communication tools
 try:
     from tools.agent_tools import AGENT_TOOLS
-    AVAILABLE_TOOLS = BASIC_TOOLS + AGENT_TOOLS
+    MCP_TOOLS = ALL_UTILITY_TOOLS + AGENT_TOOLS
 except ImportError:
-    # Fallback if circular import
-    AVAILABLE_TOOLS = BASIC_TOOLS
+    # Fallback if circular import occurs
+    MCP_TOOLS = ALL_UTILITY_TOOLS

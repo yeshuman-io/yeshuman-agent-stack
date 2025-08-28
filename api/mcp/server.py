@@ -3,7 +3,7 @@ MCP Server implementation using Django Ninja and BaseTool tools.
 """
 from ninja import NinjaAPI, Schema
 from typing import Dict, Any, List, Optional, Union
-from tools.utilities import AVAILABLE_TOOLS
+from tools.utilities import MCP_TOOLS
 from langchain_core.tools import BaseTool
 import json
 
@@ -47,7 +47,7 @@ class MCPServer:
             "tools": tools_list
         }
     
-    def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Call a specific tool."""
         if name not in self.tools:
             raise ValueError(f"Tool '{name}' not found")
@@ -59,11 +59,11 @@ class MCPServer:
             if hasattr(tool, 'args_schema') and tool.args_schema:
                 # Validate arguments against schema
                 validated_args = tool.args_schema(**arguments)
-                # Convert to dict and call tool
-                result = tool._run(**validated_args.model_dump())
+                # Convert to dict and call tool async
+                result = await tool._arun(**validated_args.model_dump())
             else:
-                # Call tool directly with arguments
-                result = tool._run(**arguments)
+                # Call tool directly with arguments async
+                result = await tool._arun(**arguments)
             
             return {
                 "content": [
@@ -76,7 +76,7 @@ class MCPServer:
         except Exception as e:
             raise ValueError(f"Tool execution failed: {str(e)}")
     
-    def handle_request(self, request: MCPRequest) -> MCPResponse:
+    async def handle_request(self, request: MCPRequest) -> MCPResponse:
         """Handle an MCP request."""
         try:
             if request.method == "initialize":
@@ -96,7 +96,7 @@ class MCPServer:
             elif request.method == "tools/call":
                 name = request.params.get("name")
                 arguments = request.params.get("arguments", {})
-                result = self.call_tool(name, arguments)
+                result = await self.call_tool(name, arguments)
             elif request.method == "notifications/initialized":
                 # Handle initialization complete notification
                 result = {}  # Empty response for notification
@@ -124,4 +124,4 @@ class MCPServer:
 
 
 # Global MCP server instance
-mcp_server = MCPServer(AVAILABLE_TOOLS)
+mcp_server = MCPServer(MCP_TOOLS)

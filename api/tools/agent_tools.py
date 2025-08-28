@@ -20,26 +20,38 @@ class AgentInteractionTool(BaseTool):
     args_schema: type[BaseModel] = AgentInteractionInput
     
     def _run(self, message: str, run_manager: Optional = None) -> str:
-        """Execute the agent interaction tool."""
+        """Execute the agent interaction tool synchronously (wrapper for async version)."""
+        import asyncio
+        try:
+            # Check if we're in an async context
+            loop = asyncio.get_running_loop()
+            # We're in an async context, this shouldn't be called
+            return "Error: Synchronous tool execution not supported in async context"
+        except RuntimeError:
+            # No event loop running, safe to create one
+            return asyncio.run(self._arun(message, run_manager))
+    
+    async def _arun(self, message: str, run_manager: Optional = None) -> str:
+        """Execute the agent interaction tool asynchronously."""
         try:
             # Import here to avoid circular imports
-            import asyncio
             from agent.graph import ainvoke_agent
+            import logging
             
-            # Run async function in sync context
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result = loop.run_until_complete(ainvoke_agent(message))
-            finally:
-                loop.close()
+            logger = logging.getLogger(__name__)
             
+            # Now we can properly call the async function
+            result = await ainvoke_agent(message)
             if result["success"]:
                 return result["response"]
             else:
                 return f"Agent Error: {result['error']}"
+            
         except Exception as e:
-            return f"Tool Error: {str(e)}"
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"AgentInteractionTool execution error: {str(e)}")
+            return "AgentChat temporarily unavailable"
 
 
 class AgentCapabilitiesInput(BaseModel):
@@ -58,8 +70,22 @@ class AgentCapabilitiesTool(BaseTool):
     args_schema: type[BaseModel] = AgentCapabilitiesInput
     
     def _run(self, detail_level: str = "summary", run_manager: Optional = None) -> str:
+        """Execute the agent capabilities tool synchronously (wrapper for async version)."""
+        import asyncio
+        try:
+            # Check if we're in an async context
+            loop = asyncio.get_running_loop()
+            # We're in an async context, this shouldn't be called
+            return "Error: Synchronous tool execution not supported in async context"
+        except RuntimeError:
+            # No event loop running, safe to create one
+            return asyncio.run(self._arun(detail_level, run_manager))
+    
+    async def _arun(self, detail_level: str = "summary", run_manager: Optional = None) -> str:
         """Execute the agent capabilities tool."""
         try:
+            import asyncio
+            await asyncio.sleep(0)  # Yield control
             # Get basic tools to avoid circular import
             from tools.utilities import CalculatorTool, EchoTool
             basic_tools = [CalculatorTool(), EchoTool()]

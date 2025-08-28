@@ -30,13 +30,9 @@ class AnthropicSSEGenerator:
                            If None, a simple whitespace-based counter is used.
         """
         self.last_heartbeat = 0
-        self.heartbeat_interval = 15  # seconds
+        self.heartbeat_interval = 5  # seconds (reduced for testing)
         self.content_blocks = {}  # Track active content blocks by type
         self.token_counter = token_counter or (lambda text: len(text.split()))
-        self.tool_use_detected = False
-        self.current_tool_name = None
-        self.current_tool_input = {}
-        self.tool_input_buffer = ""
 
     async def format_sse_event(self, event_type: str, data: Dict[str, Any]) -> str:
         """
@@ -50,7 +46,9 @@ class AnthropicSSEGenerator:
             A formatted SSE event string
         """
         try:
-            return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+            # Ensure JSON is single-line (no pretty printing)
+            json_data = json.dumps(data, separators=(',', ':'))
+            return f"event: {event_type}\ndata: {json_data}\n\n"
         except (TypeError, ValueError) as e:
             logger.error(f"Error formatting SSE event: {str(e)}")
             # Return a fallback error event
@@ -72,39 +70,7 @@ class AnthropicSSEGenerator:
             self.content_blocks[chunk_type] = len(self.content_blocks)
         return self.content_blocks[chunk_type]
 
-    async def detect_tool_use(self, chunk: Dict[str, Any]) -> bool:
-        """
-        Detect if a chunk represents a tool use request.
-        
-        Args:
-            chunk: The chunk from the stream generator
-            
-        Returns:
-            bool: True if the chunk represents a tool use, False otherwise
-        """
-        # Check for explicit tool_use type
-        if chunk.get("type") == "tool_use":
-            self.current_tool_name = chunk.get("name")
-            self.current_tool_input = chunk.get("input", {})
-            return True
-            
-        # Check for function_call type (OpenAI style)
-        if chunk.get("type") == "function_call" or "function_call" in chunk:
-            function_data = chunk.get("function_call", {})
-            if isinstance(function_data, dict):
-                self.current_tool_name = function_data.get("name")
-                # The input might be in arguments or already parsed
-                arguments = function_data.get("arguments", "{}")
-                if isinstance(arguments, str):
-                    try:
-                        self.current_tool_input = json.loads(arguments)
-                    except json.JSONDecodeError:
-                        self.current_tool_input = {"raw_arguments": arguments}
-                else:
-                    self.current_tool_input = arguments
-                return True
-                
-        return False
+
 
     async def process_tool_use(self, block_index: int) -> List[bytes]:
         """
@@ -201,11 +167,7 @@ class AnthropicSSEGenerator:
             # Track the last heartbeat time
             self.last_heartbeat = asyncio.get_event_loop().time()
             
-            # Reset tool use state
-            self.tool_use_detected = False
-            self.current_tool_name = None
-            self.current_tool_input = {}
-            self.tool_input_buffer = ""
+
             
             # Process the stream
             try:
@@ -216,18 +178,7 @@ class AnthropicSSEGenerator:
                         yield b": heartbeat\n\n"
                         self.last_heartbeat = current_time
                     
-                    # Check for tool use
-                    if await self.detect_tool_use(chunk):
-                        # Get block index for tool use
-                        tool_block_index = self.get_block_index_for_type("tool_use")
-                        
-                        # Process tool use and yield events
-                        for event in await self.process_tool_use(tool_block_index):
-                            yield event
-                        
-                        # Mark tool_use block as active
-                        active_blocks.add("tool_use")
-                        continue
+
                     
                     # Extract chunk type and content
                     chunk_type = chunk.get("type", "message")
@@ -272,18 +223,17 @@ class AnthropicSSEGenerator:
                     # Accumulate content
                     accumulated_content[chunk_type] += content
                     
-                    # Send content delta with appropriate delta type
-                    delta_type = f"{chunk_type}_delta"
-                    
-                    # Special case mappings for different content types
-                    if chunk_type == "message":
-                        delta_type = "text_delta"
-                    elif chunk_type == "thinking":
-                        delta_type = "thinking_delta"
-                    elif chunk_type == "voice":
-                        delta_type = "voice_delta"
-                    elif chunk_type == "tool":
-                        delta_type = "tool_delta"
+                    # Map chunk types to proper delta types
+                    delta_type_mapping = {
+                        "message": "message_delta",
+                        "thinking": "thinking_delta", 
+                        "tool": "tool_delta",
+                        "json": "json_delta",
+                        "system": "system_delta",
+                        "voice": "voice_delta",
+                        "error": "error"
+                    }
+                    delta_type = delta_type_mapping.get(chunk_type, "message_delta")
                     
                     yield (await self.format_sse_event("content_block_delta", {
                         "type": "content_block_delta",
@@ -334,8 +284,6 @@ class AnthropicSSEGenerator:
             
             if "error" in active_blocks:
                 stop_reason = "error"
-            elif self.tool_use_detected:
-                stop_reason = "tool_use"
             
             # Calculate total tokens
             total_tokens = 0
@@ -353,10 +301,18 @@ class AnthropicSSEGenerator:
                 "usage": {"output_tokens": total_tokens}
             })).encode('utf-8')
             
-            # End the message
+            # Send a heartbeat before ending (helps detect connection issues)
+            yield b": heartbeat\n\n"
+            
+            # End the message (but keep connection alive)
             yield (await self.format_sse_event("message_stop", {
                 "type": "message_stop"
             })).encode('utf-8')
+            
+            # Keep connection alive with periodic heartbeats
+            while True:
+                await asyncio.sleep(self.heartbeat_interval)
+                yield b": heartbeat\n\n"
             
         except Exception as e:
             logger.error(f"Critical error in SSE generation: {str(e)}")

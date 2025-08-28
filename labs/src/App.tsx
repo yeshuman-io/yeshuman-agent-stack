@@ -134,7 +134,7 @@ function App() {
   const [thinkingEvents, setThinkingEvents] = useState<StreamEvent[]>([]);
   const [toolEvents, setToolEvents] = useState<StreamEvent[]>([]);
   const [knowledgeEvents, setKnowledgeEvents] = useState<StreamEvent[]>([]);
-  const [conductorEvents, setConductorEvents] = useState<StreamEvent[]>([]);
+
   const [systemNotifications, setSystemNotifications] = useState<SystemNotification[]>([]);
   const [inputText, setInputText] = useState('');
   const [isConnected, setIsConnected] = useState(false);
@@ -158,8 +158,9 @@ function App() {
   const [jsonContent, setJsonContent] = useState<string>('');
   const [structuredData, setStructuredData] = useState<any>(null);
   
+  
   // Manage SSE connection
-  const setupSSEConnection = useCallback((initType: 'welcome' | 'connect' | 'messages' = 'connect') => {
+  const setupSSEConnection = useCallback((userState: 'new_user' | 'returning_user' | 'authenticated_user' = 'new_user') => {
     // Clean up any existing connection
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -169,12 +170,12 @@ function App() {
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
     
-    console.log(`Establishing SSE connection (${initType})...`);
+    console.log(`Establishing SSE connection (${userState})...`);
     
     // Clear content blocks for new connection
     contentBlocksRef.current = {};
     
-    fetchEventSource(`http://localhost:8111/agent/stream?init=${initType}`, {
+    fetchEventSource(`http://localhost:8000/agent/stream?user_state=${userState}`, {
       method: 'GET',
       headers: {
         'Accept': 'text/event-stream',
@@ -190,8 +191,8 @@ function App() {
         setIsConnected(true);
         console.log('SSE connection established');
         
-        // Show connection notification for non-welcome connections
-        if (initType !== 'welcome') {
+        // Show connection notification for returning users
+        if (userState === 'returning_user' || userState === 'authenticated_user') {
           setSystemNotifications(prev => [...prev, {
             id: generateId(),
             content: 'Connected to server',
@@ -204,13 +205,15 @@ function App() {
       
       // Called for each event
       onmessage(event) {
-        // Handle heartbeat messages
-        if (event.data.trim() === ": heartbeat") {
-          console.log('Received heartbeat');
-          return;
-        }
+        // Handle heartbeat messages (they don't come through onmessage)
+        // Heartbeats are SSE comments and are handled by the library internally
         
         try {
+          // Skip empty or malformed data
+          if (!event.data || event.data.trim() === '') {
+            return;
+          }
+          
           // Parse the event data
           const data = JSON.parse(event.data) as AnthropicEvent;
           console.log(`Received ${event.event} event:`, data);
@@ -286,7 +289,7 @@ function App() {
                   // Use delta.type to determine which panel to update
                   const deltaType = delta.type;
                   
-                  if (deltaType === "text_delta") {
+                  if (deltaType === "message_delta") {
                     // This should go to the main message panel
                     setMessages(prev => {
                       const messageIndex = prev.findIndex(msg => msg.id === blockId);
@@ -361,7 +364,7 @@ function App() {
               setVoiceContent("");
               setJsonContent("");
               setStructuredData(null);
-              setConductorEvents([]);
+
               
               // Log for debugging
               console.log(`Message start event received: ${JSON.stringify(data)}`);
@@ -375,14 +378,7 @@ function App() {
                 timestamp: new Date()
               };
               
-              // Check if this is a conductor event
-              const content = data.content || '';
-              if (content.includes('🎼') || content.includes('Starting') || content.includes('Progress:') || 
-                  content.includes('finished') || content.includes('All processes') || content.includes('Ready for')) {
-                setConductorEvents(prev => [...prev, systemEvent]);
-              } else {
-                setSystemNotifications(prev => [...prev, systemEvent]);
-              }
+              setSystemNotifications(prev => [...prev, systemEvent]);
               break;
               
             // Handle legacy format or simple system messages
@@ -396,14 +392,7 @@ function App() {
                   timestamp: new Date()
                 };
                 
-                // Check if this is a conductor event
-                const content = legacyData.content || '';
-                if (content.includes('🎼') || content.includes('Starting') || content.includes('Progress:') || 
-                    content.includes('finished') || content.includes('All processes') || content.includes('Ready for')) {
-                  setConductorEvents(prev => [...prev, systemEvent]);
-                } else {
-                  setSystemNotifications(prev => [...prev, systemEvent]);
-                }
+                setSystemNotifications(prev => [...prev, systemEvent]);
               } else if (legacyData.type === 'error') {
                 setSystemNotifications(prev => [...prev, {
                   id: generateId(),
@@ -450,22 +439,22 @@ function App() {
       // Keep the connection open in hidden tabs
       openWhenHidden: true,
       
-      // Configure retries (defined in the library)
+      // Configure retries to prevent connection drops
       onclose() {
         console.log('SSE connection closed');
         setIsConnected(false);
         
-        // Don't auto-reconnect for now - let user manually reconnect
-        // This prevents the constant reconnection loop
         setSystemNotifications(prev => [...prev, {
           id: generateId(),
           content: 'Connection completed. Ready for new messages.',
           timestamp: new Date()
         }]);
-        
-        // Optional: Set a longer timeout to reconnect (disabled for now)
-        // This prevents the constant reconnection loop that was causing issues
-      }
+      },
+      
+      // Retry configuration to keep connection alive
+      retry: true,
+      retryInterval: 1000, // Retry after 1 second
+      maxRetries: 3
     }).catch(error => {
       if (error.name !== 'AbortError') {
         console.error('Fatal SSE error:', error);
@@ -480,9 +469,55 @@ function App() {
   }, []);
   
   // Initialize connection on component mount
+  // Detect user state for smart session handling
+  const detectUserState = useCallback(() => {
+    try {
+      // Check if localStorage is available (fails in some incognito modes)
+      const testKey = 'yeshuman_test';
+      localStorage.setItem(testKey, 'test');
+      localStorage.removeItem(testKey);
+      
+      const hasSessionHistory = localStorage.getItem('yeshuman_session_id');
+      const lastVisit = localStorage.getItem('yeshuman_last_visit');
+      
+      if (!hasSessionHistory) {
+        // Store new session info
+        const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        localStorage.setItem('yeshuman_session_id', sessionId);
+        localStorage.setItem('yeshuman_last_visit', new Date().toISOString());
+        return 'new_user';
+      } else {
+        // Update last visit
+        localStorage.setItem('yeshuman_last_visit', new Date().toISOString());
+        return 'returning_user';
+      }
+    } catch (error) {
+      // localStorage not available (incognito, etc.) - always treat as new user
+      console.log('localStorage not available, treating as new user');
+      return 'new_user';
+    }
+    // Future: check auth token for 'authenticated_user'
+  }, []);
+
   useEffect(() => {
-    // Start with welcome connection
-    setupSSEConnection('welcome');
+    // Detect user state and send appropriate contextual message
+    const userState = detectUserState();
+    
+    // Send a contextual greeting message based on user state
+    let greetingMessage = "";
+    if (userState === 'new_user') {
+      greetingMessage = "Hi! I'm new here.";
+    } else if (userState === 'returning_user') {
+      greetingMessage = "Hey, I'm back!";
+    } else {
+      greetingMessage = "Hello!";
+    }
+    
+    // Send the greeting message and let agent respond naturally
+    setTimeout(() => {
+      // Use a slight delay to ensure UI is ready
+      handleSendInitialMessage(greetingMessage);
+    }, 100);
     
     // Cleanup on unmount
     return () => {
@@ -490,7 +525,216 @@ function App() {
         abortControllerRef.current.abort();
       }
     };
-  }, [setupSSEConnection]);
+  }, [detectUserState]);
+
+  // Handle content block delta events
+  const handleContentBlockDelta = useCallback((data: ContentBlockDeltaEvent) => {
+    if (data.delta && data.index !== undefined) {
+      const { index, delta } = data;
+      const { text } = delta;
+      
+      if (!contentBlocksRef.current[index]) {
+        console.warn(`Received delta for unknown content block ${index}`);
+        return;
+      }
+      
+      // Update stored content
+      contentBlocksRef.current[index].content += text || "";
+      const blockType = contentBlocksRef.current[index].type;
+      const blockId = contentBlocksRef.current[index].id;
+      const blockContent = contentBlocksRef.current[index].content;
+      
+      // Log for debugging
+      console.log(`Content block delta: type=${blockType}, delta_type=${delta.type}, text=${text}`);
+      
+      // Handle each delta type appropriately based on both block type and delta type
+      if (text) {
+        // Create event object for history
+        const newEvent = {
+          id: generateId(),
+          content: text,
+          timestamp: new Date()
+        };
+        
+        // Use delta.type to determine which panel to update
+        const deltaType = delta.type;
+        
+        if (deltaType === "message_delta") {
+          // This should go to the main message panel
+          setMessages(prev => {
+            const messageIndex = prev.findIndex(msg => msg.id === blockId);
+            if (messageIndex >= 0) {
+              const updatedMessages = [...prev];
+              updatedMessages[messageIndex] = {
+                ...updatedMessages[messageIndex],
+                content: blockContent
+              };
+              return updatedMessages;
+            }
+            return prev;
+          });
+        } else if (deltaType === "thinking_delta") {
+          // Add to thinking events for history
+          setThinkingEvents(prev => [...prev, newEvent]);
+          // Accumulate thinking content
+          setThinkingContent(prev => prev + text);
+        } else if (deltaType === "voice_delta") {
+          // Add to voice events for history
+          setVoiceEvents(prev => [...prev, newEvent]);
+          // Accumulate voice content
+          setVoiceContent(prev => prev + text);
+        } else if (deltaType === "tool_delta") {
+          setToolEvents(prev => [...prev, newEvent]);
+        } else if (deltaType === "knowledge_delta") {
+          setKnowledgeEvents(prev => [...prev, newEvent]);
+        } else if (deltaType === "json_delta") {
+          // Progressive JSON accumulation
+          setJsonContent(prev => {
+            const newContent = prev + text;
+            
+            // Try to parse accumulated JSON
+            try {
+              const parsed = JSON.parse(newContent);
+              setStructuredData(parsed);
+              console.log('✅ JSON parsed successfully:', parsed);
+            } catch(e) {
+              // Still accumulating, not yet valid JSON
+              console.log('⏳ Accumulating JSON...', newContent.length, 'chars');
+            }
+            
+            return newContent;
+          });
+          
+          // Also add to knowledge events for history
+          setKnowledgeEvents(prev => [...prev, {
+            ...newEvent,
+            content: `JSON: ${text}`
+          }]);
+        } else if (deltaType === "error_delta") {
+          setSystemNotifications(prev => [...prev, {
+            ...newEvent,
+            isError: true
+          }]);
+        } else {
+          console.warn(`Unknown delta type: ${deltaType}`);
+        }
+      }
+    }
+  }, [setMessages, setThinkingEvents, setThinkingContent, setVoiceEvents, setVoiceContent, setToolEvents, setKnowledgeEvents, setJsonContent, setStructuredData, setSystemNotifications]);
+  
+  // Function to handle sending initial greeting (hidden from user)
+  const handleSendInitialMessage = useCallback(async (message: string) => {
+    try {
+      // Clean up any existing connection first
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      
+      // Create a new abort controller
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      
+      console.log('Sending initial greeting:', message);
+      
+      // Clear content blocks for new response
+      contentBlocksRef.current = {};
+      
+      // Send POST request and consume the SSE response directly
+      fetchEventSource('http://localhost:8000/agent/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify({ message }),
+        signal: abortController.signal,
+        
+        // Called when the connection is established
+        onopen(response) {
+          if (!response.ok) {
+            throw new Error(`Failed to send initial message: ${response.status} ${response.statusText}`);
+          }
+          
+          setIsConnected(true);
+          console.log('Initial greeting sent, consuming SSE response...');
+        },
+        
+        // Called for each event (reuse existing event handling)
+        onmessage(event) {
+          try {
+            // Skip empty or malformed data
+            if (!event.data || event.data.trim() === '') {
+              return;
+            }
+            
+            // Parse the event data
+            const data = JSON.parse(event.data) as AnthropicEvent;
+            console.log(`Received ${event.event} event:`, data);
+            
+            // Handle different event types
+            switch (event.event) {
+              case 'content_block_start':
+                if (data.content_block) {
+                  const { index, content_block } = data;
+                  const { type, id } = content_block;
+                  
+                  // Store new content block
+                  contentBlocksRef.current[index!] = {
+                    id,
+                    type,
+                    content: ""
+                  };
+                  
+                  // Initialize UI for agent response (no user message shown)
+                  if (type === "text") {
+                    setMessages(prev => [...prev, {
+                      id,
+                      content: "",
+                      isUser: false
+                    }]);
+                  }
+                }
+                break;
+                
+              case 'content_block_delta':
+                handleContentBlockDelta(data as ContentBlockDeltaEvent);
+                break;
+                
+              case 'message_stop':
+                console.log('Initial message completed');
+                break;
+                
+              default:
+                console.log(`Unhandled event type: ${event.event}`, data);
+            }
+          } catch (error) {
+            console.error('Error parsing SSE event:', error, 'Raw data:', event.data);
+          }
+        },
+        
+        // Called when connection closes
+        onclose() {
+          console.log('SSE connection closed');
+          setIsConnected(false);
+        },
+        
+        // Called on error
+        onerror(error) {
+          console.error('SSE connection error:', error);
+          setIsConnected(false);
+        },
+        
+        // Retry config
+        retry: {
+          retryMs: 1000,
+          maxRetries: 3
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error sending initial message:', error);
+    }
+  }, [handleContentBlockDelta]);
   
   // Function to handle sending a message
   const handleSendMessage = useCallback(async () => {
@@ -509,23 +753,132 @@ function App() {
       setInputText('');
       
       try {
-        // Send POST request
-        const response = await fetch('http://localhost:8111/agent/stream', {
+        // Clean up any existing connection first
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+        
+        // Create a new abort controller
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+        
+        console.log('Sending message via POST and consuming SSE response...');
+        
+        // Clear content blocks for new response
+        contentBlocksRef.current = {};
+        
+        // Send POST request and consume the SSE response directly
+        fetchEventSource('http://localhost:8000/agent/stream', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
           },
           body: JSON.stringify({ message: userInput }),
+          signal: abortController.signal,
+          
+          // Called when the connection is established
+          onopen(response) {
+            if (!response.ok) {
+              throw new Error(`Failed to send message: ${response.status} ${response.statusText}`);
+            }
+            
+            setIsConnected(true);
+            console.log('Message sent, consuming SSE response...');
+          },
+          
+          // Called for each event
+          onmessage(event) {
+            // Handle heartbeat messages (they don't come through onmessage)
+            // Heartbeats are SSE comments and are handled by the library internally
+            
+            try {
+              // Skip empty or malformed data
+              if (!event.data || event.data.trim() === '') {
+                return;
+              }
+              
+              // Parse the event data
+              const data = JSON.parse(event.data) as AnthropicEvent;
+              console.log(`Received ${event.event} event:`, data);
+              
+              // Handle different event types
+              switch (event.event) {
+                case 'content_block_start':
+                  if (data.content_block) {
+                    const { index, content_block } = data;
+                    const { type, id } = content_block;
+                    
+                    // Store new content block
+                    contentBlocksRef.current[index!] = {
+                      id,
+                      type,
+                      content: ""
+                    };
+                    
+                    // Log for debugging
+                    console.log(`Content block start: index=${index}, type=${type}, id=${id}`);
+                    
+                    // Initialize UI based on content block type
+                    if (type === "text") {
+                      setMessages(prev => {
+                        // Only add a new message if the last message is from the user or no messages exist
+                        if (prev.length === 0 || prev[prev.length - 1].isUser) {
+                          return [...prev, {
+                            id,
+                            content: "",
+                            isUser: false
+                          }];
+                        }
+                        return prev;
+                      });
+                    }
+                  }
+                  break;
+                  
+                case 'content_block_delta':
+                  handleContentBlockDelta(data as ContentBlockDeltaEvent);
+                  break;
+                  
+                case 'message_stop':
+                  console.log('Message completed');
+                  // Don't close connection, keep it alive for potential follow-ups
+                  break;
+                  
+                default:
+                  console.log(`Unhandled event type: ${event.event}`, data);
+              }
+            } catch (error) {
+              console.error('Error parsing SSE event:', error, 'Raw data:', event.data);
+            }
+          },
+          
+          // Called when connection closes
+          onclose() {
+            console.log('SSE connection closed');
+            setIsConnected(false);
+          },
+          
+          // Called on error
+          onerror(error) {
+            console.error('SSE connection error:', error);
+            setIsConnected(false);
+            
+            setSystemNotifications(prev => [...prev, {
+              id: generateId(),
+              content: 'Connection error occurred',
+              timestamp: new Date(),
+              isError: true
+            }]);
+          },
+          
+          // Retry config
+          retry: {
+            retryMs: 1000,
+            maxRetries: 3
+          }
         });
         
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        // Set up SSE connection if needed
-        if (!isConnected) {
-          setupSSEConnection('connect');
-        }
       } catch (error) {
         console.error('Error sending message:', error);
         
@@ -538,7 +891,7 @@ function App() {
         }]);
       }
     }
-  }, [inputText, isConnected, setupSSEConnection]);
+  }, [inputText, handleContentBlockDelta]);
 
   // Memoized setInputText to prevent unnecessary re-renders
   const handleInputChange = useCallback((text: string) => {
@@ -652,13 +1005,12 @@ function App() {
           {/* Mobile view: Tabs for different streams */}
           <div className="md:hidden w-full">
             <Tabs defaultValue="data" className="w-full">
-              <TabsList className="grid grid-cols-7 w-full">
+              <TabsList className="grid grid-cols-6 w-full">
                 <TabsTrigger value="data">YesHuman</TabsTrigger>
                 <TabsTrigger value="voice">Voice</TabsTrigger>
                 <TabsTrigger value="thinking">Thinking</TabsTrigger>
                 <TabsTrigger value="tools">Tools</TabsTrigger>
                 <TabsTrigger value="knowledge">Knowledge</TabsTrigger>
-                <TabsTrigger value="conductor">Conductor</TabsTrigger>
                 <TabsTrigger value="system">System</TabsTrigger>
               </TabsList>
               
@@ -802,43 +1154,7 @@ function App() {
                 </Card>
               </TabsContent>
               
-              <TabsContent value="conductor" className="h-[calc(100vh-150px)]">
-                <Card className="h-full border-0 rounded-none">
-                  <CardHeader className="px-4 py-2">
-                    <CardTitle className="flex items-center gap-2">
-                      🎼 Conductor
-                      <span className="text-xs text-muted-foreground">
-                        ({conductorEvents.length} events)
-                      </span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <div className="h-[calc(100vh-200px)] overflow-y-auto no-scrollbar">
-                      <div>
-                        {[...conductorEvents].reverse().map(event => (
-                          <div key={event.id} className="mb-3 p-2 rounded-lg bg-muted/30 border border-border/20">
-                            <div className="flex items-start">
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-foreground/90">{event.content}</p>
-                                <p className="text-xs text-muted-foreground/60 mt-1">
-                                  {formatTime(event.timestamp)}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                        {conductorEvents.length === 0 && (
-                          <div className="text-center text-muted-foreground/50 text-xs py-8">
-                            <div className="mb-2">🎼</div>
-                            <p>Conductor orchestration events will appear here</p>
-                            <p className="mt-1">Parallel process coordination • Progress tracking • Status updates</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+
               
               <TabsContent value="system" className="h-[calc(100vh-150px)]">
                 <Card className="h-full border-0 rounded-none">
@@ -968,10 +1284,10 @@ function App() {
                 </div>
               </div>
               
-              {/* Bottom row: Tools, Conductor, and System */}
+              {/* Bottom row: Tools and System */}
               <div className="flex flex-1">
                 {/* Tools column */}
-                <div className="w-1/3 border-r">
+                <div className="w-1/2 border-r">
                   <Card className="h-full border-0 rounded-none">
                     <CardHeader className="px-4 py-2">
                       <CardTitle>Tools</CardTitle>
@@ -986,42 +1302,8 @@ function App() {
                   </Card>
                 </div>
                 
-                {/* Conductor column */}
-                <div className="w-1/3 border-r">
-                  <Card className="h-full border-0 rounded-none">
-                    <CardHeader className="px-4 py-2">
-                      <CardTitle className="flex items-center gap-2">
-                        🎼 Conductor
-                        <span className="text-xs text-muted-foreground">
-                          ({conductorEvents.length})
-                        </span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-4">
-                      <div className="h-[calc(100vh/2-100px)] overflow-y-auto no-scrollbar">
-                        <div>
-                          {[...conductorEvents].reverse().map(event => (
-                            <div key={event.id} className="mb-2 p-1.5 rounded bg-muted/20 border border-border/20">
-                              <p className="text-xs font-medium text-foreground/90">{event.content}</p>
-                              <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                                {formatTime(event.timestamp)}
-                              </p>
-                            </div>
-                          ))}
-                          {conductorEvents.length === 0 && (
-                            <div className="text-center text-muted-foreground/50 text-xs py-4">
-                              <div className="mb-1">🎼</div>
-                              <p>Orchestration</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-                
                 {/* System notifications column */}
-                <div className="w-1/3">
+                <div className="w-1/2">
                   <Card className="h-full border-0 rounded-none">
                     <CardHeader className="px-4 py-2">
                       <CardTitle>System</CardTitle>

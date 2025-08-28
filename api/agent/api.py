@@ -1,17 +1,17 @@
 """
 Agent API endpoints for custom UI consumers.
 
-This module provides endpoints that return Anthropic-compatible
-SSE streams for custom UIs expecting delta events.
+This module provides a unified streaming endpoint that returns Anthropic-compatible
+SSE streams for custom UIs expecting delta events. Follows the server/ pattern.
 """
 import json
 import logging
 from ninja import NinjaAPI
 from pydantic import BaseModel
-from django.http import HttpResponse
+
 from utils.sse import SSEHttpResponse
 from streaming.generators import AnthropicSSEGenerator
-from agent.graph import astream_agent
+from agent.graph import astream_agent_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -23,87 +23,79 @@ class AgentRequest(BaseModel):
     message: str
 
 
-class AgentResponse(BaseModel):
-    """Response model for non-streaming agent interactions."""
-    response: str
-    success: bool
-
-
-@agent_api.api_operation(["OPTIONS"], "/stream", summary="CORS preflight for agent stream")
-def agent_stream_options(request):
-    """Handle CORS preflight requests for the streaming endpoint."""
-    response = HttpResponse()
-    response["Access-Control-Allow-Origin"] = "*"
-    response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response["Access-Control-Allow-Headers"] = "Content-Type, Accept, Authorization, X-API-Key"
-    response["Access-Control-Max-Age"] = "86400"
-    return response
-
-
-@agent_api.get("/stream", summary="Agent streaming (Anthropic SSE format) - GET")
-async def agent_stream_get(request):
+@agent_api.api_operation(["GET", "POST", "OPTIONS"], "/stream", summary="Unified Agent Streaming Endpoint")
+async def stream(request):
     """
-    GET endpoint for agent streaming with init parameter support.
+    Unified streaming endpoint following server/ pattern.
     
-    Supports query parameters:
-    - message: Direct message to send to agent
-    - init: Initialization type (welcome, demo, test)
+    Handles GET, POST, and OPTIONS requests:
+    - OPTIONS /agent/stream           -> CORS preflight
+    - GET  /agent/stream?init=welcome -> Initialization streams  
+    - GET  /agent/stream?message=...  -> Direct message streams
+    - POST /agent/stream             -> User message streams via JSON body
     
     Returns:
         SSEHttpResponse with Anthropic-compatible streaming events
     """
-    message = request.GET.get('message')
-    init_type = request.GET.get('init')
     
-    if init_type:
-        # Map init types to appropriate messages
-        init_messages = {
-            'welcome': 'Welcome! I\'m YesHuman, your AI assistant. How can I help you today?',
-            'demo': 'This is a demonstration of thinking and response streaming.',
-            'test': 'Testing the agent with thinking and response nodes.'
-        }
-        message = init_messages.get(init_type, f'Initializing with {init_type}...')
-    elif not message:
-        message = 'Hello! How can I help you today?'
+    # Handle CORS preflight
+    if request.method == "OPTIONS":
+        from django.http import HttpResponse
+        response = HttpResponse()
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Accept"
+        return response
     
-    # Create a payload object
-    class MockPayload:
-        def __init__(self, message):
-            self.message = message
-    
-    payload = MockPayload(message)
-    return await agent_stream_post(request, payload)
-
-
-@agent_api.post("/stream", summary="Agent streaming (Anthropic SSE format)")
-async def agent_stream_post(request, payload: AgentRequest):
-    """
-    Streaming agent interaction using real LangGraph with SSEGenerator.
-    
-    Args:
-        request: HTTP request object
-        payload: The agent request containing the message
+    if request.method == "POST":
+        # Handle POST request with JSON body
+        try:
+            data = json.loads(request.body)
+            message = data.get("message", "")
+            if not message:
+                # Return error as SSE stream for consistency
+                async def error_stream():
+                    yield f"event: error\ndata: {json.dumps({'type': 'error', 'content': 'Message is required in POST body'})}\n\n"
+                response = SSEHttpResponse(error_stream())
+                response["Access-Control-Allow-Origin"] = "*"
+                return response
+                
+        except json.JSONDecodeError:
+            # Return error as SSE stream for consistency  
+            async def error_stream():
+                yield f"event: error\ndata: {json.dumps({'type': 'error', 'content': 'Invalid JSON in request body'})}\n\n"
+            response = SSEHttpResponse(error_stream())
+            response["Access-Control-Allow-Origin"] = "*"
+            return response
+            
+    else:  # GET request
+        # Handle GET request with query parameters
+        message = request.GET.get('message')
+        user_state = request.GET.get('user_state', 'new_user')
         
-    Returns:
-        SSEHttpResponse with Anthropic-compatible streaming events
-    """
+        if not message:
+            # No hardcoded messages - return error if no message provided
+            async def error_stream():
+                yield f"event: error\ndata: {json.dumps({'type': 'error', 'content': 'Message is required'})}\n\n"
+            response = SSEHttpResponse(error_stream())
+            response["Access-Control-Allow-Origin"] = "*"
+            return response
     
-    # Use the existing SSEGenerator - agent emits correct format
-    sse_generator = AnthropicSSEGenerator()
-    return SSEHttpResponse(sse_generator.generate_sse(astream_agent(payload.message)))
-
-
-@agent_api.post("/message", summary="Agent message interaction (non-streaming)")
-async def agent_message_post(request, payload: AgentRequest):
-    """
-    Non-streaming agent message endpoint that delegates to the streaming endpoint.
-    
-    Args:
-        request: HTTP request object
-        payload: The agent request containing the message
+    # Stream the agent response using AnthropicSSEGenerator
+    try:
+        sse_generator = AnthropicSSEGenerator()
+        response = SSEHttpResponse(sse_generator.generate_sse(astream_agent_tokens(message)))
+        # Add CORS headers
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Content-Type, Accept"
+        return response
         
-    Returns:
-        SSEHttpResponse with Anthropic-compatible streaming events
-    """
-    # Delegate to streaming endpoint
-    return await agent_stream_post(request, payload)
+    except Exception as e:
+        logger.error(f"Agent streaming error: {str(e)}")
+        # Return error as SSE stream for consistency
+        async def error_stream():
+            yield f"event: error\ndata: {json.dumps({'type': 'error', 'content': 'Agent execution encountered an error'})}\n\n"
+        response = SSEHttpResponse(error_stream())
+        response["Access-Control-Allow-Origin"] = "*"
+        return response

@@ -20,7 +20,7 @@ mcp_api = NinjaAPI(
 def sse_mcp_endpoint(request):
     """SSE endpoint for MCP protocol compatibility."""
     
-    def event_stream():
+    async def event_stream():
         """Generate SSE events for MCP communication."""
         # MCP initialization response
         init_response = {
@@ -60,7 +60,7 @@ def sse_mcp_endpoint(request):
                     id=body.get("id")
                 )
                 
-                response = mcp_server.handle_request(mcp_request)
+                response = await mcp_server.handle_request(mcp_request)
                 
                 # Format as JSON-RPC response
                 jsonrpc_response = {
@@ -98,7 +98,7 @@ def mcp_tools_sse(request):
 
 
 @mcp_api.post("/")
-def mcp_endpoint(request):
+async def mcp_endpoint(request):
     """Main MCP endpoint with streaming response for MCP protocol."""
     try:
         # Parse the JSON-RPC request
@@ -111,7 +111,7 @@ def mcp_endpoint(request):
             id=body.get("id")
         )
         
-        response = mcp_server.handle_request(mcp_request)
+        response = await mcp_server.handle_request(mcp_request)
         
         # Return as streaming response for MCP compatibility
         def generate_response():
@@ -164,10 +164,10 @@ class ToolCallRequest(Schema):
 
 
 @mcp_api.post("/tools/call")
-def call_tool_endpoint(request, payload: ToolCallRequest):
+async def call_tool_endpoint(request, payload: ToolCallRequest):
     """Convenience endpoint to call a tool directly."""
     try:
-        result = mcp_server.call_tool(payload.tool_name, payload.arguments)
+        result = await mcp_server.call_tool(payload.tool_name, payload.arguments)
         return {"success": True, "result": result}
     except Exception as e:
         return {"success": False, "error": str(e)}
