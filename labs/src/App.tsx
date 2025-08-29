@@ -55,6 +55,12 @@ interface AnthropicEvent {
   usage?: { output_tokens: number };
 }
 
+// Minimal event shape for deltas to satisfy TS
+type ContentBlockDeltaEvent = {
+  index: number;
+  delta: { type: string; text?: string };
+};
+
 // Type for legacy event data
 interface LegacyEventData {
   type?: string;
@@ -131,6 +137,7 @@ const ChatInput = ({ inputText, setInputText, handleSendMessage, shortcutMode }:
 function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [voiceEvents, setVoiceEvents] = useState<StreamEvent[]>([]);
+  const [voiceLines, setVoiceLines] = useState<string[]>([]);
   const [thinkingEvents, setThinkingEvents] = useState<StreamEvent[]>([]);
   const [toolEvents, setToolEvents] = useState<StreamEvent[]>([]);
   const [knowledgeEvents, setKnowledgeEvents] = useState<StreamEvent[]>([]);
@@ -154,6 +161,7 @@ function App() {
   
   // Instead of storing full events in state, just store the latest content
   const [thinkingContent, setThinkingContent] = useState<string>('');
+  // Deprecated for rendering; voiceLines is used instead
   const [voiceContent, setVoiceContent] = useState<string>('');
   const [jsonContent, setJsonContent] = useState<string>('');
   const [structuredData, setStructuredData] = useState<any>(null);
@@ -252,8 +260,7 @@ function App() {
                   // Reset thinking content when a new thinking block starts
                   setThinkingContent("");
                 } else if (type === "voice") {
-                  // Start a new voice line; do not clear previous content
-                  setVoiceContent(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
+                  // Start a new voice segment element
                   setVoiceLines(prev => [...prev, ""]);
                   console.log(`[voice] content_block_start index=${index} id=${id}`);
                 }
@@ -312,24 +319,15 @@ function App() {
                     // Accumulate thinking content
                     setThinkingContent(prev => prev + text);
                   } else if (deltaType === "voice_delta") {
-                    // If this is a new voice segment (previous delta for this block wasn't voice),
-                    // start a new line before appending
-                    if (blockType === "voice" && prevDeltaType !== "voice_delta") {
-                      setVoiceContent(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
-                      console.log(`[voice] segment boundary detected (prev=${prevDeltaType || 'none'}) → new line`);
-                    }
                     // Add to voice events for history
                     setVoiceEvents(prev => [...prev, newEvent]);
-                    // Accumulate voice content
-                    setVoiceContent(prev => prev + text);
-                    // Also maintain a lines array that pushes tokens into the last line
+                    // Append token to latest voice line
                     setVoiceLines(prev => {
                       if (prev.length === 0) return [text];
                       const copy = [...prev];
                       copy[copy.length - 1] = (copy[copy.length - 1] || "") + (text || "");
                       return copy;
                     });
-                    console.log(`[voice] delta text='${text?.replace(/\n/g, "\\n")}' len=${text?.length ?? 0}`);
                   } else if (deltaType === "voice_complete") {
                     // Boundary signal from backend—ensure newline without appending text
                     setVoiceContent(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
@@ -410,7 +408,7 @@ function App() {
               // Handle system events from conductor orchestration
               const systemEvent = {
                 id: generateId(),
-                content: data.content || '',
+                content: (data as any).content || '',
                 timestamp: new Date()
               };
               
@@ -421,7 +419,7 @@ function App() {
               // Handle tool events
               const toolEvent = {
                 id: generateId(),
-                content: data.content || '',
+                content: (data as any).content || '',
                 timestamp: new Date()
               };
               
@@ -498,10 +496,7 @@ function App() {
         }]);
       },
       
-      // Retry configuration to keep connection alive
-      retry: true,
-      retryInterval: 1000, // Retry after 1 second
-      maxRetries: 3
+      // Remove unsupported retry options (library handles retries internally if configured elsewhere)
     }).catch(error => {
       if (error.name !== 'AbortError') {
         console.error('Fatal SSE error:', error);
@@ -704,6 +699,7 @@ function App() {
           
           setIsConnected(true);
           console.log('Initial greeting sent, consuming SSE response...');
+          return Promise.resolve();
         },
         
         // Called for each event (reuse existing event handling)
@@ -740,8 +736,8 @@ function App() {
                       isUser: false
                     }]);
                   } else if (type === "voice") {
-                    // Start a new voice line for this block
-                    setVoiceContent(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
+                    // Start a new voice segment element
+                    setVoiceLines(prev => [...prev, ""]);
                     console.log(`[voice] content_block_start index=${index} id=${id}`);
                   }
                 }
@@ -756,8 +752,6 @@ function App() {
                   const idx = data.index as number;
                   const block = contentBlocksRef.current[idx];
                   if (block && block.type === "voice") {
-                    setVoiceContent(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
-                    setVoiceLines(prev => (prev.length ? [...prev, ""] : prev));
                     console.log(`[voice] content_block_stop index=${idx}`);
                   }
                 }
@@ -787,11 +781,6 @@ function App() {
           setIsConnected(false);
         },
         
-        // Retry config
-        retry: {
-          retryMs: 1000,
-          maxRetries: 3
-        }
       });
       
     } catch (error) {
@@ -848,6 +837,7 @@ function App() {
             
             setIsConnected(true);
             console.log('Message sent, consuming SSE response...');
+            return Promise.resolve();
           },
           
           // Called for each event
@@ -895,6 +885,10 @@ function App() {
                         }
                         return prev;
                       });
+                    } else if (type === "voice") {
+                      // Start a new voice segment element
+                      setVoiceLines(prev => [...prev, ""]);
+                      console.log(`[voice] content_block_start index=${index} id=${id}`);
                     }
                   }
                   break;
@@ -905,7 +899,8 @@ function App() {
                   
                 case 'message_stop':
                   console.log('Message completed');
-                  // Don't close connection, keep it alive for potential follow-ups
+                  // Ensure final voice line is closed visually by pushing an empty boundary
+                  setVoiceLines(prev => (prev.length && prev[prev.length - 1] !== "" ? [...prev, ""] : prev));
                   break;
                   
                 default:
@@ -935,11 +930,6 @@ function App() {
             }]);
           },
           
-          // Retry config
-          retry: {
-            retryMs: 1000,
-            maxRetries: 3
-          }
         });
         
       } catch (error) {
@@ -1140,8 +1130,10 @@ function App() {
                       className="h-[calc(100vh-200px)] flex flex-col overflow-y-auto p-2 no-scrollbar"
                     >
                       <div className="flex-1"></div>
-                      <div className="mt-auto">
-                        {renderStreamingContent(voiceContent)}
+                      <div className="mt-auto space-y-1">
+                        {voiceLines.map((line, i) => (
+                          <div key={i} className="text-xs italic text-muted-foreground whitespace-pre-wrap">{line}</div>
+                        ))}
                       </div>
                     </div>
                   </CardContent>
@@ -1339,8 +1331,10 @@ function App() {
                         className="h-[calc(100vh/2-100px)] flex flex-col overflow-y-auto p-2 no-scrollbar"
                       >
                         <div className="flex-1"></div>
-                        <div className="mt-auto">
-                          {renderStreamingContent(voiceContent)}
+                        <div className="mt-auto space-y-1">
+                          {voiceLines.map((line, i) => (
+                            <div key={i} className="text-xs italic text-muted-foreground whitespace-pre-wrap">{line}</div>
+                          ))}
                         </div>
                       </div>
                     </CardContent>

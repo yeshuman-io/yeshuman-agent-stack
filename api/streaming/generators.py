@@ -32,6 +32,7 @@ class AnthropicSSEGenerator:
         self.last_heartbeat = 0
         self.heartbeat_interval = 5  # seconds (reduced for testing)
         self.content_blocks = {}  # Track active content blocks by type
+        self.voice_counter = 0     # Fresh index per voice segment
         self.token_counter = token_counter or (lambda text: len(text.split()))
 
     async def format_sse_event(self, event_type: str, data: Dict[str, Any]) -> str:
@@ -182,24 +183,53 @@ class AnthropicSSEGenerator:
                     chunk_type = chunk.get("type", "message")
                     content = chunk.get("content", "")
 
-                    # Special boundary: voice_complete should be forwarded even without content
-                    if chunk_type == "voice_complete":
-                        # Ensure a voice block exists and is active
-                        voice_index = self.get_block_index_for_type("voice")
-                        if "voice" not in active_blocks:
-                            active_blocks.add("voice")
+                    # Voice segment start: allocate fresh content block
+                    if chunk_type == "voice_start":
+                        idx = len(self.content_blocks) + self.voice_counter
+                        # Reserve a unique index for this segment
+                        segment_index = idx
+                        self.voice_counter += 1
+                        active_blocks.add(f"voice_{segment_index}")
+                        self.content_blocks[f"voice_{segment_index}"] = segment_index
+                        yield (await self.format_sse_event("content_block_start", {
+                            "type": "content_block_start",
+                            "index": segment_index,
+                            "content_block": {"type": "voice", "id": f"voice_{uuid.uuid4().hex[:8]}"}
+                        })).encode('utf-8')
+                        continue
+                    # Voice tokens: route to the most recent voice segment block
+                    if chunk_type == "voice":
+                        # Find latest voice segment index
+                        voice_keys = [k for k in self.content_blocks.keys() if k.startswith("voice_")]
+                        if not voice_keys:
+                            # If no start was sent, open one implicitly
+                            segment_index = len(self.content_blocks) + self.voice_counter
+                            self.voice_counter += 1
+                            active_blocks.add(f"voice_{segment_index}")
+                            self.content_blocks[f"voice_{segment_index}"] = segment_index
                             yield (await self.format_sse_event("content_block_start", {
                                 "type": "content_block_start",
-                                "index": voice_index,
+                                "index": segment_index,
                                 "content_block": {"type": "voice", "id": f"voice_{uuid.uuid4().hex[:8]}"}
                             })).encode('utf-8')
-                        # Emit a boundary delta the UI can interpret as newline
+                        else:
+                            segment_index = self.content_blocks[sorted(voice_keys, key=lambda k: int(k.split('_')[1]))[-1]]
                         yield (await self.format_sse_event("content_block_delta", {
                             "type": "content_block_delta",
-                            "index": voice_index,
-                            "delta": {"type": "voice_complete", "message": chunk.get("message", "")}
+                            "index": segment_index,
+                            "delta": {"type": "voice_delta", "text": content}
                         })).encode('utf-8')
-                        # Do not mark stop here; allow subsequent voice deltas in same message
+                        continue
+                    # Voice stop: close the most recent voice block
+                    if chunk_type == "voice_stop":
+                        voice_keys = [k for k in self.content_blocks.keys() if k.startswith("voice_")]
+                        if voice_keys:
+                            segment_key = sorted(voice_keys, key=lambda k: int(k.split('_')[1]))[-1]
+                            segment_index = self.content_blocks[segment_key]
+                            yield (await self.format_sse_event("content_block_stop", {
+                                "type": "content_block_stop",
+                                "index": segment_index
+                            })).encode('utf-8')
                         continue
 
                     # Skip empty chunks
@@ -251,7 +281,6 @@ class AnthropicSSEGenerator:
                         "json": "json_delta",
                         "system": "system_delta",
                         "voice": "voice_delta",
-                        "voice_complete": "voice_complete",
                         "error": "error"
                     }
                     delta_type = delta_type_mapping.get(chunk_type, "message_delta")

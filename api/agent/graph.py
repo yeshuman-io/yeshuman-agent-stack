@@ -127,6 +127,9 @@ async def agent_node(state: AgentState) -> AgentState:
                         "Return ONLY the status line, no quotes."
                     )
                     new_line = ""
+                    # Signal start of a new voice segment
+                    if writer:
+                        writer({"type": "voice_start"})
                     async for _chunk in voice_llm.astream([HumanMessage(content=prompt)]):
                         if _chunk.content:
                             new_line += _chunk.content
@@ -138,9 +141,9 @@ async def agent_node(state: AgentState) -> AgentState:
                     if new_line_clean and new_line_clean.lower() != (last_line or "").strip().lower():
                         vs.setdefault("voice_messages", []).append(new_line_clean)
                     vs["last_voice_sig"] = phase_sig
-                    # Signal voice segment completion for clean UI line breaks
+                    # Signal voice segment completion
                     if writer:
-                        writer({"type": "voice_complete", "message": "done"})
+                        writer({"type": "voice_stop"})
                 except Exception as _e:
                     logger.debug(f"Voice generation non-fatal error: {_e}")
             _asyncio.create_task(_voice_task())
