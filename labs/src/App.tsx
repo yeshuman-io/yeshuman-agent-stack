@@ -623,8 +623,13 @@ function App() {
         } else if (deltaType === "voice_delta") {
           // Add to voice events for history
           setVoiceEvents(prev => [...prev, newEvent]);
-          // Accumulate voice content
-          setVoiceContent(prev => prev + text);
+          // Append token to latest voice line
+          setVoiceLines(prev => {
+            if (prev.length === 0) return [text || ""];
+            const copy = [...prev];
+            copy[copy.length - 1] = (copy[copy.length - 1] || "") + (text || "");
+            return copy;
+          });
         } else if (deltaType === "tool_delta") {
           setToolEvents(prev => [...prev, newEvent]);
         } else if (deltaType === "knowledge_delta") {

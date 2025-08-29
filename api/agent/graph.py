@@ -112,6 +112,7 @@ async def agent_node(state: AgentState) -> AgentState:
             import asyncio as _asyncio
             async def _voice_task():
                 try:
+                    logger.info(f"Voice task started for phase: {phase_sig}")
                     # Context for a brief progress prompt
                     user_msg = ""
                     for _m in reversed(state.get("messages", [])):
@@ -129,11 +130,13 @@ async def agent_node(state: AgentState) -> AgentState:
                     new_line = ""
                     # Signal start of a new voice segment
                     if writer:
+                        logger.info("Sending voice_start signal")
                         writer({"type": "voice_start"})
                     async for _chunk in voice_llm.astream([HumanMessage(content=prompt)]):
                         if _chunk.content:
                             new_line += _chunk.content
                             if writer:
+                                logger.info(f"Sending voice chunk: {_chunk.content}")
                                 writer({"type": "voice", "content": _chunk.content})
                     # Persist
                     new_line_clean = (new_line or "").strip()
@@ -143,9 +146,11 @@ async def agent_node(state: AgentState) -> AgentState:
                     vs["last_voice_sig"] = phase_sig
                     # Signal voice segment completion
                     if writer:
+                        logger.info("Sending voice_stop signal")
                         writer({"type": "voice_stop"})
+                    logger.info(f"Voice task completed: {new_line_clean}")
                 except Exception as _e:
-                    logger.debug(f"Voice generation non-fatal error: {_e}")
+                    logger.error(f"Voice generation error: {_e}")
             _asyncio.create_task(_voice_task())
         # -----------------------------------------------
 
