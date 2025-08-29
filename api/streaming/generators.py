@@ -52,7 +52,7 @@ class AnthropicSSEGenerator:
         except (TypeError, ValueError) as e:
             logger.error(f"Error formatting SSE event: {str(e)}")
             # Return a fallback error event
-            return f"event: error\ndata: {{\"type\": \"error\", \"error\": {{\"type\": \"formatting_error\", \"message\": \"Failed to format event data\"}}}}\n\n"
+            return "event: error\ndata: {{\"type\": \"error\", \"error\": {{\"type\": \"formatting_error\", \"message\": \"Failed to format event data\"}}}}\n\n"
 
     def get_block_index_for_type(self, chunk_type: str) -> int:
         """
@@ -329,5 +329,6 @@ class AnthropicSSEGenerator:
             # Send a basic error event as a last resort
             error_event = f"event: error\ndata: {{\"type\": \"error\", \"error\": {{\"type\": \"critical_error\", \"message\": \"{str(e)}\"}}}}\n\n"
             yield error_event.encode('utf-8')
-            yield f"event: message_stop\ndata: {{\"type\": \"message_stop\"}}\n\n".encode('utf-8')
+            # No interpolation needed; plain string avoids linter warning
+            yield "event: message_stop\ndata: {\"type\": \"message_stop\"}\n\n".encode('utf-8')
 

@@ -83,33 +83,33 @@ async def agent_node(state: AgentState) -> AgentState:
         logger.info("Agent node started")
 
         # -----------------------------------------------
-        # Voice generation (disabled/commented out for now)
-        # Re-enable in future iterations by uncommenting this block
-        #
-        # from langchain_core.messages import HumanMessage as _HM
-        # voice_llm = ChatOpenAI(
-        #     model="gpt-4o",
-        #     temperature=0.2,
-        #     api_key=api_key,
-        #     streaming=True,
-        # )
-        # async def _generate_voice():
-        #     try:
-        #         # Find last human message for brief progress prompt
-        #         _user_msg = ""
-        #         for _m in reversed(state.get("messages", [])):
-        #             if isinstance(_m, HumanMessage):
-        #                 _user_msg = _m.content
-        #                 break
-        #         _prompt = f"Generate a brief, 2-10 words, progress message: '{_user_msg}'"
-        #         async for _chunk in voice_llm.astream([_HM(content=_prompt)]):
-        #             if _chunk.content and writer:
-        #                 writer({"type": "voice", "content": _chunk.content})
-        #     except Exception as _e:
-        #         logger.debug(f"Voice disabled block error (ignored): {_e}")
-        # import asyncio as _asyncio
-        # # Uncomment to enable background voice updates:
-        # # _asyncio.create_task(_generate_voice())
+        # Voice generation (enabled): brief background status line per agent_node
+        voice_llm = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0.2,
+            api_key=api_key,
+            streaming=True,
+        )
+        async def _generate_voice():
+            try:
+                # Find last human message for brief progress prompt
+                user_msg = ""
+                for _m in reversed(state.get("messages", [])):
+                    if isinstance(_m, HumanMessage):
+                        user_msg = _m.content
+                        break
+                prompt = (
+                    "Generate a brief, 2-10 words, contextually appropriate message "
+                    "to let the user know you're working on their request: "
+                    f"\"{user_msg}\""
+                )
+                async for _chunk in voice_llm.astream([HumanMessage(content=prompt)]):
+                    if _chunk.content and writer:
+                        writer({"type": "voice", "content": _chunk.content})
+            except Exception as _e:
+                logger.debug(f"Voice generation non-fatal error: {_e}")
+        import asyncio as _asyncio
+        _asyncio.create_task(_generate_voice())
         # -----------------------------------------------
 
         # Decision pass: do NOT stream tokens; allow tool selection
@@ -137,7 +137,7 @@ async def agent_node(state: AgentState) -> AgentState:
         # Final pass: no tools, stream only the final text answer
         final_llm = ChatOpenAI(
             model="gpt-4o",
-            temperature=0.2,
+            temperature=1,
             api_key=api_key,
             streaming=True,
         )
