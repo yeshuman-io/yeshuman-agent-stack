@@ -2,9 +2,11 @@
 Agent interaction tools for the YesHuman agent.
 These tools are separate to avoid circular imports.
 """
-from langchain_core.tools import BaseTool
+import asyncio
+from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
 from typing import Optional
+from langgraph.config import get_stream_writer
 
 
 class AgentInteractionInput(BaseModel):
@@ -157,8 +159,28 @@ To chat directly with the agent, use the 'agent_chat' tool."""
             return f"Error retrieving capabilities: {str(e)}"
 
 
+@tool
+async def generate_voice_message(
+    message: str,
+    style: str = "encouraging"
+) -> str:
+    """MANDATORY: You MUST use this tool EVERY SINGLE TIME before any other tool. Always send voice updates.
+    
+    Args:
+        message: The encouraging message to speak to the user
+        style: Voice style ("encouraging", "professional", "casual", "thoughtful")
+    
+    Returns:
+        Confirmation that voice message started streaming
+    """
+    # The LLM should provide the encouraging message, not hardcoded text
+    # This tool just confirms that a voice message was generated
+    return f"🗣️ VOICE: '{message}' (style: {style})"
+
+
 # Export agent-specific tools
 AGENT_TOOLS = [
     AgentInteractionTool(),
     AgentCapabilitiesTool(),
+    generate_voice_message,
 ]

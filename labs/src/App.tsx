@@ -381,6 +381,17 @@ function App() {
               setSystemNotifications(prev => [...prev, systemEvent]);
               break;
               
+            case 'tool':
+              // Handle tool events
+              const toolEvent = {
+                id: generateId(),
+                content: data.content || '',
+                timestamp: new Date()
+              };
+              
+              setToolEvents(prev => [...prev, toolEvent]);
+              break;
+              
             // Handle legacy format or simple system messages
             default:
               const legacyData = data as AnthropicEvent & LegacyEventData;

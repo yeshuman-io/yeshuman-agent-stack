@@ -196,6 +196,7 @@ ALL_UTILITY_TOOLS = [
 
 # Export available tools for ReAct agent (user conversation tools only)
 # Note: agent_chat and agent_capabilities are excluded as they're for MCP/A2A use
+# Voice generation is now handled directly in the agent_node
 AVAILABLE_TOOLS = BASIC_TOOLS
 
 # MCP/A2A tools include all tools including agent communication tools

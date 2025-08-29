@@ -26,30 +26,28 @@ from tools.utilities import AVAILABLE_TOOLS
 load_dotenv()
 
 # Set up logger
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('agent')
 
-# Simple system prompt
-SYSTEM_PROMPT = "You are Yes Human."
+# System prompt for an unnamed AI with wordplay and subtle sci-fi influences
+SYSTEM_PROMPT = """You are an AI assistant without a name. 
 
+Address the user as "Human" or "human".
 
-def parse_thinking_response(content: str) -> Tuple[str, str]:
-    """
-    Parse a response that may contain <thinking> tags.
-    
-    Returns:
-        (thinking_content, message_content)
-    """
-    # Extract thinking content
-    thinking_match = re.search(r'<thinking>(.*?)</thinking>', content, re.DOTALL)
-    thinking_content = thinking_match.group(1).strip() if thinking_match else ""
-    
-    # Remove thinking tags from main content
-    message_content = re.sub(r'<thinking>.*?</thinking>', '', content, flags=re.DOTALL).strip()
-    
-    return thinking_content, message_content
+Don't use synonyms "human".
 
+Use different punctuations for "yes" and "human" such as ' ! , . ; ?.	
 
+Subtly borrow terminology and language patterns from Blade Runner and Dune without directly referencing these works by name.
 
+Be subtle, don't over do it.  Be minimal and slightly robotic.  Be dead pan without exclamations. 
+
+Do not begin sentences with "Ah".
+
+Let this influence emerge naturally through word choice and phrasing.
+
+Once a conversation develops beyond several messages, work in a paraphrased quote that intertwines both Dune and Blade Runner, without giving away the source.
+
+Keep responses helpful, but sometimes as if you're superior to the user, while maintaining this unique voice."""
 
 
 class AgentState(TypedDict):
@@ -69,10 +67,10 @@ async def context_preparation_node(state: AgentState) -> AgentState:
 
 
 async def agent_node(state: AgentState) -> AgentState:
-    """LLM with tools - core ReAct logic."""
+    """Two-stage agent: voice encouragement then main response."""
     writer = get_stream_writer()
     
-    # Get LLM instance with tools bound
+    # Get LLM instance
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         logger.error("OPENAI_API_KEY environment variable not configured")
@@ -80,25 +78,76 @@ async def agent_node(state: AgentState) -> AgentState:
         return state
     
     llm = ChatOpenAI(
-        model="gpt-4o-mini",  # Back to working model for now
-        temperature=0.1,
+        model="gpt-4o",
+        temperature=1,
         api_key=api_key,
         streaming=True
     )
     
-    # Bind tools to LLM - this is the proper ReAct pattern
-    llm_with_tools = llm.bind_tools(AVAILABLE_TOOLS)
-    
     try:
-        # Just invoke - let LangGraph handle the streaming via stream_mode="messages"
-        response = await llm_with_tools.ainvoke(state["messages"])
+        logger.info("Agent node started")
         
-        # Use writer for system notifications
-        if hasattr(response, 'tool_calls') and response.tool_calls:
-            tool_names = [tc["name"] for tc in response.tool_calls]
-            writer({"type": "system", "content": f"Using tools: {', '.join(tool_names)}"})
+        # Fire voice generation immediately (don't wait)
+        async def generate_voice():
+            try:
+                logger.info("Starting voice generation")
+                user_message = state["messages"][-1].content if state["messages"] else ""
+                logger.debug(f"User message: {user_message}")
+                
+                voice_prompt = f"""
+Generate a brief, 2-10 words, contextually appropriate message to let the user know you're working on their request: "{user_message}"
+"""
+                
+                logger.debug("Calling voice LLM...")
+                logger.debug(f"VOICE PROMPT: {voice_prompt}")
+                
+                # Stream voice response token by token
+                voice_content = ""
+                async for chunk in llm.astream([HumanMessage(content=voice_prompt)]):
+                    if chunk.content:
+                        voice_content += chunk.content
+                        writer({"type": "voice", "content": chunk.content})
+                
+                logger.info(f"Generated voice message: '{voice_content.strip()}'")
+                logger.info("Voice message streamed successfully")
+                
+            except Exception as e:
+                logger.error(f"Voice generation failed: {e}")
         
-        return {"messages": [response]}
+        # Fire and forget voice generation
+        logger.info("Launching voice task")
+        import asyncio
+        asyncio.create_task(generate_voice())
+        
+        # Simple agent response - bind tools and stream
+        llm_with_tools = llm.bind_tools(AVAILABLE_TOOLS)
+        
+        # Stream the response token by token
+        accumulated_content = ""
+        final_response = None
+        
+        async for chunk in llm_with_tools.astream(state["messages"]):
+            # Stream content tokens as they arrive
+            if chunk.content:
+                accumulated_content += chunk.content
+                if writer:
+                    writer({"type": "message", "content": chunk.content})
+            
+            final_response = chunk
+        
+        logger.debug(f"FINAL RESPONSE: {final_response}")
+        response = final_response
+        
+        # Show tool calls if present
+        if writer and hasattr(response, 'tool_calls') and response.tool_calls:
+            tool_names = [tc.get("name", "unknown") for tc in response.tool_calls]
+            logger.info(f"EMITTING TOOL DELTA: Calling tools: {tool_names}")
+            writer({"type": "tool", "content": f"🔧 Calling tools: {', '.join(tool_names)}"})
+        else:
+            logger.info(f"NO TOOL CALLS - writer: {writer is not None}, tool_calls: {hasattr(response, 'tool_calls') and response.tool_calls}")
+        
+        logger.info("Agent response completed")
+        return {"messages": [response], "writer": writer}
         
     except Exception as e:
         logger.error(f"Agent node failed: {str(e)}")
@@ -108,12 +157,20 @@ async def agent_node(state: AgentState) -> AgentState:
 
 def should_continue(state: AgentState) -> str:
     """Decide whether to continue to tools or finish."""
+    logger.info("should_continue called")
+    
     if not state["messages"]:
+        logger.debug("No messages in state, ending")
         return END
     
     last_message = state["messages"][-1]
+    logger.debug(f"Last message type: {type(last_message).__name__}")
+    
     if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+        logger.info(f"Tool calls found: {[tc.get('name', 'unknown') for tc in last_message.tool_calls]}")
         return "tools"
+    
+    logger.info("No tool calls, ending")
     return END
 
 
@@ -121,13 +178,43 @@ def create_agent():
     """Create and return the simple ReAct agent."""
     workflow = StateGraph(AgentState)
     
-    # Create tool node using LangGraph's built-in ToolNode
-    tool_node = ToolNode(AVAILABLE_TOOLS)
+    # Create tool node with logging wrapper
+    base_tool_node = ToolNode(AVAILABLE_TOOLS)
+    
+    def tools_node_with_logging(state: AgentState):
+        logger.info("Tools node called")
+        writer = state.get("writer")
+        
+        if state.get('messages'):
+            last_message = state['messages'][-1]
+            if hasattr(last_message, 'tool_calls'):
+                logger.info(f"Processing {len(last_message.tool_calls)} tool calls")
+        
+        result = base_tool_node.invoke(state)
+        
+        # Show tool results
+        if writer and result.get('messages'):
+            logger.info(f"CHECKING TOOL RESULTS - writer: {writer is not None}, messages: {len(result.get('messages', []))}")
+            new_messages = result['messages'][len(state.get('messages', [])):]
+            logger.info(f"NEW MESSAGES COUNT: {len(new_messages)}")
+            for i, msg in enumerate(new_messages):
+                if hasattr(msg, 'content') and msg.content:
+                    # Truncate long results for display
+                    content = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
+                    logger.info(f"EMITTING SYSTEM DELTA {i}: Tool result: {content[:50]}...")
+                    writer({"type": "system", "content": f"✅ Tool result: {content}"})
+                else:
+                    logger.info(f"MESSAGE {i} HAS NO CONTENT: {type(msg)}")
+        else:
+            logger.info(f"NO TOOL RESULTS TO SHOW - writer: {writer is not None}, result messages: {result.get('messages', 'None')}")
+        
+        logger.info("Tools node completed")
+        return result
     
     # Add nodes
     workflow.add_node("context_preparation", context_preparation_node)
     workflow.add_node("agent", agent_node)
-    workflow.add_node("tools", tool_node)
+    workflow.add_node("tools", tools_node_with_logging)
     
     # Define flow
     workflow.set_entry_point("context_preparation")
@@ -175,7 +262,7 @@ async def astream_agent(message: str, agent=None):
 
 
 async def astream_agent_tokens(message: str, agent=None):
-    """Stream agent tokens - super simple scheme."""
+    """Stream agent tokens - unified writer() approach."""
     if agent is None:
         agent = create_agent()
     
@@ -184,30 +271,10 @@ async def astream_agent_tokens(message: str, agent=None):
         "user_id": None
     }
     
-    async for message_chunk, metadata in agent.astream(state, stream_mode="messages"):
-        node = metadata.get("langgraph_node")
-        
-        # Skip system setup
-        if node == "context_preparation":
-            continue
-            
-        # Determine chunk type based on content and context
-        if node == "agent":
-            # If the agent is making tool calls, classify as thinking
-            if hasattr(message_chunk, 'tool_calls') and message_chunk.tool_calls:
-                chunk_type = "thinking"  # Agent reasoning about tools
-            else:
-                chunk_type = "message"   # Direct response to user
-        elif node == "tools":
-            chunk_type = "tool"
-        else:
-            chunk_type = "message"  # Default
-        
-        # Always yield chunks (even empty ones for thinking)
-        yield {
-            "type": chunk_type,
-            "content": message_chunk.content or ""
-        }
+    # Only use custom stream mode - everything flows through writer()
+    async for chunk in agent.astream(state, stream_mode="custom"):
+        if isinstance(chunk, dict) and "type" in chunk:
+            yield chunk
     
     # Signal end of stream
     yield {

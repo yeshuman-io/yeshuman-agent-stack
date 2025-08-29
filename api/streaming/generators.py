@@ -70,8 +70,6 @@ class AnthropicSSEGenerator:
             self.content_blocks[chunk_type] = len(self.content_blocks)
         return self.content_blocks[chunk_type]
 
-
-
     async def process_tool_use(self, block_index: int) -> List[bytes]:
         """
         Process a tool use and generate the appropriate SSE events.
@@ -223,6 +221,8 @@ class AnthropicSSEGenerator:
                     # Accumulate content
                     accumulated_content[chunk_type] += content
                     
+                    # Voice chunks are now handled directly from stream_mode="custom"
+                    
                     # Map chunk types to proper delta types
                     delta_type_mapping = {
                         "message": "message_delta",
@@ -231,14 +231,24 @@ class AnthropicSSEGenerator:
                         "json": "json_delta",
                         "system": "system_delta",
                         "voice": "voice_delta",
+                        "voice_complete": "voice_complete",
                         "error": "error"
                     }
                     delta_type = delta_type_mapping.get(chunk_type, "message_delta")
                     
+                    # Handle special metadata for voice events
+                    delta_data = {"type": delta_type, "text": content}
+                    if chunk_type == "voice":
+                        style = chunk.get("style", "encouraging")
+                        progress = chunk.get("progress", "")
+                        delta_data.update({"style": style, "progress": progress})
+                    elif chunk_type == "voice_complete":
+                        delta_data = {"type": delta_type, "message": chunk.get("message", "")}
+                    
                     yield (await self.format_sse_event("content_block_delta", {
                         "type": "content_block_delta",
                         "index": block_index,
-                        "delta": {"type": delta_type, "text": content}
+                        "delta": delta_data
                     })).encode('utf-8')
                     
                     # Special handling for error chunks - close all blocks and end the message

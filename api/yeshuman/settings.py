@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+import logging
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -136,3 +137,74 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Custom colored formatter
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter with colors for different log levels"""
+    
+    # ANSI color codes
+    COLORS = {
+        'DEBUG': '\033[36m',     # Cyan
+        'INFO': '\033[32m',      # Green
+        'WARNING': '\033[33m',   # Yellow
+        'ERROR': '\033[31m',     # Red
+        'CRITICAL': '\033[35m',  # Magenta
+    }
+    RESET = '\033[0m'
+    
+    def format(self, record):
+        # Get the color for this log level
+        color = self.COLORS.get(record.levelname, self.RESET)
+        
+        # Format the message
+        formatted = super().format(record)
+        
+        # Add color to the level name only
+        formatted = formatted.replace(record.levelname, f"{color}{record.levelname}{self.RESET}")
+        
+        return formatted
+
+# Logging configuration - terminal only with colors
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'colored': {
+            '()': ColoredFormatter,
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'colored',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'agent': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'streaming': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'tools': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}
