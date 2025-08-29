@@ -181,7 +181,27 @@ class AnthropicSSEGenerator:
                     # Extract chunk type and content
                     chunk_type = chunk.get("type", "message")
                     content = chunk.get("content", "")
-                    
+
+                    # Special boundary: voice_complete should be forwarded even without content
+                    if chunk_type == "voice_complete":
+                        # Ensure a voice block exists and is active
+                        voice_index = self.get_block_index_for_type("voice")
+                        if "voice" not in active_blocks:
+                            active_blocks.add("voice")
+                            yield (await self.format_sse_event("content_block_start", {
+                                "type": "content_block_start",
+                                "index": voice_index,
+                                "content_block": {"type": "voice", "id": f"voice_{uuid.uuid4().hex[:8]}"}
+                            })).encode('utf-8')
+                        # Emit a boundary delta the UI can interpret as newline
+                        yield (await self.format_sse_event("content_block_delta", {
+                            "type": "content_block_delta",
+                            "index": voice_index,
+                            "delta": {"type": "voice_complete", "message": chunk.get("message", "")}
+                        })).encode('utf-8')
+                        # Do not mark stop here; allow subsequent voice deltas in same message
+                        continue
+
                     # Skip empty chunks
                     if not content and chunk_type not in ["done", "stop"]:
                         continue

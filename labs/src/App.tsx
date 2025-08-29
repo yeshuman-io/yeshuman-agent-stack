@@ -252,8 +252,10 @@ function App() {
                   // Reset thinking content when a new thinking block starts
                   setThinkingContent("");
                 } else if (type === "voice") {
-                  // Reset voice content when a new voice block starts
-                  setVoiceContent("");
+                  // Start a new voice line; do not clear previous content
+                  setVoiceContent(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
+                  setVoiceLines(prev => [...prev, ""]);
+                  console.log(`[voice] content_block_start index=${index} id=${id}`);
                 }
               }
               break;
@@ -273,6 +275,7 @@ function App() {
                 const blockType = contentBlocksRef.current[index].type;
                 const blockId = contentBlocksRef.current[index].id;
                 const blockContent = contentBlocksRef.current[index].content;
+                const prevDeltaType = (contentBlocksRef.current[index] as any).lastDeltaType;
                 
                 // Log for debugging
                 console.log(`Content block delta: type=${blockType}, delta_type=${delta.type}, text=${text}`);
@@ -309,10 +312,29 @@ function App() {
                     // Accumulate thinking content
                     setThinkingContent(prev => prev + text);
                   } else if (deltaType === "voice_delta") {
+                    // If this is a new voice segment (previous delta for this block wasn't voice),
+                    // start a new line before appending
+                    if (blockType === "voice" && prevDeltaType !== "voice_delta") {
+                      setVoiceContent(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
+                      console.log(`[voice] segment boundary detected (prev=${prevDeltaType || 'none'}) → new line`);
+                    }
                     // Add to voice events for history
                     setVoiceEvents(prev => [...prev, newEvent]);
                     // Accumulate voice content
                     setVoiceContent(prev => prev + text);
+                    // Also maintain a lines array that pushes tokens into the last line
+                    setVoiceLines(prev => {
+                      if (prev.length === 0) return [text];
+                      const copy = [...prev];
+                      copy[copy.length - 1] = (copy[copy.length - 1] || "") + (text || "");
+                      return copy;
+                    });
+                    console.log(`[voice] delta text='${text?.replace(/\n/g, "\\n")}' len=${text?.length ?? 0}`);
+                  } else if (deltaType === "voice_complete") {
+                    // Boundary signal from backend—ensure newline without appending text
+                    setVoiceContent(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
+                    setVoiceLines(prev => [...prev, ""]);
+                    console.log('[voice] voice_complete boundary received');
                   } else if (deltaType === "tool_delta") {
                     setToolEvents(prev => [...prev, newEvent]);
                   } else if (deltaType === "knowledge_delta") {
@@ -348,6 +370,20 @@ function App() {
                   } else {
                     console.warn(`Unknown delta type: ${deltaType}`);
                   }
+                }
+                // Track last delta type per block for boundary detection
+                (contentBlocksRef.current[index] as any).lastDeltaType = delta.type;
+              }
+              break;
+            
+            case 'content_block_stop':
+              // When a voice block ends, ensure it terminates with a newline
+              if (data.index !== undefined) {
+                const idx = data.index as number;
+                const block = contentBlocksRef.current[idx];
+                if (block && block.type === "voice") {
+                  setVoiceContent(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
+                  console.log(`[voice] content_block_stop index=${idx}`);
                 }
               }
               break;
@@ -703,12 +739,28 @@ function App() {
                       content: "",
                       isUser: false
                     }]);
+                  } else if (type === "voice") {
+                    // Start a new voice line for this block
+                    setVoiceContent(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
+                    console.log(`[voice] content_block_start index=${index} id=${id}`);
                   }
                 }
                 break;
                 
               case 'content_block_delta':
                 handleContentBlockDelta(data as ContentBlockDeltaEvent);
+                break;
+              
+              case 'content_block_stop':
+                if (data.index !== undefined) {
+                  const idx = data.index as number;
+                  const block = contentBlocksRef.current[idx];
+                  if (block && block.type === "voice") {
+                    setVoiceContent(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
+                    setVoiceLines(prev => (prev.length ? [...prev, ""] : prev));
+                    console.log(`[voice] content_block_stop index=${idx}`);
+                  }
+                }
                 break;
                 
               case 'message_stop':
@@ -957,6 +1009,7 @@ function App() {
       {content}
     </div>
   );
+
 
   // Render a system notification
   const renderSystemNotification = (notification: SystemNotification) => (

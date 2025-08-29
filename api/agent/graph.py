@@ -138,6 +138,9 @@ async def agent_node(state: AgentState) -> AgentState:
                     if new_line_clean and new_line_clean.lower() != (last_line or "").strip().lower():
                         vs.setdefault("voice_messages", []).append(new_line_clean)
                     vs["last_voice_sig"] = phase_sig
+                    # Signal voice segment completion for clean UI line breaks
+                    if writer:
+                        writer({"type": "voice_complete", "message": "done"})
                 except Exception as _e:
                     logger.debug(f"Voice generation non-fatal error: {_e}")
             _asyncio.create_task(_voice_task())
