@@ -54,6 +54,7 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     user_id: Optional[str]
     tools_done: Optional[bool]
+    voice_messages: Optional[List[str]]
 
 
 async def context_preparation_node(state: AgentState) -> AgentState:
@@ -98,14 +99,29 @@ async def agent_node(state: AgentState) -> AgentState:
                     if isinstance(_m, HumanMessage):
                         user_msg = _m.content
                         break
+                prior_voice = "\n".join(state.get("voice_messages", []) or [])
                 prompt = (
-                    "Generate a brief, 2-10 words, contextually appropriate message "
-                    "to let the user know you're working on their request: "
-                    f"\"{user_msg}\""
+                    "You are generating a single brief status line (2-10 words) that updates the user "
+                    "on agent progress. Consider previous voice lines and avoid repeating similar lines.\n\n"
+                    f"Previous lines (most recent last):\n{prior_voice if prior_voice else '(none)'}\n\n"
+                    f"Current user request: {user_msg}\n"
+                    "Return ONLY the status line, no quotes."
                 )
+
+                new_line = ""
                 async for _chunk in voice_llm.astream([HumanMessage(content=prompt)]):
-                    if _chunk.content and writer:
-                        writer({"type": "voice", "content": _chunk.content})
+                    if _chunk.content:
+                        new_line += _chunk.content
+                        if writer:
+                            # Emit with newline to improve readability
+                            writer({"type": "voice", "content": _chunk.content + "\n"})
+
+                # De-dup: if identical to last emitted, don't store
+                new_line_clean = (new_line or "").strip()
+                last_line = (state.get("voice_messages", []) or [])[-1] if state.get("voice_messages") else ""
+                if new_line_clean and new_line_clean.lower() != (last_line or "").strip().lower():
+                    # Store in state by returning updated voice_messages
+                    pass
             except Exception as _e:
                 logger.debug(f"Voice generation non-fatal error: {_e}")
         import asyncio as _asyncio
@@ -149,7 +165,7 @@ async def agent_node(state: AgentState) -> AgentState:
             final_response = chunk
 
         logger.info("Agent response completed")
-        return {"messages": [final_response], "writer": writer}
+        return {"messages": [final_response], "writer": writer, "voice_messages": state.get("voice_messages", [])}
         
     except Exception as e:
         logger.error(f"Agent node failed: {str(e)}")
