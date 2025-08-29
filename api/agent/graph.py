@@ -53,6 +53,7 @@ class AgentState(TypedDict):
     """Simple state following LangGraph patterns."""
     messages: Annotated[List[BaseMessage], add_messages]
     user_id: Optional[str]
+    tools_done: Optional[bool]
 
 
 async def context_preparation_node(state: AgentState) -> AgentState:
@@ -68,141 +69,87 @@ async def context_preparation_node(state: AgentState) -> AgentState:
 
 
 async def agent_node(state: AgentState) -> AgentState:
-    """Two-stage agent: voice encouragement then main response."""
+    """Bounded, simple agent: one decision pass, optional single tool hop, final streamed answer."""
     writer = get_stream_writer()
-    
-    # Get LLM instance
+
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         logger.error("OPENAI_API_KEY environment variable not configured")
-        writer({"type": "system", "content": "Configuration error occurred"})
+        if writer:
+            writer({"type": "error", "content": "Configuration error occurred"})
         return state
-    
-    llm = ChatOpenAI(
-        model="gpt-4o",
-        temperature=1,
-        api_key=api_key,
-        streaming=True
-    )
-    
+
     try:
         logger.info("Agent node started")
-        
-        # Fire voice generation immediately (don't wait)
-        async def generate_voice():
-            try:
-                logger.info("Starting voice generation")
-                # Find the last human message for voice generation context
-                user_message = ""
-                for msg in reversed(state["messages"]):
-                    if isinstance(msg, HumanMessage):
-                        user_message = msg.content
-                        break
-                logger.debug(f"User message for voice: {user_message}")
-                
-                voice_prompt = f"""
-Generate a brief, 2-10 words, contextually appropriate message to let the user know you're working on their request: "{user_message}"
-"""
-                
-                logger.debug("Calling voice LLM...")
-                logger.debug(f"VOICE PROMPT: {voice_prompt}")
-                
-                # Stream voice response token by token
-                voice_content = ""
-                async for chunk in llm.astream([HumanMessage(content=voice_prompt)]):
-                    if chunk.content:
-                        voice_content += chunk.content
-                        writer({"type": "voice", "content": chunk.content})
-                
-                logger.info(f"Generated voice message: '{voice_content.strip()}'")
-                logger.info("Voice message streamed successfully")
-                
-            except Exception as e:
-                logger.error(f"Voice generation failed: {e}")
-        
-        # Fire and forget voice generation
-        logger.info("Launching voice task")
-        import asyncio
-        asyncio.create_task(generate_voice())
-        
-        # Simple agent response - bind tools and stream
-        llm_with_tools = llm.bind_tools(AVAILABLE_TOOLS)
-        
-        # Debug: log the messages being sent to the LLM and available tools
-        logger.debug(f"Messages being sent to LLM: {len(state['messages'])} messages")
-        for i, msg in enumerate(state["messages"]):
-            logger.debug(f"Message {i}: {type(msg).__name__} - {msg.content[:100]}...")
-        logger.debug(f"Available tools: {[tool.name for tool in AVAILABLE_TOOLS]}")
-        
-        # Stream the response token by token
-        accumulated_content = ""
-        accumulated_tool_calls = []
-        final_response = None
-        
-        async for chunk in llm_with_tools.astream(state["messages"]):
-            # Stream content tokens as they arrive
-            if chunk.content:
-                accumulated_content += chunk.content
-                if writer:
-                    writer({"type": "message", "content": chunk.content})
-            
-            # Handle tool calls in streaming - accumulate them
-            if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
-                logger.debug(f"Received tool calls in chunk: {chunk.tool_calls}")
-                for tc in chunk.tool_calls:
-                    logger.debug(f"Tool call details: {tc}")
-                    # Only add valid tool calls (with name and id)
-                    if tc.get('name') and tc.get('id'):
-                        # Check if weather tool has location argument
-                        if tc.get('name') == 'weather' and not tc.get('args', {}).get('location'):
-                            logger.debug(f"Weather tool call missing location, adding Melbourne as default")
-                            tc['args'] = {'location': 'Melbourne'}
-                        accumulated_tool_calls.append(tc)
-                    else:
-                        logger.debug(f"Skipping invalid tool call: {tc}")
-            
-            final_response = chunk
-        
-        logger.debug(f"FINAL RESPONSE: {final_response}")
-        logger.debug(f"ACCUMULATED CONTENT: '{accumulated_content}'")
-        
-        # Ensure the response contains the accumulated content and tool calls
-        if final_response:
-            from langchain_core.messages import AIMessage
-            # Use accumulated tool calls if we found any, otherwise use final response's tool calls
-            tool_calls = accumulated_tool_calls if accumulated_tool_calls else getattr(final_response, 'tool_calls', [])
-            
-            response = AIMessage(
-                content=accumulated_content,
-                additional_kwargs=getattr(final_response, 'additional_kwargs', {}),
-                response_metadata=getattr(final_response, 'response_metadata', {}),
-                id=getattr(final_response, 'id', None),
-                tool_calls=tool_calls
-            )
-            
-            logger.debug(f"ACCUMULATED TOOL CALLS: {accumulated_tool_calls}")
-        else:
-            response = final_response
-        
-        # Show tool calls if present
-        tool_calls = getattr(response, 'tool_calls', None) or []
-        logger.debug(f"Response tool_calls: {tool_calls}")
-        logger.debug(f"Response additional_kwargs: {getattr(response, 'additional_kwargs', {})}")
-        
-        if writer and tool_calls:
+
+        # -----------------------------------------------
+        # Voice generation (disabled/commented out for now)
+        # Re-enable in future iterations by uncommenting this block
+        #
+        # from langchain_core.messages import HumanMessage as _HM
+        # voice_llm = ChatOpenAI(
+        #     model="gpt-4o",
+        #     temperature=0.2,
+        #     api_key=api_key,
+        #     streaming=True,
+        # )
+        # async def _generate_voice():
+        #     try:
+        #         # Find last human message for brief progress prompt
+        #         _user_msg = ""
+        #         for _m in reversed(state.get("messages", [])):
+        #             if isinstance(_m, HumanMessage):
+        #                 _user_msg = _m.content
+        #                 break
+        #         _prompt = f"Generate a brief, 2-10 words, progress message: '{_user_msg}'"
+        #         async for _chunk in voice_llm.astream([_HM(content=_prompt)]):
+        #             if _chunk.content and writer:
+        #                 writer({"type": "voice", "content": _chunk.content})
+        #     except Exception as _e:
+        #         logger.debug(f"Voice disabled block error (ignored): {_e}")
+        # import asyncio as _asyncio
+        # # Uncomment to enable background voice updates:
+        # # _asyncio.create_task(_generate_voice())
+        # -----------------------------------------------
+
+        # Decision pass: do NOT stream tokens; allow tool selection
+        decision_llm = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0.2,
+            api_key=api_key,
+            streaming=False,
+        ).bind_tools(AVAILABLE_TOOLS)
+
+        # Log brief context
+        logger.debug(f"Messages being sent to LLM: {len(state.get('messages', []))} messages")
+
+        decision_response = await decision_llm.ainvoke(state["messages"])  # AIMessage
+
+        # If tools are suggested and we haven't executed tools yet, emit tool event and hand off
+        tool_calls = getattr(decision_response, "tool_calls", None) or []
+        if tool_calls and not state.get("tools_done"):
             tool_names = [tc.get("name", "unknown") for tc in tool_calls]
-            logger.info(f"EMITTING TOOL DELTA: Calling tools: {tool_names}")
-            writer({"type": "tool", "content": f"🔧 Calling tools: {', '.join(tool_names)}"})
-        else:
-            logger.info(f"NO TOOL CALLS - writer: {writer is not None}, tool_calls: {tool_calls}")
-            # If we have content but no tool calls, make sure content is streamed
-            if accumulated_content.strip() and not tool_calls:
-                logger.info(f"Response has content but no tool calls, content length: {len(accumulated_content)}")
-            elif not accumulated_content.strip() and not tool_calls:
-                logger.warning("Response has no content and no tool calls - this may indicate an issue")
-        
+            logger.info(f"Tool calls requested: {tool_names}")
+            if writer:
+                writer({"type": "tool", "content": f"🔧 Calling tools: {', '.join(tool_names)}"})
+            return {"messages": [decision_response], "writer": writer, "tools_done": state.get("tools_done", False)}
+
+        # Final pass: no tools, stream only the final text answer
+        final_llm = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0.2,
+            api_key=api_key,
+            streaming=True,
+        )
+
+        final_response = None
+        async for chunk in final_llm.astream(state["messages"]):
+            if chunk.content and writer:
+                writer({"type": "message", "content": chunk.content})
+            final_response = chunk
+
         logger.info("Agent response completed")
-        return {"messages": [response], "writer": writer}
+        return {"messages": [final_response], "writer": writer}
         
     except Exception as e:
         logger.error(f"Agent node failed: {str(e)}")
@@ -218,6 +165,11 @@ def should_continue(state: AgentState) -> str:
         logger.debug("No messages in state, ending")
         return END
     
+    # Prevent loops: once tools have been executed, do not return to tools
+    if state.get("tools_done"):
+        logger.info("tools_done=True, ending")
+        return END
+
     last_message = state["messages"][-1]
     logger.debug(f"Last message type: {type(last_message).__name__}")
     
@@ -248,23 +200,10 @@ def create_agent():
                 logger.info(f"Processing {len(tool_calls)} tool calls")
         
         result = base_tool_node.invoke(state)
-        
-        # Show tool results
-        if writer and result.get('messages'):
-            logger.info(f"CHECKING TOOL RESULTS - writer: {writer is not None}, messages: {len(result.get('messages', []))}")
-            new_messages = result['messages'][len(state.get('messages', [])):]
-            logger.info(f"NEW MESSAGES COUNT: {len(new_messages)}")
-            for i, msg in enumerate(new_messages):
-                if hasattr(msg, 'content') and msg.content:
-                    # Truncate long results for display
-                    content = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
-                    logger.info(f"EMITTING SYSTEM DELTA {i}: Tool result: {content[:50]}...")
-                    writer({"type": "system", "content": f"✅ Tool result: {content}"})
-                else:
-                    logger.info(f"MESSAGE {i} HAS NO CONTENT: {type(msg)}")
-        else:
-            logger.info(f"NO TOOL RESULTS TO SHOW - writer: {writer is not None}, result messages: {result.get('messages', 'None')}")
-        
+
+        # Mark tools as executed to bound the loop
+        result["tools_done"] = True
+
         logger.info("Tools node completed")
         return result
     
