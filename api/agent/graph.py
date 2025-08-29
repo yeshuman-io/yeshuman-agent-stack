@@ -9,8 +9,7 @@ Clean design following LangGraph patterns:
 """
 import os
 import logging
-import re
-from typing import TypedDict, List, Optional, Annotated, Tuple
+from typing import TypedDict, List, Optional, Annotated
 from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
@@ -61,7 +60,9 @@ async def context_preparation_node(state: AgentState) -> AgentState:
     # Add system message if not already present
     if not state["messages"] or not isinstance(state["messages"][0], SystemMessage):
         system_message = SystemMessage(content=SYSTEM_PROMPT)
-        return {"messages": [system_message]}
+        # Prepend system message to existing messages, don't replace them
+        existing_messages = state.get("messages", [])
+        return {"messages": [system_message] + existing_messages}
     
     return state
 
@@ -91,8 +92,13 @@ async def agent_node(state: AgentState) -> AgentState:
         async def generate_voice():
             try:
                 logger.info("Starting voice generation")
-                user_message = state["messages"][-1].content if state["messages"] else ""
-                logger.debug(f"User message: {user_message}")
+                # Find the last human message for voice generation context
+                user_message = ""
+                for msg in reversed(state["messages"]):
+                    if isinstance(msg, HumanMessage):
+                        user_message = msg.content
+                        break
+                logger.debug(f"User message for voice: {user_message}")
                 
                 voice_prompt = f"""
 Generate a brief, 2-10 words, contextually appropriate message to let the user know you're working on their request: "{user_message}"
@@ -122,8 +128,15 @@ Generate a brief, 2-10 words, contextually appropriate message to let the user k
         # Simple agent response - bind tools and stream
         llm_with_tools = llm.bind_tools(AVAILABLE_TOOLS)
         
+        # Debug: log the messages being sent to the LLM and available tools
+        logger.debug(f"Messages being sent to LLM: {len(state['messages'])} messages")
+        for i, msg in enumerate(state["messages"]):
+            logger.debug(f"Message {i}: {type(msg).__name__} - {msg.content[:100]}...")
+        logger.debug(f"Available tools: {[tool.name for tool in AVAILABLE_TOOLS]}")
+        
         # Stream the response token by token
         accumulated_content = ""
+        accumulated_tool_calls = []
         final_response = None
         
         async for chunk in llm_with_tools.astream(state["messages"]):
@@ -133,18 +146,60 @@ Generate a brief, 2-10 words, contextually appropriate message to let the user k
                 if writer:
                     writer({"type": "message", "content": chunk.content})
             
+            # Handle tool calls in streaming - accumulate them
+            if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
+                logger.debug(f"Received tool calls in chunk: {chunk.tool_calls}")
+                for tc in chunk.tool_calls:
+                    logger.debug(f"Tool call details: {tc}")
+                    # Only add valid tool calls (with name and id)
+                    if tc.get('name') and tc.get('id'):
+                        # Check if weather tool has location argument
+                        if tc.get('name') == 'weather' and not tc.get('args', {}).get('location'):
+                            logger.debug(f"Weather tool call missing location, adding Melbourne as default")
+                            tc['args'] = {'location': 'Melbourne'}
+                        accumulated_tool_calls.append(tc)
+                    else:
+                        logger.debug(f"Skipping invalid tool call: {tc}")
+            
             final_response = chunk
         
         logger.debug(f"FINAL RESPONSE: {final_response}")
-        response = final_response
+        logger.debug(f"ACCUMULATED CONTENT: '{accumulated_content}'")
+        
+        # Ensure the response contains the accumulated content and tool calls
+        if final_response:
+            from langchain_core.messages import AIMessage
+            # Use accumulated tool calls if we found any, otherwise use final response's tool calls
+            tool_calls = accumulated_tool_calls if accumulated_tool_calls else getattr(final_response, 'tool_calls', [])
+            
+            response = AIMessage(
+                content=accumulated_content,
+                additional_kwargs=getattr(final_response, 'additional_kwargs', {}),
+                response_metadata=getattr(final_response, 'response_metadata', {}),
+                id=getattr(final_response, 'id', None),
+                tool_calls=tool_calls
+            )
+            
+            logger.debug(f"ACCUMULATED TOOL CALLS: {accumulated_tool_calls}")
+        else:
+            response = final_response
         
         # Show tool calls if present
-        if writer and hasattr(response, 'tool_calls') and response.tool_calls:
-            tool_names = [tc.get("name", "unknown") for tc in response.tool_calls]
+        tool_calls = getattr(response, 'tool_calls', None) or []
+        logger.debug(f"Response tool_calls: {tool_calls}")
+        logger.debug(f"Response additional_kwargs: {getattr(response, 'additional_kwargs', {})}")
+        
+        if writer and tool_calls:
+            tool_names = [tc.get("name", "unknown") for tc in tool_calls]
             logger.info(f"EMITTING TOOL DELTA: Calling tools: {tool_names}")
             writer({"type": "tool", "content": f"🔧 Calling tools: {', '.join(tool_names)}"})
         else:
-            logger.info(f"NO TOOL CALLS - writer: {writer is not None}, tool_calls: {hasattr(response, 'tool_calls') and response.tool_calls}")
+            logger.info(f"NO TOOL CALLS - writer: {writer is not None}, tool_calls: {tool_calls}")
+            # If we have content but no tool calls, make sure content is streamed
+            if accumulated_content.strip() and not tool_calls:
+                logger.info(f"Response has content but no tool calls, content length: {len(accumulated_content)}")
+            elif not accumulated_content.strip() and not tool_calls:
+                logger.warning("Response has no content and no tool calls - this may indicate an issue")
         
         logger.info("Agent response completed")
         return {"messages": [response], "writer": writer}
@@ -166,8 +221,9 @@ def should_continue(state: AgentState) -> str:
     last_message = state["messages"][-1]
     logger.debug(f"Last message type: {type(last_message).__name__}")
     
-    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-        logger.info(f"Tool calls found: {[tc.get('name', 'unknown') for tc in last_message.tool_calls]}")
+    tool_calls = getattr(last_message, 'tool_calls', None) or []
+    if tool_calls:
+        logger.info(f"Tool calls found: {[tc.get('name', 'unknown') for tc in tool_calls]}")
         return "tools"
     
     logger.info("No tool calls, ending")
@@ -187,8 +243,9 @@ def create_agent():
         
         if state.get('messages'):
             last_message = state['messages'][-1]
-            if hasattr(last_message, 'tool_calls'):
-                logger.info(f"Processing {len(last_message.tool_calls)} tool calls")
+            tool_calls = getattr(last_message, 'tool_calls', None) or []
+            if tool_calls:
+                logger.info(f"Processing {len(tool_calls)} tool calls")
         
         result = base_tool_node.invoke(state)
         
