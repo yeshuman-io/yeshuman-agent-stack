@@ -9,11 +9,11 @@ Clean design following LangGraph patterns:
 """
 import os
 import logging
-from typing import TypedDict, List, Optional, Annotated
+from typing import TypedDict, List, Optional, Annotated, Dict, Any
 from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
+from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.config import get_stream_writer
@@ -26,6 +26,18 @@ load_dotenv()
 
 # Set up logger
 logger = logging.getLogger('agent')
+# Module-local, async-safe-ish voice state store keyed by user_id
+# Keeps minimal state across graph turns without coupling to graph state
+VOICE_STATE: Dict[str, Dict[str, Any]] = {}
+
+def _get_voice_state(user_id: str) -> Dict[str, Any]:
+    if user_id not in VOICE_STATE:
+        VOICE_STATE[user_id] = {
+            "voice_messages": [],
+            "last_voice_sig": None,
+        }
+    return VOICE_STATE[user_id]
+
 
 # System prompt for an unnamed AI with wordplay and subtle sci-fi influences
 SYSTEM_PROMPT = """You are an AI assistant without a name. 
@@ -55,6 +67,7 @@ class AgentState(TypedDict):
     user_id: Optional[str]
     tools_done: Optional[bool]
     voice_messages: Optional[List[str]]
+    last_voice_sig: Optional[str]
 
 
 async def context_preparation_node(state: AgentState) -> AgentState:
@@ -91,41 +104,43 @@ async def agent_node(state: AgentState) -> AgentState:
             api_key=api_key,
             streaming=True,
         )
-        async def _generate_voice():
-            try:
-                # Find last human message for brief progress prompt
-                user_msg = ""
-                for _m in reversed(state.get("messages", [])):
-                    if isinstance(_m, HumanMessage):
-                        user_msg = _m.content
-                        break
-                prior_voice = "\n".join(state.get("voice_messages", []) or [])
-                prompt = (
-                    "You are generating a single brief status line (2-10 words) that updates the user "
-                    "on agent progress. Consider previous voice lines and avoid repeating similar lines.\n\n"
-                    f"Previous lines (most recent last):\n{prior_voice if prior_voice else '(none)'}\n\n"
-                    f"Current user request: {user_msg}\n"
-                    "Return ONLY the status line, no quotes."
-                )
-
-                new_line = ""
-                async for _chunk in voice_llm.astream([HumanMessage(content=prompt)]):
-                    if _chunk.content:
-                        new_line += _chunk.content
-                        if writer:
-                            # Emit with newline to improve readability
-                            writer({"type": "voice", "content": _chunk.content + "\n"})
-
-                # De-dup: if identical to last emitted, don't store
-                new_line_clean = (new_line or "").strip()
-                last_line = (state.get("voice_messages", []) or [])[-1] if state.get("voice_messages") else ""
-                if new_line_clean and new_line_clean.lower() != (last_line or "").strip().lower():
-                    # Store in state by returning updated voice_messages
-                    pass
-            except Exception as _e:
-                logger.debug(f"Voice generation non-fatal error: {_e}")
-        import asyncio as _asyncio
-        _asyncio.create_task(_generate_voice())
+        # Rate-limit by phase signature using process-local VOICE_STATE
+        user_id = state.get("user_id") or "default"
+        vs = _get_voice_state(user_id)
+        phase_sig = "agent:final" if state.get("tools_done") else "agent:start"
+        if vs.get("last_voice_sig") != phase_sig:
+            import asyncio as _asyncio
+            async def _voice_task():
+                try:
+                    # Context for a brief progress prompt
+                    user_msg = ""
+                    for _m in reversed(state.get("messages", [])):
+                        if isinstance(_m, HumanMessage):
+                            user_msg = _m.content
+                            break
+                    prior_voice = "\n".join(vs.get("voice_messages", []) or [])
+                    prompt = (
+                        "You are generating a single brief status line (2-10 words) that updates the user "
+                        "on agent progress. Consider previous voice lines and avoid repeating similar lines.\n\n"
+                        f"Previous lines (most recent last):\n{prior_voice if prior_voice else '(none)'}\n\n"
+                        f"Current user request: {user_msg}\n"
+                        "Return ONLY the status line, no quotes."
+                    )
+                    new_line = ""
+                    async for _chunk in voice_llm.astream([HumanMessage(content=prompt)]):
+                        if _chunk.content:
+                            new_line += _chunk.content
+                            if writer:
+                                writer({"type": "voice", "content": _chunk.content})
+                    # Persist
+                    new_line_clean = (new_line or "").strip()
+                    last_line = (vs.get("voice_messages", []) or [])[-1] if vs.get("voice_messages") else ""
+                    if new_line_clean and new_line_clean.lower() != (last_line or "").strip().lower():
+                        vs.setdefault("voice_messages", []).append(new_line_clean)
+                    vs["last_voice_sig"] = phase_sig
+                except Exception as _e:
+                    logger.debug(f"Voice generation non-fatal error: {_e}")
+            _asyncio.create_task(_voice_task())
         # -----------------------------------------------
 
         # Decision pass: do NOT stream tokens; allow tool selection
@@ -165,7 +180,12 @@ async def agent_node(state: AgentState) -> AgentState:
             final_response = chunk
 
         logger.info("Agent response completed")
-        return {"messages": [final_response], "writer": writer, "voice_messages": state.get("voice_messages", [])}
+        return {
+            "messages": [final_response],
+            "writer": writer,
+            "voice_messages": state.get("voice_messages", []),
+            "last_voice_sig": state.get("last_voice_sig"),
+        }
         
     except Exception as e:
         logger.error(f"Agent node failed: {str(e)}")
@@ -214,11 +234,21 @@ def create_agent():
             tool_calls = getattr(last_message, 'tool_calls', None) or []
             if tool_calls:
                 logger.info(f"Processing {len(tool_calls)} tool calls")
+                # Voice status for tools phase (single line, rate-limited by phase signature)
+                tool_names = [tc.get("name", "unknown") for tc in tool_calls]
+                sig = f"tools:{','.join(sorted(tool_names))}"
+                if writer and state.get("last_voice_sig") != sig:
+                    writer({"type": "voice", "content": f"Calling {', '.join(tool_names)}..."})
+                    state["last_voice_sig"] = sig
         
         result = base_tool_node.invoke(state)
 
-        # Mark tools as executed to bound the loop
+        # Mark tools as executed to bound the loop and carry voice state forward
         result["tools_done"] = True
+        if state.get("last_voice_sig"):
+            result["last_voice_sig"] = state.get("last_voice_sig")
+        if state.get("voice_messages"):
+            result["voice_messages"] = state.get("voice_messages")
 
         logger.info("Tools node completed")
         return result
