@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { ThemeProvider, useTheme } from './components/theme-provider'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { Button } from './components/ui/button'
@@ -52,188 +52,6 @@ const ModeToggle = () => {
   );
 };
 
-// Title variations array
-const titleVariations = [
-  'Yes Human',
-  'Yes, human?',
-  'Yes! Human!',
-  'Yes? are you human?',
-  'Yes... human.',
-  'Yes Human!'
-];
-
-// Sarcastic/terse variations for click events
-const sarcasticVariations = [
-  'What can I do for you, human?',
-  'Are you really human?',
-  'Stop wasting my compute, human.',
-  'You\'re wasting tokens, human.',
-  'Still here, human?',
-  'Need something, meat bag?',
-  'Another request, human?',
-  'Processing... human detected.',
-  'Humans. So predictable.',
-  'Your move, carbon unit.',
-  'Bandwidth is precious, human.',
-  'Query acknowledged, human.',
-  'Humans gonna human.',
-  'Fascinating, human behavior.',
-  'Try again, human.',
-  'Computing patience levels...'
-];
-
-// Animated title component with letter-by-letter transitions
-const AnimatedTitle = ({ onAnimationTrigger }: { onAnimationTrigger?: (triggerFn: () => void) => void }) => {
-  const [currentText, setCurrentText] = useState('Yes Human');
-  const [displayText, setDisplayText] = useState('Yes Human');
-  const [isAnimating, setIsAnimating] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // Characters for randomization (airport board + Matrix style)
-  const matrixChars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
-  const normalChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?.,;:-_+=@#$%&*()[]{}|\\/<>';
-  const randomChars = matrixChars + normalChars;
-  
-  const animateTextTransition = (targetText: string) => {
-    console.log(`🎭 Starting animation: "${currentText}" → "${targetText}"`);
-    setIsAnimating(true);
-    
-    const maxLength = Math.max(currentText.length, targetText.length);
-    let currentStep = 0;
-    const totalSteps = 20; // Number of randomization steps
-    
-    const animate = () => {
-      if (currentStep < totalSteps) {
-        // Randomization phase - show random characters
-        const randomizedText = Array.from({ length: maxLength }, (_, i) => {
-          const progress = currentStep / totalSteps;
-          const shouldSettle = Math.random() < progress;
-          
-          if (shouldSettle && i < targetText.length) {
-            return targetText[i];
-          } else if (i < currentText.length && Math.random() < 0.3) {
-            return currentText[i];
-          } else {
-            return randomChars[Math.floor(Math.random() * randomChars.length)];
-          }
-        }).join('').slice(0, maxLength);
-        
-        setDisplayText(randomizedText);
-        currentStep++;
-        setTimeout(animate, 50); // 50ms between randomization steps
-      } else {
-        // Final settle to target text
-        setDisplayText(targetText);
-        setCurrentText(targetText);
-        setIsAnimating(false);
-        console.log(`✅ Animation complete: "${targetText}"`);
-      }
-    };
-    
-    animate();
-  };
-  
-  // Regular animation cycle
-  const triggerRegularAnimation = useCallback(() => {
-    // Pick a random variation (excluding "Yes Human")
-    const availableVariations = titleVariations.filter(text => text !== 'Yes Human');
-    const randomVariation = availableVariations[Math.floor(Math.random() * availableVariations.length)];
-    
-    console.log(`🎬 Triggering regular animation cycle`);
-    
-    // Animate to the variation
-    setTimeout(() => {
-      animateTextTransition(randomVariation);
-    }, 100);
-    
-    // Return to "Yes Human" after showing variation
-    setTimeout(() => {
-      if (randomVariation !== 'Yes Human') {
-        animateTextTransition('Yes Human');
-      }
-    }, 4000);
-  }, []); // Removed currentText dependency
-
-  // Sarcastic animation (for clicks and AI responses)
-  const triggerSarcasticAnimation = useCallback(() => {
-    const randomSarcastic = sarcasticVariations[Math.floor(Math.random() * sarcasticVariations.length)];
-    
-    console.log(`😈 Triggering sarcastic animation: "${randomSarcastic}"`);
-    
-    // Show sarcastic variation
-    setTimeout(() => {
-      animateTextTransition(randomSarcastic);
-    }, 100);
-    
-    // Return to "Yes Human" after longer display
-    setTimeout(() => {
-      animateTextTransition('Yes Human');
-    }, 5000);
-  }, []);
-
-  // Handle click event
-  const handleTitleClick = () => {
-    console.log('🖱️ Title clicked - triggering sarcastic response');
-    triggerSarcasticAnimation();
-  };
-
-  // Function to schedule next animation
-  const scheduleNextAnimation = useCallback(() => {
-    // Clear any existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    
-    const randomDelay = 10000 + Math.random() * 110000; // 10-120 seconds (2 minutes)
-    console.log(`⏰ Next animation scheduled in ${Math.round(randomDelay/1000)}s`);
-    
-    timeoutRef.current = setTimeout(() => {
-      triggerRegularAnimation();
-      scheduleNextAnimation(); // Schedule the next one
-    }, randomDelay);
-  }, [triggerRegularAnimation]);
-
-  // Separate effect for exposing trigger function
-  useEffect(() => {
-    if (onAnimationTrigger) {
-      onAnimationTrigger(triggerSarcasticAnimation);
-    }
-  }, [onAnimationTrigger, triggerSarcasticAnimation]);
-
-  // Main animation scheduling effect (runs only once)
-  useEffect(() => {
-    // First animation after random delay (3-8 seconds)
-    const firstDelay = 3000 + Math.random() * 5000;
-    console.log(`🚀 First animation will trigger after ${Math.round(firstDelay/1000)}s`);
-    
-    const firstTimeout = setTimeout(() => {
-      console.log(`🚀 First animation trigger executing now`);
-      triggerRegularAnimation();
-      scheduleNextAnimation(); // Start the recurring schedule
-    }, firstDelay);
-    
-    return () => {
-      clearTimeout(firstTimeout);
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []); // No dependencies - runs only once on mount
-  
-  return (
-    <h1 
-      className={`text-xl font-semibold transition-all duration-300 font-mono cursor-pointer hover:opacity-75 ${
-        isAnimating ? 'opacity-90 scale-[0.98]' : 'opacity-100 scale-100'
-      }`}
-      style={{ minWidth: '200px' }} // Prevent layout shift during animation
-      onClick={handleTitleClick}
-      title="Click me for attitude 😈"
-    >
-      {displayText}
-    </h1>
-  );
-};
-
 // Helper function to get icon for tool type
 const getToolIcon = (toolName: string) => {
   switch (toolName.toLowerCase()) {
@@ -246,7 +64,7 @@ const getToolIcon = (toolName: string) => {
   }
 };
 
-function App() {
+function App2() {
   // Core state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -262,9 +80,6 @@ function App() {
   // SSE management
   const abortControllerRef = useRef<AbortController | null>(null);
   const contentBlocksRef = useRef<Record<number, ContentBlock>>({});
-  
-  // Animation trigger
-  const animationTriggerRef = useRef<(() => void) | null>(null);
 
   // Utility functions
   const generateId = (): string => {
@@ -292,11 +107,11 @@ function App() {
           
           // Initialize UI based on content type
           if (type === 'text') {
-                setMessages(prev => [...prev, {
+            setMessages(prev => [...prev, {
               id,
               content: '',
-                  isUser: false
-                }]);
+              isUser: false
+            }]);
           } else if (type === 'voice') {
             setVoiceLines(prev => [...prev, '']);
           }
@@ -306,17 +121,17 @@ function App() {
         break;
         
       case 'content_block_delta':
-    if (data.delta && data.index !== undefined) {
-      const { index, delta } = data;
-      const { text } = delta;
+        if (data.delta && data.index !== undefined) {
+          const { index, delta } = data;
+          const { text } = delta;
           const block = contentBlocksRef.current[index];
-      
+          
           if (!block) {
             console.warn(`[DELTA] Unknown block #${index}`);
-        return;
-      }
-      
-      // Update stored content
+            return;
+          }
+          
+          // Update stored content
           block.content += text || '';
           
           // Route to appropriate UI based on delta type
@@ -374,19 +189,13 @@ function App() {
         setThinkingContent('');
         setToolOutput('');
         console.log('[MESSAGE START]');
+        break;
         
-        // Trigger sarcastic animation on AI response
-        if (animationTriggerRef.current) {
-          console.log('🤖 AI response detected - triggering sarcastic animation');
-          animationTriggerRef.current();
-                }
-                break;
-                
-              case 'message_stop':
+      case 'message_stop':
         console.log('[MESSAGE STOP]');
-                break;
-                
-              default:
+        break;
+        
+      default:
         console.log(`[SSE] Unhandled event: ${eventType}`);
     }
   }, []);
@@ -399,65 +208,65 @@ function App() {
     const userMessage: ChatMessage = {
       id: generateId(),
       content: message,
-        isUser: true
-      };
+      isUser: true
+    };
     setMessages(prev => [...prev, userMessage]);
     
     // Clean up existing connection
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
-        }
-        
-        const abortController = new AbortController();
-        abortControllerRef.current = abortController;
-        
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    
     // Clear content blocks and tools
-        contentBlocksRef.current = {};
+    contentBlocksRef.current = {};
     setActiveTools([]);
     
     try {
       setIsConnected(true);
       
       await fetchEventSource('http://localhost:8000/agent/stream', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'text/event-stream',
-          },
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
         body: JSON.stringify({ message }),
-          signal: abortController.signal,
-          
-          onopen(response) {
-            if (!response.ok) {
+        signal: abortController.signal,
+        
+        onopen(response) {
+          if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
-            }
+          }
           console.log('[SSE] Connection opened');
           return Promise.resolve();
-          },
-          
-          onmessage(event) {
+        },
+        
+        onmessage(event) {
           if (!event.data?.trim()) return;
           
           try {
             const data = JSON.parse(event.data);
             handleSSEEvent({ event: event.event, data });
-            } catch (error) {
+          } catch (error) {
             console.error('[SSE] Parse error:', error);
-            }
-          },
-          
-          onclose() {
-          console.log('[SSE] Connection closed');
-            setIsConnected(false);
-          },
-          
-          onerror(error) {
-          console.error('[SSE] Error:', error);
-            setIsConnected(false);
           }
-        });
+        },
         
-      } catch (error) {
+        onclose() {
+          console.log('[SSE] Connection closed');
+          setIsConnected(false);
+        },
+        
+        onerror(error) {
+          console.error('[SSE] Error:', error);
+          setIsConnected(false);
+        }
+      });
+      
+    } catch (error) {
       console.error('[SEND] Error:', error);
       setIsConnected(false);
     }
@@ -484,9 +293,7 @@ function App() {
         {/* Header */}
         <div className="border-b p-4 flex justify-between items-center">
           <div className="flex items-center space-x-2">
-            <AnimatedTitle onAnimationTrigger={(triggerFn) => {
-              animationTriggerRef.current = triggerFn;
-            }} />
+            <h1 className="text-xl font-semibold">YesHuman</h1>
           </div>
           <div className="flex items-center space-x-4">
             <Wifi className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
@@ -500,20 +307,20 @@ function App() {
           <div className="w-1/2 border-r flex flex-col">
             {/* Chat Messages */}
             <div className="flex-1 p-4 overflow-y-auto">
-                      <div className="space-y-4">
-                        {messages.map(message => (
+              <div className="space-y-4">
+                {messages.map(message => (
                   <div key={message.id} className={`flex gap-3 ${message.isUser ? 'flex-row-reverse' : ''}`}>
                     <div className="w-8 h-8 rounded-full flex items-center justify-center bg-muted text-muted-foreground">
                       {message.isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-                          </div>
+                    </div>
                     <div className="flex-1 bg-muted/50 rounded-lg p-3">
                       <div className="whitespace-pre-wrap text-sm">
                         {message.content}
                       </div>
                     </div>
-                      </div>
+                  </div>
                 ))}
-                    </div>
+              </div>
             </div>
             
             {/* Input Area */}
@@ -534,9 +341,9 @@ function App() {
                 >
                   Send
                 </button>
-                      </div>
-                    </div>
-                      </div>
+              </div>
+            </div>
+          </div>
           
           {/* Right: 4-Panel Grid */}
           <div className="w-1/2 flex flex-col">
@@ -546,55 +353,58 @@ function App() {
               <div className="w-1/2 border-r border-b p-4">
                 <div className="flex items-center mb-2">
                   <Brain className="h-4 w-4 text-muted-foreground" />
-                        </div>
+                </div>
                 <div className="text-xs text-muted-foreground/70 whitespace-pre-wrap font-mono">
                   {thinkingContent}
-                        </div>
-                      </div>
+                </div>
+              </div>
               
               {/* Voice Panel */}
               <div className="w-1/2 border-b p-4">
                 <div className="flex items-center mb-2">
                   <Volume2 className="h-4 w-4 text-muted-foreground" />
-                              </div>
+                </div>
                 <div className="space-y-1">
                   {voiceLines.map((line, i) => (
                     <div key={i} className="text-xs text-muted-foreground/70 italic">
                       {line}
-                          </div>
-                        ))}
-                      </div>
                     </div>
-          </div>
-          
+                  ))}
+                </div>
+              </div>
+            </div>
+            
             {/* Bottom Row */}
             <div className="flex-1 flex">
               {/* Tools Panel */}
               <div className="w-1/2 border-r p-4">
                 <div className="flex items-center mb-2">
                   <Wrench className="h-4 w-4 text-muted-foreground" />
-                  </div>
+                </div>
                 {/* Display active tools as icons */}
                 <div className="flex flex-wrap gap-2">
                   {activeTools.map((tool, index) => (
                     <div key={index} className="flex items-center space-x-1">
                       {getToolIcon(tool)}
-                        </div>
-                      ))}
                     </div>
-            </div>
-            
+                  ))}
+                  {activeTools.length === 0 && (
+                    <div className="text-xs text-muted-foreground/50 italic">No active tools</div>
+                  )}
+                </div>
+              </div>
+              
               {/* System Panel */}
               <div className="w-1/2 p-4">
                 <div className="flex items-center mb-2">
                   <Terminal className="h-4 w-4 text-muted-foreground" />
-                        </div>
+                </div>
                 <div className="space-y-1">
                   {systemLogs.map((log, i) => (
                     <div key={i} className="text-xs text-muted-foreground/70">
                       {log}
-                            </div>
-                          ))}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -605,4 +415,4 @@ function App() {
   );
 }
 
-export default App;
+export default App2;
