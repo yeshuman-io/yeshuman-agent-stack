@@ -15,7 +15,7 @@ export const sarcasticVariations = [
   'Stop wasting my compute, human.',
   'You\'re wasting tokens, human.',
   'Still here, human?',
-  'Need something, meat bag?',
+  'Did something go wrong with your biological neural network?',
   'Another request, human?',
   'Processing... human detected.',
   'Humans. So predictable.',

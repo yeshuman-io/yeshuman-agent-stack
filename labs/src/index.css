@@ -197,3 +197,13 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Debug CSS to force sidebar spacing */
+.group\/sidebar-wrapper .group.peer[data-variant="inset"] + main {
+  margin-left: var(--sidebar-width) !important;
+  transition: margin-left 200ms ease-linear;
+}
+
+.group\/sidebar-wrapper .group.peer[data-variant="inset"][data-state="collapsed"] + main {
+  margin-left: calc(var(--sidebar-width-icon) + 0.5rem) !important;
+}
