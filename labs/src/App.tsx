@@ -46,9 +46,9 @@ function App() {
     <ThemeProvider defaultTheme="dark" storageKey="yeshuman-v2-theme">
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset className="flex flex-col">
+        <SidebarInset className="flex flex-col h-screen">
           {/* Header */}
-          <div className="border-b p-4 flex justify-between items-center">
+          <div className="border-b p-4 flex justify-between items-center flex-shrink-0">
             <div className="flex items-center space-x-2">
               <SidebarTrigger />
               <AnimatedTitle onAnimationTrigger={(triggerFn) => {
@@ -62,9 +62,9 @@ function App() {
           </div>
           
           {/* Main Layout */}
-          <div className="flex-1 flex">
+          <div className="flex-1 flex min-h-0">
             {/* Left: Chat */}
-            <div className="w-1/2 border-r flex flex-col">
+            <div className="w-1/2 border-r flex flex-col min-h-0">
               <ChatMessages messages={messages} />
               <ChatInput 
                 inputText={inputText}
