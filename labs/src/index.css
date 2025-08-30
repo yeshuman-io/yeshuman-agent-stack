@@ -199,11 +199,12 @@
 }
 
 /* Debug CSS to force sidebar spacing */
-.group\/sidebar-wrapper .group.peer[data-variant="inset"] + main {
-  margin-left: var(--sidebar-width) !important;
+.group\/sidebar-wrapper .group.peer[data-variant="inset"][data-state="expanded"] + main {
+  margin-left: 12rem !important;
   transition: margin-left 200ms ease-linear;
 }
 
 .group\/sidebar-wrapper .group.peer[data-variant="inset"][data-state="collapsed"] + main {
-  margin-left: calc(var(--sidebar-width-icon) + 0.5rem) !important;
+  margin-left: 0rem !important;
+  transition: margin-left 200ms ease-linear;
 }
