@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { ThemeProvider } from './components/theme-provider'
-import { Wifi } from 'lucide-react'
+import { Activity } from 'lucide-react'
 import { AnimatedTitle } from './components/animated-title'
 import { ModeToggle } from './components/mode-toggle'
 import { ChatMessages, ChatInput } from './components/chat'
@@ -56,7 +56,7 @@ function App() {
               }} />
             </div>
             <div className="flex items-center space-x-4">
-              <Wifi className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
+              <Activity className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
               <ModeToggle />
             </div>
           </div>
