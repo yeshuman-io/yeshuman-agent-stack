@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { AnimatedSendButton } from '../animated-send-button';
 
 interface ChatInputProps {
   inputText: string;
@@ -27,13 +28,11 @@ export const ChatInput = ({ inputText, setInputText, onSubmit, isLoading = false
           rows={2}
           disabled={false}
         />
-        <button
+        <AnimatedSendButton
           onClick={onSubmit}
           disabled={!inputText.trim() || isLoading}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? 'Sending...' : 'Send'}
-        </button>
+          isLoading={isLoading}
+        />
       </div>
     </div>
   );
