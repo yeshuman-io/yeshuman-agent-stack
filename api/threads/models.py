@@ -18,6 +18,16 @@ class Thread(models.Model):
         null=True,
         blank=True
     )
+    session_id = models.CharField(
+        max_length=100,
+        help_text="Session ID for anonymous users",
+        null=True,
+        blank=True
+    )
+    is_anonymous = models.BooleanField(
+        default=False,
+        help_text="Whether this thread belongs to an anonymous user"
+    )
     created_at = models.DateTimeField(
         auto_now_add=True,
         help_text="The date and time the thread was created.",

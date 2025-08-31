@@ -1,6 +1,5 @@
 ---
-description: managing python dependencies with uv (not pip)
-alwaysApply: false
+alwaysApply: true
 ---
 Use uv commands exclusively
 uv add package-name (not uv pip install)

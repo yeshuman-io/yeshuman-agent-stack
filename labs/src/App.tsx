@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { ThemeProvider } from './components/theme-provider'
-import { Activity } from 'lucide-react'
+import { Activity, RotateCcw } from 'lucide-react'
 import { AnimatedTitle } from './components/animated-title'
 import { ModeToggle } from './components/mode-toggle'
 import { ChatMessages, ChatInput } from './components/chat'
@@ -27,7 +27,9 @@ function App() {
     thinkingContent,
     voiceLines,
     activeTools,
-    sendMessage
+    currentThreadId,
+    sendMessage,
+    startNewConversation
   } = useSSE(() => {
     // Trigger animation when AI response starts
     if (animationTriggerRef.current) {
@@ -56,9 +58,22 @@ function App() {
               <AnimatedTitle onAnimationTrigger={(triggerFn) => {
                 animationTriggerRef.current = triggerFn;
               }} />
+              {currentThreadId && (
+                <div className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
+                  Thread: {currentThreadId.slice(-8)}
+                </div>
+              )}
             </div>
             <div className="flex items-center space-x-4">
               <Activity className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
+              <button
+                onClick={startNewConversation}
+                className="flex items-center space-x-2 px-3 py-1 bg-muted hover:bg-muted/80 rounded-md text-sm transition-colors"
+                title="Start new conversation"
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span>New</span>
+              </button>
               <ModeToggle />
             </div>
           </div>

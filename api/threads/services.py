@@ -23,54 +23,75 @@ async def get_thread(thread_id: str) -> Optional[Thread]:
         return None
 
 
-async def get_or_create_thread(thread_id: Optional[str] = None, user_id: Optional[str] = None) -> Thread:
+async def get_or_create_thread(user_id: Optional[str] = None, subject: Optional[str] = None, thread_id: Optional[str] = None, session_id: Optional[str] = None) -> Thread:
     """
-    Get or create a thread with the given ID.
+    Get or create a thread with the given parameters.
 
-    If thread_id is None or empty, a new thread will be created.
-    If thread_id is provided and exists, the existing thread will be returned.
-    If thread_id is provided but doesn't exist, a new thread with that ID will be created.
+    Supports both authenticated users and anonymous sessions.
 
     Args:
-        thread_id: The ID of the thread to get or create, or None to create a new thread
         user_id: The user ID to associate with the thread
+        subject: The subject/title for the thread
+        thread_id: The ID of the thread to get or create, or None to create a new thread
+        session_id: Session ID for anonymous users
 
     Returns:
         The thread object
     """
-    if not thread_id:
+    if thread_id:
+        try:
+            # Try to get the existing thread
+            thread_obj = await sync_to_async(Thread.objects.get)(id=thread_id)
+            return thread_obj
+        except Thread.DoesNotExist:
+            # Create a new thread with the specified ID
+            is_anonymous = user_id is None and session_id is not None
+            thread_obj = await sync_to_async(Thread.objects.create)(
+                id=thread_id,
+                user_id=user_id,
+                session_id=session_id,
+                subject=subject,
+                is_anonymous=is_anonymous
+            )
+            return thread_obj
+    else:
         # Create a new thread without specifying an ID
-        thread_obj = await sync_to_async(Thread.objects.create)(user_id=user_id)
-        return thread_obj
-
-    try:
-        # Try to get the existing thread
-        thread_obj = await sync_to_async(Thread.objects.get)(id=thread_id)
-        return thread_obj
-    except Thread.DoesNotExist:
-        # Create a new thread with the specified ID
-        thread_obj = await sync_to_async(Thread.objects.create)(id=thread_id, user_id=user_id)
+        is_anonymous = user_id is None and session_id is not None
+        thread_obj = await sync_to_async(Thread.objects.create)(
+            user_id=user_id,
+            session_id=session_id,
+            subject=subject,
+            is_anonymous=is_anonymous
+        )
         return thread_obj
 
 
-async def get_all_thread_messages(thread_id: str) -> List[dict]:
+async def get_all_thread_messages(thread_id: str, count_only: bool = False) -> List[dict]:
     """
     Get all messages for a given thread ID.
 
     Args:
         thread_id: The ID of the thread to retrieve messages for
+        count_only: If True, return only the count instead of message list
 
     Returns:
-        A list of message dictionaries
+        A list of message dictionaries or count
     """
     try:
         thread_obj = await sync_to_async(Thread.objects.get)(id=thread_id)
 
-        # Get all messages for this thread
-        messages_list = await sync_to_async(list)(Message.objects.filter(thread=thread_obj).values())
+        if count_only:
+            # Return count only
+            count = await sync_to_async(Message.objects.filter(thread=thread_obj).count)()
+            return count
+
+        # Get all messages for this thread as objects, not dicts
+        messages_list = await sync_to_async(list)(
+            Message.objects.filter(thread=thread_obj).order_by('created_at')
+        )
         return messages_list
     except Thread.DoesNotExist:
-        return []
+        return 0 if count_only else []
 
 
 async def get_thread_messages_as_langchain(thread_id: str) -> List:
@@ -119,7 +140,7 @@ async def create_human_message(thread_id: Optional[str], message: str, user_id: 
         The created human message object
     """
     # Get or create the thread
-    thread_obj = await get_or_create_thread(thread_id, user_id)
+    thread_obj = await get_or_create_thread(user_id, None, thread_id)
 
     # Create the human message
     human_message_obj = await sync_to_async(HumanMessageModel.objects.create)(
@@ -154,7 +175,7 @@ async def create_assistant_message(thread_id: Optional[str], message: str, user_
         The created assistant message object
     """
     # Get or create the thread
-    thread_obj = await get_or_create_thread(thread_id, user_id)
+    thread_obj = await get_or_create_thread(user_id, None, thread_id)
 
     # Create the assistant message
     assistant_message_obj = await sync_to_async(AssistantMessage.objects.create)(
@@ -180,3 +201,88 @@ async def get_user_threads(user_id: str, limit: int = 50) -> List[Thread]:
         Thread.objects.filter(user_id=user_id).order_by('-updated_at')[:limit]
     )
     return threads
+
+
+async def get_session_threads(session_id: str, limit: int = 50) -> List[Thread]:
+    """
+    Get all threads for a given session ID (anonymous users).
+
+    Args:
+        session_id: The session ID to get threads for
+        limit: Maximum number of threads to return
+
+    Returns:
+        A list of thread objects
+    """
+    threads = await sync_to_async(list)(
+        Thread.objects.filter(session_id=session_id).order_by('-updated_at')[:limit]
+    )
+    return threads
+
+
+async def migrate_anonymous_thread_to_user(thread_id: str, user_id: str) -> bool:
+    """
+    Migrate an anonymous thread to belong to a user.
+
+    Args:
+        thread_id: The thread ID to migrate
+        user_id: The user ID to assign ownership to
+
+    Returns:
+        True if migration successful, False otherwise
+    """
+    try:
+        thread = await sync_to_async(Thread.objects.get)(id=thread_id, is_anonymous=True)
+        thread.user_id = user_id
+        thread.is_anonymous = False
+        thread.session_id = None  # Clear session ID
+        await sync_to_async(thread.save)()
+        return True
+    except Thread.DoesNotExist:
+        return False
+
+
+async def get_or_create_session_thread(session_id: str, subject: Optional[str] = None, thread_id: Optional[str] = None) -> Thread:
+    """
+    Get or create a thread for an anonymous session.
+
+    Args:
+        session_id: The session ID for the anonymous user
+        subject: Optional subject for the thread
+        thread_id: Optional specific thread ID to use
+
+    Returns:
+        The thread object
+    """
+    return await get_or_create_thread(
+        user_id=None,
+        subject=subject,
+        thread_id=thread_id,
+        session_id=session_id
+    )
+
+
+async def cleanup_old_anonymous_threads(days_old: int = 30) -> int:
+    """
+    Clean up old anonymous threads that haven't been updated recently.
+
+    Args:
+        days_old: Number of days old to consider for cleanup
+
+    Returns:
+        Number of threads cleaned up
+    """
+    from datetime import timedelta
+    from django.utils import timezone
+
+    cutoff_date = timezone.now() - timedelta(days=days_old)
+
+    # Delete old anonymous threads
+    deleted_count = await sync_to_async(
+        lambda: Thread.objects.filter(
+            is_anonymous=True,
+            updated_at__lt=cutoff_date
+        ).delete()
+    )()
+
+    return deleted_count[0] if isinstance(deleted_count, tuple) else deleted_count

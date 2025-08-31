@@ -1,4 +1,12 @@
+---
+alwaysApply: true
+---
+
 Django is the ONLY runtime
+MCP and A2A must be served by Django and Ninja
+No standalone servers
+No separate processes
+All protocols through Django endpointsDjango is the ONLY runtime
 MCP and A2A must be served by Django and Ninja
 No standalone servers
 No separate processes

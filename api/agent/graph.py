@@ -286,18 +286,62 @@ def create_agent():
 
 
 # Keep the existing API functions for compatibility
-async def ainvoke_agent(message: str, agent=None):
+async def ainvoke_agent(message: str, messages: Optional[List[BaseMessage]] = None, agent=None):
     """Async invoke the agent with a message."""
     if agent is None:
         agent = create_agent()
-    
+
+    # Use provided messages or create new message list
+    if messages:
+        state_messages = messages + [HumanMessage(content=message)]
+    else:
+        state_messages = [HumanMessage(content=message)]
+
     state = {
-        "messages": [HumanMessage(content=message)],
+        "messages": state_messages,
         "user_id": None
     }
-    
+
     result = await agent.ainvoke(state)
     return result
+
+
+async def ainvoke_agent_sync(message: str, messages: Optional[List[BaseMessage]] = None):
+    """Synchronous version of agent for thread API - returns complete response."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY environment variable not configured")
+
+    # Use provided messages or create new message list
+    if messages:
+        state_messages = messages + [HumanMessage(content=message)]
+    else:
+        state_messages = [HumanMessage(content=message)]
+
+    # Add system message if not present
+    if not state_messages or not isinstance(state_messages[0], SystemMessage):
+        system_message = SystemMessage(content=SYSTEM_PROMPT)
+        state_messages = [system_message] + state_messages
+
+    # Create a synchronous LLM for complete responses
+    llm = ChatOpenAI(
+        model="gpt-4o",
+        temperature=1,
+        api_key=api_key,
+        streaming=False,  # No streaming for complete responses
+    )
+
+    # Get the complete response
+    response = await llm.ainvoke(state_messages)
+
+    # Return in the same format as the graph agent
+    return {
+        "messages": [response],
+        "user_id": None,
+        "tools_done": True,
+        "voice_messages": [],
+        "last_voice_sig": None
+    }
 
 
 async def astream_agent(message: str, agent=None):
@@ -314,21 +358,27 @@ async def astream_agent(message: str, agent=None):
         yield chunk
 
 
-async def astream_agent_tokens(message: str, agent=None):
+async def astream_agent_tokens(message: str, messages: Optional[List[BaseMessage]] = None, agent=None):
     """Stream agent tokens - unified writer() approach."""
     if agent is None:
         agent = create_agent()
-    
+
+    # Use provided messages or create new message list
+    if messages:
+        state_messages = messages + [HumanMessage(content=message)]
+    else:
+        state_messages = [HumanMessage(content=message)]
+
     state = {
-        "messages": [HumanMessage(content=message)],
+        "messages": state_messages,
         "user_id": None
     }
-    
+
     # Only use custom stream mode - everything flows through writer()
     async for chunk in agent.astream(state, stream_mode="custom"):
         if isinstance(chunk, dict) and "type" in chunk:
             yield chunk
-    
+
     # Signal end of stream
     yield {
         "type": "done",

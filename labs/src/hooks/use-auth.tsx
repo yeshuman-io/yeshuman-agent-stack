@@ -13,6 +13,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isAuthenticated: boolean;
+  refreshThreads: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

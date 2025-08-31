@@ -10,6 +10,9 @@ export const useSSE = (onMessageStart?: () => void) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Thread management
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+
   // Get auth token (conditionally to avoid dependency issues)
   const tokenRef = useRef<string | null>(null);
   try {
@@ -138,7 +141,13 @@ export const useSSE = (onMessageStart?: () => void) => {
         setThinkingContent('');
         setToolOutput('');
         console.log('[MESSAGE START]');
-        
+
+        // Extract thread_id if provided (for new threads)
+        if (data.thread_id && !currentThreadId) {
+          console.log(`[THREAD] New thread created: ${data.thread_id}`);
+          setCurrentThreadId(data.thread_id);
+        }
+
         // Trigger sarcastic animation on AI response
         if (onMessageStart) {
           console.log('🤖 AI response detected - triggering sarcastic animation');
@@ -191,7 +200,10 @@ export const useSSE = (onMessageStart?: () => void) => {
           'Accept': 'text/event-stream',
           ...(tokenRef.current && { 'Authorization': `Bearer ${tokenRef.current}` }),
         },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({
+          message,
+          ...(currentThreadId && { thread_id: currentThreadId })
+        }),
         signal: abortController.signal,
         
         onopen(response) {
@@ -233,6 +245,16 @@ export const useSSE = (onMessageStart?: () => void) => {
     }
   }, [handleSSEEvent]);
 
+  // Function to start a new conversation
+  const startNewConversation = useCallback(() => {
+    setCurrentThreadId(null);
+    setMessages([]);
+    setThinkingContent('');
+    setVoiceLines([]);
+    setActiveTools([]);
+    console.log('[THREAD] Started new conversation');
+  }, []);
+
   return {
     // State
     messages,
@@ -242,8 +264,10 @@ export const useSSE = (onMessageStart?: () => void) => {
     voiceLines,
     toolOutput,
     activeTools,
-    
+    currentThreadId,
+
     // Actions
-    sendMessage
+    sendMessage,
+    startNewConversation
   };
 };

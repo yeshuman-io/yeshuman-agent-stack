@@ -1,4 +1,5 @@
 import { Calendar, Home, Inbox, Search, Settings, MessageSquare, Brain, Bot, Mic, Wrench, Terminal, LogOut, LogIn, User } from "lucide-react"
+import { useState, useEffect } from "react"
 
 import {
   Sidebar,
@@ -16,66 +17,67 @@ import {
 import { LoginDialog } from "@/components/login-dialog"
 import { useAuth } from "@/hooks/use-auth"
 
-// Menu items for navigation
-const items = [
-  {
-    title: "Home",
-    url: "#",
-    icon: Home,
-  },
-  {
-    title: "Chat",
-    url: "#",
-    icon: MessageSquare,
-  },
-  {
-    title: "Thinking",
-    url: "#",
-    icon: Brain,
-  },
-  {
-    title: "Voice",
-    url: "#",
-    icon: Mic,
-  },
-  {
-    title: "Tools",
-    url: "#",
-    icon: Wrench,
-  },
-  {
-    title: "System",
-    url: "#",
-    icon: Terminal,
-  },
-]
-
-// Additional menu items
-const additionalItems = [
-  {
-    title: "Inbox",
-    url: "#",
-    icon: Inbox,
-  },
-  {
-    title: "Calendar", 
-    url: "#",
-    icon: Calendar,
-  },
-  {
-    title: "Search",
-    url: "#",
-    icon: Search,
-  },
-  {
-    title: "Settings",
-    url: "#",
-    icon: Settings,
-  },
-]
+// Thread interface
+interface Thread {
+  id: string
+  subject: string
+  created_at: string
+  updated_at: string
+}
 
 export function AppSidebar() {
-  const { user, isAuthenticated, logout } = useAuth()
+  const { user, token, isAuthenticated, logout } = useAuth()
+  const [threads, setThreads] = useState<Thread[]>([])
+  const [threadsLoading, setThreadsLoading] = useState(false)
+
+  // Fetch threads when user is authenticated
+  useEffect(() => {
+    if (isAuthenticated && user && token) {
+      fetchThreads()
+    } else {
+      setThreads([])
+    }
+  }, [isAuthenticated, user, token])
+
+  const fetchThreads = async () => {
+    console.log('fetchThreads called, token:', token ? token.substring(0, 20) + '...' : 'null')
+    console.log('isAuthenticated:', isAuthenticated, 'user:', user?.username)
+
+    if (!token) {
+      console.warn('No token available for threads fetch')
+      return
+    }
+
+    try {
+      setThreadsLoading(true)
+      console.log('Making request to: http://127.0.0.1:8000/api/threads')
+
+      const response = await fetch('http://127.0.0.1:8000/api/threads', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      console.log('Response status:', response.status, response.statusText)
+
+      if (response.ok) {
+        const threadsData = await response.json()
+        console.log('Fetched threads:', threadsData.length, 'threads')
+        setThreads(threadsData)
+      } else {
+        const errorText = await response.text()
+        console.error('Failed to fetch threads:', response.status, response.statusText, errorText)
+        setThreads([])
+      }
+    } catch (error) {
+      console.error('Error fetching threads:', error)
+      setThreads([])
+    } finally {
+      setThreadsLoading(false)
+    }
+  }
 
   return (
     <Sidebar collapsible="icon" variant="inset">
@@ -98,37 +100,35 @@ export function AppSidebar() {
       
       <SidebarContent className="custom-scrollbar">
         <SidebarGroup>
-          <SidebarGroupLabel>Application</SidebarGroupLabel>
+          <SidebarGroupLabel>Threads</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <a href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </a>
+              {threadsLoading ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton disabled>
+                    <MessageSquare className="size-4" />
+                    <span>Loading threads...</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        
-        <SidebarGroup>
-          <SidebarGroupLabel>Tools</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {additionalItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <a href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </a>
+              ) : threads.length === 0 ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton disabled>
+                    <MessageSquare className="size-4" />
+                    <span>No threads yet</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
+              ) : (
+                threads.slice(0, 10).map((thread) => (
+                  <SidebarMenuItem key={thread.id}>
+                    <SidebarMenuButton asChild tooltip={thread.subject}>
+                      <a href={`#thread-${thread.id}`}>
+                        <MessageSquare className="size-4" />
+                        <span className="truncate">{thread.subject || 'Untitled Thread'}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -147,10 +147,10 @@ export function AppSidebar() {
                   )}
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">
-                    {isAuthenticated ? user?.username : "Human?"}
+                  <span className="truncate text-xs text-muted-foreground">
+                    {isAuthenticated ? user?.username?.split('@')[0] : "Human?"}
                   </span>
-                  <span className="truncate text-xs">
+                  <span className="truncate text-[10px] text-muted-foreground">
                     {isAuthenticated ? user?.email : "click to login"}
                   </span>
                 </div>
@@ -164,8 +164,8 @@ export function AppSidebar() {
                   <LogOut className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Human</span>
-                  <span className="truncate text-xs">Return to anonymity</span>
+                  <span className="truncate text-xs text-muted-foreground">Human</span>
+                  <span className="truncate text-[10px] text-muted-foreground">Return to anonymity</span>
                 </div>
               </SidebarMenuButton>
             </SidebarMenuItem>

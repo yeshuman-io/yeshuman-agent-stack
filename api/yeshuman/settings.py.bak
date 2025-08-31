@@ -123,7 +123,7 @@ ASGI_APPLICATION = 'yeshuman.asgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # Database Configuration
-# PostgreSQL is the primary database (SQLite fallback available)
+# Supports both PostgreSQL (production) and SQLite (development fallback)
 USE_POSTGRES = os.getenv('USE_POSTGRES', 'true').lower() in ('true', '1', 'yes')
 
 if USE_POSTGRES:
@@ -138,7 +138,7 @@ if USE_POSTGRES:
         }
     }
 else:
-    # SQLite fallback for development when PostgreSQL is not available
+    # SQLite fallback for development
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
