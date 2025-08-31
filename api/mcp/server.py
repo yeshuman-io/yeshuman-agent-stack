@@ -87,7 +87,7 @@ class MCPServer:
                         "tools": {}
                     },
                     "serverInfo": {
-                        "name": "YesHuman",
+                        "name": "Yes Human",
                         "version": "1.0.0"
                     }
                 }

@@ -1,5 +1,5 @@
 """
-Anthropic SSE Generator for YesHuman Agent Stack.
+Anthropic SSE Generator for Yes Human Agent Stack.
 
 Copied and adapted from server/agent/generators.py to provide
 Anthropic-compatible SSE streaming for custom UI consumers.

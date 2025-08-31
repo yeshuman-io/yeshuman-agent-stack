@@ -1,4 +1,4 @@
-# YesHuman Agent Stack
+# Yes Human Agent Stack
 
 ## Primary Goal
 
@@ -127,7 +127,7 @@ yeshuman/
 
 ## Quick Start
 
-### 1. Start the YesHuman Agent Stack
+### 1. Start the Yes Human Agent Stack
 
 ```bash
 cd api
@@ -161,7 +161,7 @@ pytest                          # All 50 tests should pass
 ## MCP (Model Context Protocol) Usage
 
 ### Overview
-The YesHuman stack includes a complete MCP implementation:
+The Yes Human stack includes a complete MCP implementation:
 - **MCP Server**: Django-hosted server exposing tools via MCP protocol with JSON-RPC 2.0
 - **MCP Client**: Stdio-based client for integration with MCP-compatible tools (like Cursor IDE)
 - **Available Tools**: Calculator, Echo, Weather, Text Analysis, Agent Chat, and Agent Capabilities
@@ -236,7 +236,7 @@ echo '{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "echo", "arg
 
 #### Agent Chat Tool
 - **Name**: `agent_chat`
-- **Description**: Chat directly with the YesHuman LangGraph agent
+- **Description**: Chat directly with the Yes Human LangGraph agent
 - **Input**: `{"message": "question_or_request"}`
 - **Example**: Direct conversation with your intelligent agent
 
@@ -295,7 +295,7 @@ curl -X POST http://localhost:8000/mcp/tools/call \
 ## A2A (Agent-to-Agent) Communication
 
 ### Overview
-The YesHuman stack includes a complete A2A server implementation for agent-to-agent communication:
+The Yes Human stack includes a complete A2A server implementation for agent-to-agent communication:
 - **JSON-RPC 2.0 Protocol**: Full compliance with A2A specification
 - **Streaming Support**: Token-by-token LLM streaming with word grouping
 - **Agent Cards**: Structured capability descriptions for discovery
@@ -319,7 +319,7 @@ POST /a2a/agents/{name}/heartbeat  # Update agent heartbeat
 GET /a2a/discover                  # Discover available agents
 
 # Agent Cards (A2A Specification Compliance)
-GET /a2a/agent-card                # Get YesHuman agent card
+GET /a2a/agent-card                # Get Yes Human agent card
 GET /a2a/agent-card/{agent_name}   # Get agent card by name
 POST /a2a/capability-match         # Match agent capabilities
 
@@ -337,7 +337,7 @@ GET /a2a/stream/{agent_id}         # SSE stream of messages
 ```
 
 ### Agent Cards
-Following A2A specification standards, the YesHuman agent provides structured **Agent Cards** that describe:
+Following A2A specification standards, the Yes Human agent provides structured **Agent Cards** that describe:
 - **Capabilities**: Detailed specifications with input/output schemas
 - **Endpoints**: Available protocols (MCP, A2A, REST) with authentication methods
 - **Metadata**: Version, owner, documentation, SLA information  
@@ -358,7 +358,7 @@ curl -X POST http://localhost:8000/a2a/capability-match \
 
 ### A2A Streaming Protocol
 
-The YesHuman agent supports streaming communication via JSON-RPC 2.0:
+The Yes Human agent supports streaming communication via JSON-RPC 2.0:
 
 #### Non-Streaming Messages
 ```bash
@@ -413,7 +413,7 @@ The A2A Inspector provides a web-based interface for testing and debugging A2A c
 ### Prerequisites
 - Node.js and npm installed
 - Python 3.13+ with uv package manager
-- YesHuman Agent Stack running on http://localhost:8000
+- Yes Human Agent Stack running on http://localhost:8000
 
 ### Installation & Setup
 
@@ -440,7 +440,7 @@ cd .. && chmod +x run.sh   # Make run script executable
 
 ### Using the A2A Inspector
 
-1. **Start the YesHuman Agent Stack**:
+1. **Start the Yes Human Agent Stack**:
    ```bash
    cd api && source .venv/bin/activate && python manage.py runserver
    ```
@@ -452,7 +452,7 @@ cd .. && chmod +x run.sh   # Make run script executable
 
 3. **Open the Inspector**: Navigate to http://localhost:3000
 
-4. **Connect to YesHuman Agent**:
+4. **Connect to Yes Human Agent**:
    - Click "Add Agent" or "Connect to Agent"
    - Enter the Agent Card URL: `http://localhost:8000/a2a/agent-card/a2a`
    - Click "Connect"
@@ -507,7 +507,7 @@ cd a2a-inspector && ./run.sh
 
 #### Connection Issues
 ```bash
-# Verify YesHuman agent is running
+# Verify Yes Human agent is running
 curl http://localhost:8000/a2a/agent-card/a2a
 
 # Check agent card format

@@ -19,7 +19,7 @@ from agent.graph import ainvoke_agent, astream_agent
 
 # Create A2A API instance
 a2a_api = NinjaAPI(
-    title="YesHuman A2A Server",
+    title="Yes Human A2A Server",
     version="1.0.0",
     description="Agent-to-Agent communication server",
     urls_namespace="a2a"
@@ -686,10 +686,10 @@ class AgentCardResponse(Schema):
     agent_card: Dict[str, Any]
     
 
-@a2a_api.get("/agent-card", response=AgentCardResponse, summary="Get YesHuman Agent Card")
+@a2a_api.get("/agent-card", response=AgentCardResponse, summary="Get Yes Human Agent Card")
 def get_agent_card(request):
     """
-    Get the standardized A2A Agent Card for the YesHuman agent.
+    Get the standardized A2A Agent Card for the Yes Human agent.
     
     Agent Cards provide a comprehensive description of agent capabilities,
     endpoints, and metadata following A2A specification standards.
@@ -710,7 +710,7 @@ def get_agent_card_a2a(request):
     """Return an A2A-spec AgentCard shape expected by a2a-inspector."""
     try:
         card = {
-            "name": "YesHuman Agent",
+            "name": "Yes Human Agent",
             "version": "1.0.0",
             "description": "Multi-platform LangGraph ReAct agent with comprehensive tool integration and protocol support",
             "url": "http://localhost:8000/a2a/",
@@ -754,7 +754,7 @@ def get_agent_card_a2a(request):
                 },
             ],
             "documentationUrl": "https://github.com/yeshuman-io/yeshuman-agent-stack",
-            "provider": {"organization": "YesHuman.io", "url": "https://yeshuman.io"},
+            "provider": {"organization": "Yes Human.io", "url": "https://yeshuman.io"},
         }
         return card
     except Exception as e:
@@ -766,7 +766,7 @@ def get_agent_card_by_name(request, agent_name: str):
     """
     Get agent card for a specific registered agent.
     
-    For now, this only supports the YesHuman agent, but could be extended
+    For now, this only supports the Yes Human agent, but could be extended
     to support multiple agents in a multi-agent system.
     """
     try:
@@ -804,7 +804,7 @@ class CapabilityMatchResponse(Schema):
 @a2a_api.post("/capability-match", response=CapabilityMatchResponse, summary="Match Agent Capabilities")
 def match_capabilities(request, payload: CapabilityMatchRequest):
     """
-    Check if the YesHuman agent matches specific capability requirements.
+    Check if the Yes Human agent matches specific capability requirements.
     
     This is useful for agent discovery and task routing in multi-agent systems.
     """

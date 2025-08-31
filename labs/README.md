@@ -1,6 +1,6 @@
-# YesHuman Labs UI
+# Yes Human Labs UI
 
-A sophisticated streaming interface for the YesHuman Agent Stack, featuring real-time parallel streaming of thinking, voice, tools, and structured data.
+A sophisticated streaming interface for the Yes Human Agent Stack, featuring real-time parallel streaming of thinking, voice, tools, and structured data.
 
 ## 🎯 Features
 
@@ -17,7 +17,7 @@ A sophisticated streaming interface for the YesHuman Agent Stack, featuring real
 
 - Node.js 18+ 
 - pnpm 9+
-- YesHuman Agent Stack running on `localhost:8111`
+- Yes Human Agent Stack running on `localhost:8111`
 
 ### Installation
 
@@ -46,7 +46,7 @@ pnpm preview
 
 ## 🎼 Architecture Integration
 
-This UI connects to your YesHuman Agent Stack's `/agent/stream` endpoint and expects Anthropic-compatible SSE events:
+This UI connects to your Yes Human Agent Stack's `/agent/stream` endpoint and expects Anthropic-compatible SSE events:
 
 ```typescript
 // Thinking stream
@@ -122,4 +122,4 @@ pnpm type-check
 
 ## 🔗 Integration
 
-The UI automatically connects to your YesHuman Agent Stack. Make sure your agent server is running with the parallel streaming conductor node for the full experience.
+The UI automatically connects to your Yes Human Agent Stack. Make sure your agent server is running with the parallel streaming conductor node for the full experience.

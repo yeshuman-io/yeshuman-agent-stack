@@ -9,9 +9,9 @@ import json
 
 # Create MCP API instance
 mcp_api = NinjaAPI(
-    title="YesHuman MCP Server",
+    title="Yes Human MCP Server",
     version="1.0.0",
-    description="Model Context Protocol server for YesHuman tools",
+    description="Model Context Protocol server for Yes Human tools",
     urls_namespace="mcp"
 )
 

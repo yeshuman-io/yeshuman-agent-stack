@@ -49,14 +49,16 @@ AUTHENTICATION_BACKENDS = [
 INSTALLED_APPS = [
     'daphne',
     'corsheaders',  # CORS support
+    'polymorphic',  # Polymorphic models
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # YesHuman apps
+    # Yes Human apps
     'auth.apps.AuthConfig',  # Custom auth app with unique label
+    'threads',  # Conversation threads
     'a2a',
 ]
 
@@ -122,8 +124,12 @@ ASGI_APPLICATION = 'yeshuman.asgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('POSTGRES_DB', 'yeshuman'),
+        'USER': os.getenv('POSTGRES_USER', 'yeshuman'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'password'),
+        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+        'PORT': os.getenv('POSTGRES_PORT', '5432'),
     }
 }
 

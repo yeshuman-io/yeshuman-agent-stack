@@ -271,7 +271,7 @@ class TestMCPServer(TestCase):
         self.assertIn('protocolVersion', result)
         self.assertIn('capabilities', result)
         self.assertIn('serverInfo', result)
-        self.assertEqual(result['serverInfo']['name'], 'YesHuman')
+        self.assertEqual(result['serverInfo']['name'], 'Yes Human')
 
     def test_mcp_notifications_initialized(self):
         """Test MCP notifications/initialized message."""

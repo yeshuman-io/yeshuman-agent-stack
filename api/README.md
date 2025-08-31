@@ -1,6 +1,6 @@
-# YesHuman API
+# Yes Human API
 
-Django + LangGraph API backend for the YesHuman Agent Stack.
+Django + LangGraph API backend for the Yes Human Agent Stack.
 
 ## Quick Start
 

@@ -1,5 +1,5 @@
 """
-Tests for the YesHuman agent functionality.
+Tests for the Yes Human agent functionality.
 """
 import os
 import pytest

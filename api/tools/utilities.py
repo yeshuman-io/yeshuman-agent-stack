@@ -1,5 +1,5 @@
 """
-Utility tools for the YesHuman agent.
+Utility tools for the Yes Human agent.
 """
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field

@@ -1,5 +1,5 @@
 """
-Agent interaction tools for the YesHuman agent.
+Agent interaction tools for the Yes Human agent.
 These tools are separate to avoid circular imports.
 """
 import asyncio
@@ -11,14 +11,14 @@ from langgraph.config import get_stream_writer
 
 class AgentInteractionInput(BaseModel):
     """Input for agent interaction tool."""
-    message: str = Field(description="Message to send to the YesHuman agent")
+    message: str = Field(description="Message to send to the Yes Human agent")
 
 
 class AgentInteractionTool(BaseTool):
-    """Tool for direct interaction with the YesHuman agent."""
+    """Tool for direct interaction with the Yes Human agent."""
     
     name: str = "agent_chat"
-    description: str = "Chat directly with the YesHuman agent. Ask questions, request demonstrations of capabilities, or have a conversation."
+    description: str = "Chat directly with the Yes Human agent. Ask questions, request demonstrations of capabilities, or have a conversation."
     args_schema: type[BaseModel] = AgentInteractionInput
     
     def _run(self, message: str, run_manager: Optional = None) -> str:
@@ -68,7 +68,7 @@ class AgentCapabilitiesTool(BaseTool):
     """Tool for discovering agent capabilities."""
     
     name: str = "agent_capabilities"
-    description: str = "Get information about the YesHuman agent's capabilities and available tools."
+    description: str = "Get information about the Yes Human agent's capabilities and available tools."
     args_schema: type[BaseModel] = AgentCapabilitiesInput
     
     def _run(self, detail_level: str = "summary", run_manager: Optional = None) -> str:
@@ -95,7 +95,7 @@ class AgentCapabilitiesTool(BaseTool):
             if detail_level == "detailed":
                 capabilities = {
                     "agent_info": {
-                        "name": "YesHuman Agent",
+                        "name": "Yes Human Agent",
                         "type": "LangGraph ReAct Agent",
                         "model": "gpt-4o-mini",
                         "capabilities": [
@@ -141,10 +141,10 @@ class AgentCapabilitiesTool(BaseTool):
                         "Mobile applications"
                     ]
                 }
-                return f"YesHuman Agent Detailed Capabilities:\n{capabilities}"
+                return f"Yes Human Agent Detailed Capabilities:\n{capabilities}"
             else:
                 tool_names = [tool.name for tool in basic_tools] + ["agent_chat", "agent_capabilities"]
-                return f"""YesHuman Agent - Capabilities Summary:
+                return f"""Yes Human Agent - Capabilities Summary:
                 
 🤖 **Agent Type**: LangGraph ReAct Agent with GPT-4o-mini
 🛠️ **Available Tools**: {', '.join(tool_names)}

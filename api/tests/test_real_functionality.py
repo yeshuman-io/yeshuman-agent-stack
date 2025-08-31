@@ -22,7 +22,7 @@ class TestRealFunctionality(TestCase):
         data = response.json()
         
         # Test real data structure (no mocking)
-        self.assertEqual(data["name"], "YesHuman Agent")
+        self.assertEqual(data["name"], "Yes Human Agent")
         self.assertIn("streaming", data["capabilities"])
         self.assertTrue(data["capabilities"]["streaming"])
         self.assertEqual(data["preferredTransport"], "JSONRPC")

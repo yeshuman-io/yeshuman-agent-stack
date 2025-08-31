@@ -9,9 +9,9 @@ from auth.api import auth_router
 
 # Initialize the API
 api = NinjaAPI(
-    title="YesHuman Agent API",
+    title="Yes Human Agent API",
     version="1.0.0",
-    description="API for YesHuman Agent Stack with MCP and A2A support"
+    description="API for Yes Human Agent Stack with MCP and A2A support"
 )
 
 # Add auth router
@@ -71,7 +71,7 @@ def health_check(request):
 # Chat endpoint
 @api.post("/chat", response=ChatResponse)
 async def chat(request, payload: ChatRequest):
-    """Chat with the YesHuman agent."""
+    """Chat with the Yes Human agent."""
     try:
         result = await ainvoke_agent(payload.message)
         

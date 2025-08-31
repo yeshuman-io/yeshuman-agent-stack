@@ -348,7 +348,7 @@ class TestA2AAgentCards(TestCase):
         self.client = Client()
     
     def test_agent_card_endpoint(self):
-        """Test agent card endpoint returns YesHuman agent card."""
+        """Test agent card endpoint returns Yes Human agent card."""
         response = self.client.get('/a2a/agent-card')
         self.assertEqual(response.status_code, 200)
         
@@ -356,7 +356,7 @@ class TestA2AAgentCards(TestCase):
         self.assertIn('agent_card', data)
         
         agent_card = data['agent_card']
-        self.assertEqual(agent_card['name'], 'YesHuman Agent')
+        self.assertEqual(agent_card['name'], 'Yes Human Agent')
         self.assertIn('capabilities', agent_card)
         self.assertIn('endpoints', agent_card)
         self.assertIn('tags', agent_card)
@@ -370,13 +370,13 @@ class TestA2AAgentCards(TestCase):
     
     def test_agent_card_by_name(self):
         """Test getting agent card by name."""
-        # Test YesHuman agent
+        # Test Yes Human agent
         response = self.client.get('/a2a/agent-card/yeshuman')
         self.assertEqual(response.status_code, 200)
         
         data = response.json()
         self.assertIn('agent_card', data)
-        self.assertEqual(data['agent_card']['name'], 'YesHuman Agent')
+        self.assertEqual(data['agent_card']['name'], 'Yes Human Agent')
         
         # Test non-existent agent
         response = self.client.get('/a2a/agent-card/nonexistent')

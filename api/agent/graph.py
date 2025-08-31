@@ -1,5 +1,5 @@
 """
-YesHuman Agent - Simple ReAct Implementation with LangGraph.
+Yes Human Agent - Simple ReAct Implementation with LangGraph.
 
 Clean design following LangGraph patterns:
 - Standard AgentState with messages + add_messages reducer

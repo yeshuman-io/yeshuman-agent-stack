@@ -8,7 +8,7 @@ from django.contrib.auth.models import AbstractUser
 class User(AbstractUser):
     """
     Custom User model extending Django's AbstractUser.
-    Adds any custom fields specific to YesHuman here.
+    Adds any custom fields specific to Yes Human here.
     """
 
     # Add custom fields if needed

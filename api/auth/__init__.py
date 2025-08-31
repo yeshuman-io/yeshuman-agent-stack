@@ -1,5 +1,5 @@
 """
-Simple authentication module for YesHuman Agent Stack.
+Simple authentication module for Yes Human Agent Stack.
 
 Provides environment variable-based API key authentication.
 """

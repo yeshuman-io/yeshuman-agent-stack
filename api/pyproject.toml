@@ -1,7 +1,7 @@
 [project]
 name = "yeshuman-api"
 version = "0.1.0"
-description = "YesHuman Agent Stack API"
+description = "Yes Human Agent Stack API"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -13,6 +13,8 @@ dependencies = [
     "daphne>=4.2.1",
     "django-ninja-jwt>=5.3.7",
     "django-cors-headers>=4.7.0",
+    "psycopg2-binary>=2.9.9",
+    "django-polymorphic>=3.1",
 ]
 
 [tool.uv]

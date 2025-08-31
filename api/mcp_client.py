@@ -30,7 +30,7 @@ def main():
                     data=data,
                     headers={
                         'Content-Type': 'application/json',
-                        'User-Agent': 'YesHuman-MCP-Client/1.0'
+                        'User-Agent': 'Yes Human-MCP-Client/1.0'
                     }
                 )
                 

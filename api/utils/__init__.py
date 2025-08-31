@@ -1,5 +1,5 @@
 """
-Utilities module for YesHuman Agent Stack.
+Utilities module for Yes Human Agent Stack.
 """
 from .sse import SSEHttpResponse
 

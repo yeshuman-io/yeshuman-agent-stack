@@ -1,5 +1,5 @@
 """
-Server-Sent Events (SSE) utilities for YesHuman Agent Stack.
+Server-Sent Events (SSE) utilities for Yes Human Agent Stack.
 
 This module provides proper SSE HTTP response handling with correct headers
 for web compatibility, following best practices from production systems.

@@ -88,7 +88,7 @@ class AgentCard(BaseModel):
 
 
 def create_yeshuman_agent_card() -> AgentCard:
-    """Create the agent card for the YesHuman agent."""
+    """Create the agent card for the Yes Human agent."""
     
     # Define capabilities
     capabilities = [
@@ -152,7 +152,7 @@ def create_yeshuman_agent_card() -> AgentCard:
     ]
     
     return AgentCard(
-        name="YesHuman Agent",
+        name="Yes Human Agent",
         description="Multi-platform LangGraph ReAct agent with comprehensive tool integration and protocol support",
         capabilities=capabilities,
         endpoints=endpoints,
@@ -164,7 +164,7 @@ def create_yeshuman_agent_card() -> AgentCard:
             "weather_lookup": 2.0,
             "text_analysis": 3.0
         },
-        owner="YesHuman.io",
+        owner="Yes Human.io",
         contact="info@yeshuman.io",
         license="MIT",
         documentation_url="https://github.com/yeshuman-io/yeshuman-agent-stack",
