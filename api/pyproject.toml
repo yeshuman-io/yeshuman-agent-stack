@@ -11,6 +11,8 @@ dependencies = [
     "langchain-openai>=0.3.0",
     "python-dotenv>=1.1.0",
     "daphne>=4.2.1",
+    "django-ninja-jwt>=5.3.7",
+    "django-cors-headers>=4.7.0",
 ]
 
 [tool.uv]

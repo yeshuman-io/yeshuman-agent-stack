@@ -58,18 +58,22 @@ class A2AAPIKeyBackend(BaseBackend):
     def authenticate(self, request, **credentials):
         """
         Authenticate A2A API key from request headers.
-        
+
         Args:
             request: Django HttpRequest object
             **credentials: Additional credentials (unused for API key auth)
-            
+
         Returns:
             APIKeyUser instance if authentication succeeds, None otherwise
         """
+        # Handle case where request is None (for compatibility with Django's authenticate)
+        if request is None:
+            return None
+
         # Skip authentication if disabled
         if not self.auth_enabled:
             return None
-        
+
         # Check for X-API-Key header
         api_key = request.META.get('HTTP_X_API_KEY')
         if not api_key:
@@ -110,18 +114,22 @@ class MCPAPIKeyBackend(BaseBackend):
     def authenticate(self, request, **credentials):
         """
         Authenticate MCP API key from request headers.
-        
+
         Args:
             request: Django HttpRequest object
             **credentials: Additional credentials (unused for API key auth)
-            
+
         Returns:
             APIKeyUser instance if authentication succeeds, None otherwise
         """
+        # Handle case where request is None (for compatibility with Django's authenticate)
+        if request is None:
+            return None
+
         # Skip authentication if disabled
         if not self.auth_enabled:
             return None
-        
+
         # Check for X-API-Key header
         api_key = request.META.get('HTTP_X_API_KEY')
         if not api_key:
@@ -176,14 +184,18 @@ class UniversalAPIKeyBackend(BaseBackend):
     def authenticate(self, request, **credentials):
         """
         Authenticate API key from request headers for both A2A and MCP protocols.
-        
+
         Args:
             request: Django HttpRequest object
             **credentials: Additional credentials (unused for API key auth)
-            
+
         Returns:
             APIKeyUser instance if authentication succeeds, None otherwise
         """
+        # Handle case where request is None (for compatibility with Django's authenticate)
+        if request is None:
+            return None
+
         # Get API key from headers
         api_key = request.META.get('HTTP_X_API_KEY')
         if not api_key:

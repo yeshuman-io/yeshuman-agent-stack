@@ -4,7 +4,8 @@ Main API routes using Django Ninja.
 import os
 from ninja import NinjaAPI, Schema
 from typing import Dict, Any, Optional
-from agent.graph import ainvoke_agent, create_agent
+from agent.graph import ainvoke_agent
+from auth.api import auth_router
 
 # Initialize the API
 api = NinjaAPI(
@@ -12,6 +13,9 @@ api = NinjaAPI(
     version="1.0.0",
     description="API for YesHuman Agent Stack with MCP and A2A support"
 )
+
+# Add auth router
+api.add_router("/auth", auth_router, tags=["Authentication"])
 
 
 # Schemas

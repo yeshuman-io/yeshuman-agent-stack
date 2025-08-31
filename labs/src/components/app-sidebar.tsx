@@ -1,4 +1,4 @@
-import { Calendar, Home, Inbox, Search, Settings, MessageSquare, Brain, Bot, Mic, Wrench, Terminal } from "lucide-react"
+import { Calendar, Home, Inbox, Search, Settings, MessageSquare, Brain, Bot, Mic, Wrench, Terminal, LogOut, LogIn, User } from "lucide-react"
 
 import {
   Sidebar,
@@ -13,6 +13,8 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { LoginDialog } from "@/components/login-dialog"
+import { useAuth } from "@/hooks/use-auth"
 
 // Menu items for navigation
 const items = [
@@ -73,6 +75,8 @@ const additionalItems = [
 ]
 
 export function AppSidebar() {
+  const { user, isAuthenticated, logout } = useAuth()
+
   return (
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
@@ -133,18 +137,39 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <a href="#">
+            <LoginDialog>
+              <SidebarMenuButton size="lg" className="hover:bg-transparent hover:text-sidebar-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
-                  <Settings className="size-4" />
+                  {isAuthenticated ? (
+                    <User className="size-4" />
+                  ) : (
+                    <LogIn className="size-4" />
+                  )}
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Account</span>
-                  <span className="truncate text-xs">user@example.com</span>
+                  <span className="truncate font-semibold">
+                    {isAuthenticated ? user?.username : "Human?"}
+                  </span>
+                  <span className="truncate text-xs">
+                    {isAuthenticated ? user?.email : "click to login"}
+                  </span>
                 </div>
-              </a>
-            </SidebarMenuButton>
+              </SidebarMenuButton>
+            </LoginDialog>
           </SidebarMenuItem>
+          {isAuthenticated && (
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" onClick={logout} className="cursor-pointer">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  <LogOut className="size-4" />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">Human</span>
+                  <span className="truncate text-xs">Return to anonymity</span>
+                </div>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
         </SidebarMenu>
       </SidebarFooter>
       

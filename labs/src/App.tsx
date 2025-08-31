@@ -8,6 +8,7 @@ import { ThinkingPanel, VoicePanel, ToolsPanel, SystemPanel } from './components
 import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { AppSidebar } from './components/app-sidebar'
 import { useSSE } from './hooks/use-sse'
+import { AuthProvider } from './hooks/use-auth'
 import './App.css'
 
 function App() {
@@ -44,9 +45,10 @@ function App() {
 
   return (
     <ThemeProvider defaultTheme="dark" storageKey="yeshuman-v2-theme">
-      <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset className="flex flex-col h-screen">
+      <AuthProvider>
+        <SidebarProvider>
+          <AppSidebar />
+          <SidebarInset className="flex flex-col h-screen">
           {/* Header */}
           <div className="border-b p-4 flex justify-between items-center flex-shrink-0">
             <div className="flex items-center space-x-2">
@@ -91,6 +93,7 @@ function App() {
           </div>
         </SidebarInset>
       </SidebarProvider>
+    </AuthProvider>
     </ThemeProvider>
   );
 }

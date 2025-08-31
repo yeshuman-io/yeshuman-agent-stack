@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { SSE_ENDPOINT } from '../constants';
+import { useAuth } from './use-auth';
 import type { ChatMessage, SSEEvent, ContentBlock } from '../types';
 
 export const useSSE = (onMessageStart?: () => void) => {
@@ -8,6 +9,16 @@ export const useSSE = (onMessageStart?: () => void) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Get auth token (conditionally to avoid dependency issues)
+  const tokenRef = useRef<string | null>(null);
+  try {
+    const { token } = useAuth();
+    tokenRef.current = token;
+  } catch (error) {
+    // AuthProvider not available yet, token will be null
+    tokenRef.current = null;
+  }
   
   // Content streaming state
   const [thinkingContent, setThinkingContent] = useState('');
@@ -178,6 +189,7 @@ export const useSSE = (onMessageStart?: () => void) => {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'text/event-stream',
+          ...(tokenRef.current && { 'Authorization': `Bearer ${tokenRef.current}` }),
         },
         body: JSON.stringify({ message }),
         signal: abortController.signal,
