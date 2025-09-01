@@ -1,11 +1,28 @@
 import { useState } from "react"
-import { Bot } from "lucide-react"
+import { Bot, Plane, Leaf, Heart } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AnimatedLoginButton } from "@/components/animated-login-button"
 import { useAuth } from "@/hooks/use-auth"
+import { CURRENT_CLIENT } from "@/constants"
+
+// Helper function to get the appropriate icon component
+const getBrandIcon = (iconName: string) => {
+  switch (iconName) {
+    case 'Bot':
+      return Bot;
+    case 'Plane':
+      return Plane;
+    case 'Leaf':
+      return Leaf;
+    case 'Heart':
+      return Heart;
+    default:
+      return Bot; // fallback to Bot
+  }
+};
 
 interface LoginFormProps extends React.ComponentPropsWithoutRef<"div"> {
   onSuccess?: () => void;
@@ -42,16 +59,13 @@ export function LoginForm({ className, onSuccess, ...props }: LoginFormProps) {
           <div className="flex flex-col items-center gap-2">
             <div className="flex flex-col items-center gap-2 font-medium">
               <div className="flex h-8 w-8 items-center justify-center rounded-md">
-                <Bot className="size-6" />
+                {(() => {
+                  const IconComponent = getBrandIcon(CURRENT_CLIENT.brandIcon || 'Bot');
+                  return <IconComponent className="size-6" />;
+                })()}
               </div>
             </div>
-            <h1 className="text-xl font-bold">Yes, welcome human.</h1>
-            <div className="text-center text-sm">
-              Don&apos;t have an account?{" "}
-              <a href="#" className="underline underline-offset-4">
-                Sign up
-              </a>
-            </div>
+            <h1 className="text-xl font-bold">{CURRENT_CLIENT.welcomeMessage}</h1>
           </div>
           <div className="flex flex-col gap-6">
             {error && (
@@ -64,7 +78,7 @@ export function LoginForm({ className, onSuccess, ...props }: LoginFormProps) {
               <Input
                 id="email"
                 type="email"
-                placeholder="human@sentient.ai"
+                placeholder={CURRENT_CLIENT.placeholderEmail}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required

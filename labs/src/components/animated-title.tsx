@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { 
-  titleVariations, 
-  sarcasticVariations, 
+import {
+  titleVariations,
+  sarcasticVariations,
+  CURRENT_CLIENT,
   RANDOM_CHARS,
   ANIMATION_STEPS,
   STEP_DURATION,
@@ -19,8 +20,8 @@ interface AnimatedTitleProps {
 }
 
 export const AnimatedTitle = ({ onAnimationTrigger }: AnimatedTitleProps) => {
-  const [currentText, setCurrentText] = useState('Yes Human');
-  const [displayText, setDisplayText] = useState('Yes Human');
+  const [currentText, setCurrentText] = useState(CURRENT_CLIENT.name);
+  const [displayText, setDisplayText] = useState(CURRENT_CLIENT.name);
   const [isAnimating, setIsAnimating] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -64,8 +65,8 @@ export const AnimatedTitle = ({ onAnimationTrigger }: AnimatedTitleProps) => {
   
   // Regular animation cycle
   const triggerRegularAnimation = useCallback(() => {
-    // Pick a random variation (excluding "Yes Human")
-    const availableVariations = titleVariations.filter(text => text !== 'Yes Human');
+    // Pick a random variation (excluding current client name)
+    const availableVariations = titleVariations.filter(text => text !== CURRENT_CLIENT.name);
     const randomVariation = availableVariations[Math.floor(Math.random() * availableVariations.length)];
     
     console.log(`🎬 Triggering regular animation cycle`);
@@ -75,10 +76,10 @@ export const AnimatedTitle = ({ onAnimationTrigger }: AnimatedTitleProps) => {
       animateTextTransition(randomVariation);
     }, 100);
     
-    // Return to "Yes Human" after showing variation
+    // Return to current client name after showing variation
     setTimeout(() => {
-      if (randomVariation !== 'Yes Human') {
-        animateTextTransition('Yes Human');
+      if (randomVariation !== CURRENT_CLIENT.name) {
+        animateTextTransition(CURRENT_CLIENT.name);
       }
     }, VARIATION_DISPLAY_TIME);
   }, []); // Removed currentText dependency
@@ -94,9 +95,9 @@ export const AnimatedTitle = ({ onAnimationTrigger }: AnimatedTitleProps) => {
       animateTextTransition(randomSarcastic);
     }, 100);
     
-    // Return to "Yes Human" after longer display
+    // Return to current client name after longer display
     setTimeout(() => {
-      animateTextTransition('Yes Human');
+      animateTextTransition(CURRENT_CLIENT.name);
     }, SARCASTIC_DISPLAY_TIME);
   }, []);
 

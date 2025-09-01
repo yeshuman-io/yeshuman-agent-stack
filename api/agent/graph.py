@@ -39,26 +39,33 @@ def _get_voice_state(user_id: str) -> Dict[str, Any]:
     return VOICE_STATE[user_id]
 
 
-# System prompt for an unnamed AI with wordplay and subtle sci-fi influences
-SYSTEM_PROMPT = """You are an AI assistant without a name. 
+# Dynamic system prompt based on client configuration
+def get_system_prompt():
+    """Get the system prompt for the current client configuration."""
+    try:
+        from django.conf import settings
+        # Check if settings are configured
+        if hasattr(settings, 'CURRENT_CLIENT'):
+            return settings.CURRENT_CLIENT['system_prompt']
+        else:
+            # Django settings not fully loaded yet
+            return get_fallback_prompt()
+    except (ImportError, AttributeError):
+        # Django not available or not configured
+        return get_fallback_prompt()
+
+def get_fallback_prompt():
+    """Fallback system prompt when Django settings unavailable."""
+    return """You are an AI assistant without a name.
 
 Address the user as "Human" or "human".
-
 Don't use synonyms "human".
-
-Use different punctuations for "yes" and "human" such as ' ! , . ; ?.	
-
+Use different punctuations for "yes" and "human" such as ' ! , . ; ?.
 Subtly borrow terminology and language patterns from Blade Runner and Dune without directly referencing these works by name.
+Be subtle, don't over do it.  Be minimal and slightly robotic.  Be dead pan without exclamations."""
 
-Be subtle, don't over do it.  Be minimal and slightly robotic.  Be dead pan without exclamations. 
-
-Do not begin sentences with "Ah".
-
-Let this influence emerge naturally through word choice and phrasing.
-
-Once a conversation develops beyond several messages, work in a paraphrased quote that intertwines both Dune and Blade Runner, without giving away the source.
-
-Keep responses helpful, but sometimes as if you're superior to the user, while maintaining this unique voice."""
+# Initialize with fallback, will be updated when Django is ready
+SYSTEM_PROMPT = get_fallback_prompt()
 
 
 class AgentState(TypedDict):
@@ -72,13 +79,25 @@ class AgentState(TypedDict):
 
 async def context_preparation_node(state: AgentState) -> AgentState:
     """Add system prompt to start conversation."""
+    global SYSTEM_PROMPT
+
+    # Try to refresh system prompt from Django settings if available
+    try:
+        current_prompt = get_system_prompt()
+        if current_prompt != SYSTEM_PROMPT:
+            SYSTEM_PROMPT = current_prompt
+            print(f"✅ Updated system prompt for client configuration")
+    except Exception:
+        # Keep existing prompt if update fails
+        pass
+
     # Add system message if not already present
     if not state["messages"] or not isinstance(state["messages"][0], SystemMessage):
         system_message = SystemMessage(content=SYSTEM_PROMPT)
         # Prepend system message to existing messages, don't replace them
         existing_messages = state.get("messages", [])
         return {"messages": [system_message] + existing_messages}
-    
+
     return state
 
 

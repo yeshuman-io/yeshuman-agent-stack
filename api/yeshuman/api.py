@@ -468,6 +468,15 @@ async def delete_thread(request, thread_id: str):
     return {"success": True, "message": "Thread deleted"}
 
 
+@api.get("/config")
+async def get_client_config(request):
+    """Get current client configuration."""
+    from yeshuman.settings import CURRENT_CLIENT, CLIENT_CONFIG
+    return {
+        "client": CLIENT_CONFIG,
+        "config": CURRENT_CLIENT
+    }
+
 # Test endpoint for development
 @api.get("/test")
 async def test_agent(request):

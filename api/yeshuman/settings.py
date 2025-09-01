@@ -22,6 +22,79 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from .env file in the api directory
 load_dotenv(BASE_DIR / '.env')
 
+# Multi-tenant configuration
+CLIENT_CONFIG = os.getenv('CLIENT_CONFIG', 'yeshuman').lower()
+
+# Client-specific configurations
+CLIENT_CONFIGS = {
+    'yeshuman': {
+        'name': 'Yes Human',
+        'brand': 'Yes Human',
+        'logo_path': '/logos/yeshuman-logo.svg',
+        'primary_color': '#3b82f6',
+        'system_prompt': """
+You are an AI assistant without a name.
+
+Address the user as "Human" or "human".
+Don't use synonyms "human".
+Use different punctuations for "yes" and "human" such as ' ! , . ; ?.
+Subtly borrow terminology and language patterns from Blade Runner and Dune without directly referencing these works by name.
+Be subtle, don't over do it.  Be minimal and slightly robotic.  Be dead pan without exclamations.
+        """.strip(),
+        'welcome_message': 'Yes, welcome human.',
+        'tagline': 'Exploring the depths of human experience',
+        'description': "Don't have an account? Contact an administrator to get access to Yes Human.",
+    },
+    'bookedai': {
+        'name': 'Booked AI',
+        'brand': 'Booked AI',
+        'logo_path': '/logos/bookedai-logo.svg',
+        'primary_color': '#10b981',
+        'system_prompt': """
+You are Booked AI, an intelligent assistant specialized in booking management,
+scheduling, and reservation systems. You help users manage appointments, venues,
+events, and all aspects of booking coordination. You are professional, efficient,
+and always focused on ensuring smooth booking experiences.
+        """.strip(),
+        'welcome_message': 'Welcome to Booked AI.',
+        'tagline': 'Intelligent booking and scheduling',
+        'description': "Don't have an account? Contact your administrator to get access to Booked AI.",
+    },
+    'talentco': {
+        'name': 'TalentCo',
+        'brand': 'TalentCo',
+        'logo_path': '/logos/talentco-logo.svg',
+        'primary_color': '#8b5cf6',
+        'system_prompt': """
+You are TalentCo AI, a specialized assistant for talent management, recruitment,
+and HR operations. You help with candidate evaluation, job matching, career development,
+and organizational talent strategies. You are professional, insightful, and focused
+on connecting the right talent with the right opportunities.
+        """.strip(),
+        'welcome_message': 'Welcome to TalentCo.',
+        'tagline': 'Connecting talent with opportunity',
+        'description': "Don't have an account? Contact your HR administrator to get access to TalentCo.",
+    },
+    'lumie': {
+        'name': 'Lumie',
+        'brand': 'Lumie',
+        'logo_path': '/logos/lumie-logo.svg',
+        'primary_color': '#f59e0b',
+        'system_prompt': """
+You are Lumie AI, a creative assistant specializing in lighting design, ambiance,
+and environmental aesthetics. You help users create perfect lighting experiences
+for homes, offices, events, and commercial spaces. You understand the psychology
+of light, color theory, and how lighting affects mood and productivity.
+        """.strip(),
+        'welcome_message': 'Welcome to Lumie.',
+        'tagline': 'Illuminating spaces, inspiring lives',
+        'description': "Don't have an account? Contact your administrator to get access to Lumie.",
+    },
+}
+
+# Get current client configuration
+CURRENT_CLIENT = CLIENT_CONFIGS.get(CLIENT_CONFIG, CLIENT_CONFIGS['yeshuman'])
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/

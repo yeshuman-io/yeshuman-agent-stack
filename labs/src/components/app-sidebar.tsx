@@ -1,4 +1,4 @@
-import { Calendar, Home, Inbox, Search, Settings, MessageSquare, Brain, Bot, Mic, Wrench, Terminal, LogOut, LogIn, User, Trash2 } from "lucide-react"
+import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart } from "lucide-react"
 import { useState, useEffect } from "react"
 
 import {
@@ -16,6 +16,23 @@ import {
 } from "@/components/ui/sidebar"
 import { LoginDialog } from "@/components/login-dialog"
 import { useAuth } from "@/hooks/use-auth"
+import { CURRENT_CLIENT } from "@/constants"
+
+// Helper function to get the appropriate icon component
+const getBrandIcon = (iconName: string) => {
+  switch (iconName) {
+    case 'Bot':
+      return Bot;
+    case 'Plane':
+      return Plane;
+    case 'Leaf':
+      return Leaf;
+    case 'Heart':
+      return Heart;
+    default:
+      return Bot; // fallback to Bot
+  }
+};
 
 // Thread interface
 interface Thread {
@@ -113,32 +130,32 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
               onRefreshThreads()
             }
           } else {
-            console.error('API response is not an array:', threadsData)
-            setThreads([])
+            console.error('API response is not an array:', threadsData);
+            setThreads([]);
           }
         } catch (error) {
-          console.error('JSON parsing error:', error)
-          setThreads([])
+          console.error('JSON parsing error:', error);
+          setThreads([]);
         }
       } else {
-        const errorText = await response.text()
-        console.error('Failed to fetch threads:', response.status, response.statusText, errorText)
-        setThreads([])
+        const errorText = await response.text();
+        console.error('Failed to fetch threads:', response.status, response.statusText, errorText);
+        setThreads([]);
       }
     } catch (error) {
-      console.error('Error fetching threads:', error)
-      setThreads([])
+      console.error('Error fetching threads:', error);
+      setThreads([]);
     } finally {
-      setThreadsLoading(false)
+      setThreadsLoading(false);
     }
   }
 
   const handleThreadClick = (threadId: string) => {
-    console.log('Thread clicked:', threadId)
+    console.log('Thread clicked:', threadId);
     if (onThreadSelect) {
-      onThreadSelect(threadId)
+      onThreadSelect(threadId);
     }
-  }
+  };
 
   const handleThreadDelete = async (threadId: string, event: React.MouseEvent) => {
     event.stopPropagation() // Prevent thread selection
@@ -176,11 +193,36 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <a href="#">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-muted text-sidebar-primary-foreground">
-                  <Bot className="size-4 text-foreground" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Yes Human</span>
+                <div className="flex items-center gap-3 w-full">
+                  <div className="flex-shrink-0">
+                    {CURRENT_CLIENT.logoPath ? (
+                      <img
+                        src={CURRENT_CLIENT.logoPath}
+                        alt={`${CURRENT_CLIENT.brand} logo`}
+                        className="h-8 w-8 object-contain rounded-md"
+                        onError={(e) => {
+                          // Fallback to brand icon if logo fails to load
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const IconComponent = getBrandIcon(CURRENT_CLIENT.brandIcon || 'Bot');
+                          const fallbackIcon = document.createElement('div');
+                          fallbackIcon.innerHTML = `<svg class="h-8 w-8 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>`;
+                          target.parentNode?.appendChild(fallbackIcon.firstChild as Node);
+                        }}
+                      />
+                    ) : (
+                      <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-muted text-sidebar-primary-foreground">
+                        {(() => {
+                          const IconComponent = getBrandIcon(CURRENT_CLIENT.brandIcon || 'Bot');
+                          return <IconComponent className="size-4 text-foreground" />;
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
+                    <span className="truncate font-semibold text-base">{CURRENT_CLIENT.brand}</span>
+                    <span className="truncate text-xs text-muted-foreground">{CURRENT_CLIENT.tagline}</span>
+                  </div>
                 </div>
               </a>
             </SidebarMenuButton>

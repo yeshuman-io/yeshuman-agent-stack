@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="lumieGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="lightGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FCD34D;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F59E0B;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main circle background -->
+  <circle cx="60" cy="60" r="50" fill="url(#lumieGradient)" />
+  
+  <!-- Light rays -->
+  <g stroke="url(#lightGradient)" stroke-width="3" stroke-linecap="round">
+    <line x1="60" y1="20" x2="60" y2="30" />
+    <line x1="85.36" y1="25.36" x2="80.24" y2="30.48" />
+    <line x1="100" y1="60" x2="90" y2="60" />
+    <line x1="85.36" y1="94.64" x2="80.24" y2="89.52" />
+    <line x1="60" y1="100" x2="60" y2="90" />
+    <line x1="34.64" y1="94.64" x2="39.76" y2="89.52" />
+    <line x1="20" y1="60" x2="30" y2="60" />
+    <line x1="34.64" y1="25.36" x2="39.76" y2="30.48" />
+  </g>
+  
+  <!-- Central brain/intelligence symbol -->
+  <g fill="white">
+    <!-- Brain outline -->
+    <path d="M45 45 C35 45, 35 55, 40 65 C45 75, 55 75, 60 65 C65 75, 75 75, 80 65 C85 55, 85 45, 75 45 C70 35, 50 35, 45 45 Z" />
+    
+    <!-- Neural connections -->
+    <g stroke="url(#lumieGradient)" stroke-width="1.5" fill="none">
+      <circle cx="50" cy="55" r="2" fill="url(#lumieGradient)" />
+      <circle cx="60" cy="50" r="2" fill="url(#lumieGradient)" />
+      <circle cx="70" cy="55" r="2" fill="url(#lumieGradient)" />
+      <circle cx="55" cy="65" r="2" fill="url(#lumieGradient)" />
+      <circle cx="65" cy="65" r="2" fill="url(#lumieGradient)" />
+      
+      <line x1="50" y1="55" x2="60" y2="50" />
+      <line x1="60" y1="50" x2="70" y2="55" />
+      <line x1="50" y1="55" x2="55" y2="65" />
+      <line x1="70" y1="55" x2="65" y2="65" />
+      <line x1="55" y1="65" x2="65" y2="65" />
+    </g>
+  </g>
+  
+  <!-- Lumie text -->
+  <text x="60" y="110" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#374151">
+    LUMIE
+  </text>
+</svg> 
