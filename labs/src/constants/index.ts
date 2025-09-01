@@ -13,6 +13,10 @@ export const CLIENT_CONFIGS = {
     welcomeMessage: 'Yes, welcome human.',
     tagline: 'Human Compute Interface',
     placeholderEmail: 'human@sentient.ai',
+    placeholderPassword: 'Enter your precious password',
+    loginSubheader: 'Enter your precious credentials to interact with me, human.',
+    logoutLabel: 'Human',
+    logoutDescription: 'Return to anonymity',
     description: "Don't have an account? Contact an administrator to get access to Yes Human.",
     titleVariations: [
       'Yes Human',
@@ -51,6 +55,10 @@ export const CLIENT_CONFIGS = {
     welcomeMessage: 'Welcome to Booked AI.',
     tagline: 'Your AI travel companion',
     placeholderEmail: 'traveler@booked.ai',
+    placeholderPassword: 'Your passport to adventure',
+    loginSubheader: 'Enter your credentials to unlock your next journey.',
+    logoutLabel: 'Traveler',
+    logoutDescription: 'Return to reality',
     description: "Don't have an account? Contact your administrator to get access to Booked AI.",
     titleVariations: [
       'Booked AI',
@@ -93,6 +101,10 @@ export const CLIENT_CONFIGS = {
     welcomeMessage: 'Welcome to TalentCo.',
     tagline: 'Sustainable talent for sustainable futures',
     placeholderEmail: 'talent@sustainable.jobs',
+    placeholderPassword: 'Your green credentials',
+    loginSubheader: 'Enter your credentials to connect with sustainable talent.',
+    logoutLabel: 'Guardian',
+    logoutDescription: 'Return to a better world',
     description: "Don't have an account? Contact your HR administrator to get access to TalentCo.",
     titleVariations: [
       'TalentCo',
@@ -135,6 +147,10 @@ export const CLIENT_CONFIGS = {
     welcomeMessage: 'Welcome to Lumie.',
     tagline: 'Your AI health companion',
     placeholderEmail: 'wellness@lumie.health',
+    placeholderPassword: 'Your wellness key',
+    loginSubheader: 'Enter your credentials to begin your health journey.',
+    logoutLabel: 'Companion',
+    logoutDescription: 'Return to healthy living',
     description: "Don't have an account? Contact your administrator to get access to Lumie.",
     titleVariations: [
       'Lumie',

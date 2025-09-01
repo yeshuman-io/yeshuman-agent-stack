@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { LoginForm } from "@/components/login-form"
 import { useAuth } from "@/hooks/use-auth"
+import { CURRENT_CLIENT } from "@/constants"
 
 interface LoginDialogProps {
   children: React.ReactNode;
@@ -37,7 +38,7 @@ export function LoginDialog({ children }: LoginDialogProps) {
         <SheetHeader>
           <SheetTitle>Log In</SheetTitle>
           <SheetDescription>
-            Enter your precious credentials to interact with me, human.
+            {CURRENT_CLIENT.loginSubheader}
           </SheetDescription>
         </SheetHeader>
         <div className="mt-6 p-6">

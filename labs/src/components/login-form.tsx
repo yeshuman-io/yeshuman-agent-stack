@@ -90,7 +90,7 @@ export function LoginForm({ className, onSuccess, ...props }: LoginFormProps) {
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter your precious password"
+                placeholder={CURRENT_CLIENT.placeholderPassword}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

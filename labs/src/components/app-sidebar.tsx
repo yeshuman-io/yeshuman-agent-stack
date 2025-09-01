@@ -201,10 +201,9 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
                         alt={`${CURRENT_CLIENT.brand} logo`}
                         className="h-8 w-8 object-contain rounded-md"
                         onError={(e) => {
-                          // Fallback to brand icon if logo fails to load
+                          // Fallback to Bot icon if logo fails to load
                           const target = e.target as HTMLImageElement;
                           target.style.display = 'none';
-                          const IconComponent = getBrandIcon(CURRENT_CLIENT.brandIcon || 'Bot');
                           const fallbackIcon = document.createElement('div');
                           fallbackIcon.innerHTML = `<svg class="h-8 w-8 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>`;
                           target.parentNode?.appendChild(fallbackIcon.firstChild as Node);
@@ -307,8 +306,8 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
                   <LogOut className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate text-xs text-muted-foreground">Human</span>
-                  <span className="truncate text-[10px] text-muted-foreground">Return to anonymity</span>
+                  <span className="truncate text-xs text-muted-foreground">{CURRENT_CLIENT.logoutLabel}</span>
+                  <span className="truncate text-[10px] text-muted-foreground">{CURRENT_CLIENT.logoutDescription}</span>
                 </div>
               </SidebarMenuButton>
             </SidebarMenuItem>
