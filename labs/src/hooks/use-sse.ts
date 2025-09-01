@@ -268,6 +268,7 @@ export const useSSE = (onMessageStart?: () => void) => {
 
     // Actions
     sendMessage,
-    startNewConversation
+    startNewConversation,
+    setMessages
   };
 };

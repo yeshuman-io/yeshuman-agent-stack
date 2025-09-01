@@ -447,7 +447,23 @@ async def delete_thread(request, thread_id: str):
         from ninja import HttpError
         raise HttpError(403, "Access denied")
 
-    # Delete the thread
+    # Django CASCADE is already configured in the models:
+    # Message.thread = models.ForeignKey(Thread, on_delete=models.CASCADE)
+    #
+    # However, Django Polymorphic models have additional FK constraints
+    # between the base Message table and child tables. We need to handle
+    # the polymorphic deletion carefully.
+
+    # Option 1: Let Django handle CASCADE (may work if FK constraints are set up properly)
+    # await thread.adelete()
+
+    # Option 2: Manual cascade deletion (current working approach)
+    from threads.services import get_all_thread_messages
+    messages = await get_all_thread_messages(thread_id)
+    for message in messages:
+        await sync_to_async(message.delete)()
+
+    # Now delete the thread
     await thread.adelete()
     return {"success": True, "message": "Thread deleted"}
 

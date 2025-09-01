@@ -29,7 +29,8 @@ function App() {
     activeTools,
     currentThreadId,
     sendMessage,
-    startNewConversation
+    startNewConversation,
+    setMessages
   } = useSSE(() => {
     // Trigger animation when AI response starts
     if (animationTriggerRef.current) {
@@ -45,11 +46,55 @@ function App() {
     }
   }, [inputText, sendMessage]);
 
+  // Handle thread selection from sidebar
+  const handleThreadSelect = useCallback(async (threadId: string) => {
+    console.log('Loading thread:', threadId)
+
+    try {
+      // Clear current messages first
+      setMessages([])
+
+      // Fetch thread messages from API
+      const response = await fetch(`http://127.0.0.1:8000/api/threads/${threadId}/messages`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (response.ok) {
+        const threadMessages = await response.json()
+        console.log('Loaded thread messages:', threadMessages.length)
+
+        // Convert API messages to ChatMessage format
+        const chatMessages = threadMessages.map((msg: any) => ({
+          id: msg.id || `msg-${Date.now()}`,
+          content: msg.text || msg.content || '',
+          isUser: msg.message_type === 'human' || msg.role === 'user'
+        }))
+
+        // Update messages state using the SSE hook's setMessages
+        setMessages(chatMessages)
+        console.log('Thread loaded with', chatMessages.length, 'messages')
+
+      } else {
+        console.error('Failed to load thread messages:', response.status, response.statusText)
+        // Clear messages on error
+        setMessages([])
+      }
+
+    } catch (error) {
+      console.error('Error loading thread:', error)
+      setMessages([])
+    }
+  }, []);
+
   return (
     <ThemeProvider defaultTheme="dark" storageKey="yeshuman-v2-theme">
       <AuthProvider>
         <SidebarProvider>
-          <AppSidebar />
+          <AppSidebar onThreadSelect={handleThreadSelect} />
           <SidebarInset className="flex flex-col h-screen">
           {/* Header */}
           <div className="border-b p-4 flex justify-between items-center flex-shrink-0">
