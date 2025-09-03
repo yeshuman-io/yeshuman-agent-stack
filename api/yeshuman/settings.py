@@ -131,6 +131,12 @@ if RAILWAY_PROJECT_ID:
 # Add Railway health check domain (required for Railway health checks)
 ALLOWED_HOSTS.append('healthcheck.railway.app')
 
+# Add specific Railway domains for production deployments
+ALLOWED_HOSTS.extend([
+    'yh-api-talentco-production.up.railway.app',
+    '*.up.railway.app',  # Allow all Railway subdomains
+])
+
 
 # Custom User model
 AUTH_USER_MODEL = 'yeshuman_auth.User'
