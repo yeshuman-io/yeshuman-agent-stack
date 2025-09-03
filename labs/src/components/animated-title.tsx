@@ -13,6 +13,7 @@ import {
   FIRST_ANIMATION_MIN_DELAY,
   FIRST_ANIMATION_MAX_DELAY
 } from '../constants';
+import { MatrixTalentCoBrand } from './talentco-brand';
 import type { AnimationTrigger } from '../types';
 
 interface AnimatedTitleProps {
@@ -151,7 +152,7 @@ export const AnimatedTitle = ({ onAnimationTrigger }: AnimatedTitleProps) => {
   }, []); // No dependencies - runs only once on mount
   
   return (
-    <h1 
+    <div
       className={`text-xl font-semibold transition-all duration-300 font-mono cursor-pointer hover:opacity-75 ${
         isAnimating ? 'opacity-90 scale-[0.98]' : 'opacity-100 scale-100'
       }`}
@@ -159,7 +160,7 @@ export const AnimatedTitle = ({ onAnimationTrigger }: AnimatedTitleProps) => {
       onClick={handleTitleClick}
       title="Click me for attitude 😈"
     >
-      {displayText}
-    </h1>
+      <MatrixTalentCoBrand text={displayText} size="lg" />
+    </div>
   );
 };

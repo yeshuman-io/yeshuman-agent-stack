@@ -14,6 +14,7 @@ export const CLIENT_CONFIGS = {
     tagline: 'Human Compute Interface',
     placeholderEmail: 'human@sentient.ai',
     placeholderPassword: 'Enter your precious password',
+    loginLabel: 'Human?',
     loginSubheader: 'Enter your precious credentials to interact with me, human.',
     logoutLabel: 'Human',
     logoutDescription: 'Return to anonymity',
@@ -56,6 +57,7 @@ export const CLIENT_CONFIGS = {
     tagline: 'Your AI travel companion',
     placeholderEmail: 'traveler@booked.ai',
     placeholderPassword: 'Your passport to adventure',
+    loginLabel: 'Traveler?',
     loginSubheader: 'Enter your credentials to unlock your next journey.',
     logoutLabel: 'Traveler',
     logoutDescription: 'Return to reality',
@@ -102,6 +104,7 @@ export const CLIENT_CONFIGS = {
     tagline: 'Sustainable talent for sustainable futures',
     placeholderEmail: 'talent@sustainable.jobs',
     placeholderPassword: 'Your green credentials',
+    loginLabel: 'Guardian?',
     loginSubheader: 'Enter your credentials to connect with sustainable talent.',
     logoutLabel: 'Guardian',
     logoutDescription: 'Return to a better world',
@@ -148,6 +151,7 @@ export const CLIENT_CONFIGS = {
     tagline: 'Your AI health companion',
     placeholderEmail: 'wellness@lumie.health',
     placeholderPassword: 'Your wellness key',
+    loginLabel: 'Companion?',
     loginSubheader: 'Enter your credentials to begin your health journey.',
     logoutLabel: 'Companion',
     logoutDescription: 'Return to healthy living',
@@ -215,4 +219,4 @@ export const FIRST_ANIMATION_MIN_DELAY = 3000;
 export const FIRST_ANIMATION_MAX_DELAY = 8000;
 
 // API constants
-export const SSE_ENDPOINT = 'http://localhost:8000/agent/stream';
+export const SSE_ENDPOINT = '/agent/stream';

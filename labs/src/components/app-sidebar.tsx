@@ -15,6 +15,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { LoginDialog } from "@/components/login-dialog"
+import { TalentCoBrand } from "@/components/talentco-brand"
 import { useAuth } from "@/hooks/use-auth"
 import { CURRENT_CLIENT } from "@/constants"
 
@@ -82,10 +83,10 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
 
     try {
       setThreadsLoading(true)
-      console.log('Making request to: http://127.0.0.1:8000/api/threads')
+      console.log('Making request to: /api/threads')
 
       console.log('About to make fetch request...')
-      const response = await fetch('http://127.0.0.1:8000/api/threads', {
+      const response = await fetch('/api/threads', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -162,7 +163,7 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
     console.log('Deleting thread:', threadId)
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/threads/${threadId}`, {
+      const response = await fetch(`/api/threads/${threadId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -219,7 +220,7 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
                     )}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
-                    <span className="truncate font-semibold text-base">{CURRENT_CLIENT.brand}</span>
+                    <TalentCoBrand />
                     <span className="truncate text-xs text-muted-foreground">{CURRENT_CLIENT.tagline}</span>
                   </div>
                 </div>
@@ -290,10 +291,10 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate text-xs text-muted-foreground">
-                    {isAuthenticated ? user?.username?.split('@')[0] : "Human?"}
+                    {isAuthenticated ? user?.username?.split('@')[0] : CURRENT_CLIENT.loginLabel}
                   </span>
                   <span className="truncate text-[10px] text-muted-foreground">
-                    {isAuthenticated ? user?.email : "click to login"}
+                    {isAuthenticated ? user?.email : CURRENT_CLIENT.loginSubheader}
                   </span>
                 </div>
               </SidebarMenuButton>
