@@ -23,7 +23,7 @@ from agent.api import agent_api
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', api.urls),
+    path('api/', api.urls),  # Includes /api/health endpoint
     path('mcp/', mcp_api.urls),
     path('a2a/', a2a_api.urls),
     path('agent/', agent_api.urls),

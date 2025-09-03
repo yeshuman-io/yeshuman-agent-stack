@@ -1,0 +1,15 @@
+[build]
+builder = "Nixpacks"
+
+[build.env]
+PYTHON_VERSION = "3.13"
+
+[deploy]
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+startCommand = "python manage.py migrate && daphne -b 0.0.0.0 -p $PORT yeshuman.asgi:application"
+
+[deploy.env]
+DJANGO_SETTINGS_MODULE = "yeshuman.settings"
+PYTHONPATH = "/opt/railway/app"

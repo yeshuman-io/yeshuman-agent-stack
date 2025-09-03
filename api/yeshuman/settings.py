@@ -105,7 +105,28 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-3(8d16id_3ee6^h$gv^
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver').split(',')
+# ALLOWED_HOSTS configuration for Railway deployment
+ALLOWED_HOSTS_ENV = os.getenv('ALLOWED_HOSTS', '')
+
+if ALLOWED_HOSTS_ENV:
+    ALLOWED_HOSTS = ALLOWED_HOSTS_ENV.split(',')
+else:
+    # Default hosts for development
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver']
+
+# Add Railway domain if RAILWAY_STATIC_URL is available
+RAILWAY_STATIC_URL = os.getenv('RAILWAY_STATIC_URL')
+if RAILWAY_STATIC_URL:
+    from urllib.parse import urlparse
+    railway_domain = urlparse(RAILWAY_STATIC_URL).netloc
+    if railway_domain and railway_domain not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(railway_domain)
+
+# Add Railway project domain pattern
+RAILWAY_PROJECT_ID = os.getenv('RAILWAY_PROJECT_ID')
+if RAILWAY_PROJECT_ID:
+    railway_pattern = f'*.{RAILWAY_PROJECT_ID}.up.railway.app'
+    ALLOWED_HOSTS.append(railway_pattern)
 
 
 # Custom User model
@@ -147,13 +168,26 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# CORS settings
+# CORS settings for Railway deployment
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:5173",  # Vite dev server
     "http://127.0.0.1:5173",  # Vite dev server
 ]
+
+# Add Railway frontend URL if available
+RAILWAY_FRONTEND_URL = os.getenv('RAILWAY_FRONTEND_URL')
+if RAILWAY_FRONTEND_URL and RAILWAY_FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append(RAILWAY_FRONTEND_URL)
+
+# Add Railway static URL domain for CORS
+if RAILWAY_STATIC_URL:
+    from urllib.parse import urlparse
+    railway_domain = urlparse(RAILWAY_STATIC_URL).netloc
+    railway_url = f"https://{railway_domain}"
+    if railway_url not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(railway_url)
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -196,28 +230,43 @@ ASGI_APPLICATION = 'yeshuman.asgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # Database Configuration
-# PostgreSQL is the primary database (SQLite fallback available)
-USE_POSTGRES = os.getenv('USE_POSTGRES', 'true').lower() in ('true', '1', 'yes')
+# Railway provides DATABASE_URL, fallback to individual variables for development
+import dj_database_url
 
-if USE_POSTGRES:
+DATABASE_URL = os.getenv('DATABASE_URL')
+
+if DATABASE_URL:
+    # Use Railway's DATABASE_URL for production
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('POSTGRES_DB', 'yeshuman'),
-            'USER': os.getenv('POSTGRES_USER', 'yeshuman'),
-            'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'password'),
-            'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-            'PORT': os.getenv('POSTGRES_PORT', '5432'),
-        }
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
 else:
-    # SQLite fallback for development when PostgreSQL is not available
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+    # Fallback configuration for development/local
+    USE_POSTGRES = os.getenv('USE_POSTGRES', 'true').lower() in ('true', '1', 'yes')
+
+    if USE_POSTGRES:
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': os.getenv('POSTGRES_DB', 'yeshuman'),
+                'USER': os.getenv('POSTGRES_USER', 'yeshuman'),
+                'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'password'),
+                'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+                'PORT': os.getenv('POSTGRES_PORT', '5432'),
+            }
         }
-    }
+    else:
+        # SQLite fallback for development when PostgreSQL is not available
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
+        }
 
 
 # Password validation
@@ -255,6 +304,34 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Static files configuration for Railway deployment
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Additional static files directories
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+]
+
+# Static files storage for production
+if not DEBUG:
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
+
+# Railway-specific configurations
+RAILWAY_ENVIRONMENT = os.getenv('RAILWAY_ENVIRONMENT')
+
+# Health check endpoint for Railway (uses existing /api/health)
+HEALTH_CHECK_URL = '/api/health/'
+
+# Railway project configuration
+if RAILWAY_ENVIRONMENT:
+    # Enable connection pooling for Railway
+    DATABASES['default']['CONN_MAX_AGE'] = 60
+    DATABASES['default']['CONN_HEALTH_CHECKS'] = True
+
+    # Optimize for Railway's environment
+    USE_TZ = True
+    USE_I18N = True
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
