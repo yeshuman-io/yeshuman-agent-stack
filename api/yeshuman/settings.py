@@ -131,11 +131,18 @@ if RAILWAY_PROJECT_ID:
 # Add Railway health check domain (required for Railway health checks)
 ALLOWED_HOSTS.append('healthcheck.railway.app')
 
-# Add specific Railway domains for production deployments
-ALLOWED_HOSTS.extend([
-    'yh-api-talentco-production.up.railway.app',
-    '*.up.railway.app',  # Allow all Railway subdomains
-])
+# Add Railway domains dynamically (more flexible than hardcoded)
+RAILWAY_DOMAINS = os.getenv('RAILWAY_DOMAINS', '').split(',')
+if RAILWAY_DOMAINS and RAILWAY_DOMAINS != ['']:
+    ALLOWED_HOSTS.extend(RAILWAY_DOMAINS)
+
+# Add all Railway subdomains pattern
+ALLOWED_HOSTS.append('*.up.railway.app')
+
+# Add custom domain from environment
+CUSTOM_DOMAIN = os.getenv('CUSTOM_DOMAIN')
+if CUSTOM_DOMAIN:
+    ALLOWED_HOSTS.append(CUSTOM_DOMAIN)
 
 
 # Custom User model
