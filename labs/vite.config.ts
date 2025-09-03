@@ -43,5 +43,8 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['@microsoft/fetch-event-source', 'lucide-react']
+  },
+  preview: {
+    allowedHosts: ['healthcheck.railway.app']
   }
 })
