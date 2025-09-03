@@ -1,6 +1,12 @@
 // Client configuration
 const CLIENT_CONFIG = import.meta.env.VITE_CLIENT_CONFIG || 'yeshuman';
 
+// API configuration for backend connection
+// VITE_API_URL: Set to backend URL for cross-domain requests (optional)
+// Leave empty for same-domain requests (recommended for production)
+// Example: https://your-backend-api.com
+export const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
 // Client-specific configurations
 export const CLIENT_CONFIGS = {
   yeshuman: {
