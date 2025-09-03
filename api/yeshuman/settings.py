@@ -178,26 +178,28 @@ CORS_ALLOWED_ORIGINS = [
 
 # Add Railway frontend URL if available
 RAILWAY_FRONTEND_URL = os.getenv('RAILWAY_FRONTEND_URL')
-if RAILWAY_FRONTEND_URL and RAILWAY_FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
+if RAILWAY_FRONTEND_URL and RAILWAY_FRONTEND_URL.startswith(('http://', 'https://')) and RAILWAY_FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
     CORS_ALLOWED_ORIGINS.append(RAILWAY_FRONTEND_URL)
 
 # Add custom labs/frontend domain if available
 LABS_DOMAIN = os.getenv('LABS_DOMAIN')
-if LABS_DOMAIN and LABS_DOMAIN not in CORS_ALLOWED_ORIGINS:
+if LABS_DOMAIN and LABS_DOMAIN.startswith(('http://', 'https://')) and LABS_DOMAIN not in CORS_ALLOWED_ORIGINS:
     CORS_ALLOWED_ORIGINS.append(LABS_DOMAIN)
 
 # Add custom frontend URL if available (more general)
 FRONTEND_URL = os.getenv('FRONTEND_URL')
-if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
+if FRONTEND_URL and FRONTEND_URL.startswith(('http://', 'https://')) and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
     CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
 
 # Add Railway static URL domain for CORS
 if RAILWAY_STATIC_URL:
     from urllib.parse import urlparse
     railway_domain = urlparse(RAILWAY_STATIC_URL).netloc
-    railway_url = f"https://{railway_domain}"
-    if railway_url not in CORS_ALLOWED_ORIGINS:
-        CORS_ALLOWED_ORIGINS.append(railway_url)
+    # Only add if domain is not empty (prevents 'https://' entries)
+    if railway_domain:
+        railway_url = f"https://{railway_domain}"
+        if railway_url not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(railway_url)
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -318,10 +320,7 @@ STATIC_URL = 'static/'
 # Static files configuration for Railway deployment
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Additional static files directories
-STATICFILES_DIRS = [
-    BASE_DIR / 'static',
-]
+# No additional static files directories needed for API-only project
 
 # Static files storage for production
 if not DEBUG:
