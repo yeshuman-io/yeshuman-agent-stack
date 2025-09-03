@@ -128,6 +128,9 @@ if RAILWAY_PROJECT_ID:
     railway_pattern = f'*.{RAILWAY_PROJECT_ID}.up.railway.app'
     ALLOWED_HOSTS.append(railway_pattern)
 
+# Add Railway health check domain (required for Railway health checks)
+ALLOWED_HOSTS.append('healthcheck.railway.app')
+
 
 # Custom User model
 AUTH_USER_MODEL = 'yeshuman_auth.User'
