@@ -181,6 +181,16 @@ RAILWAY_FRONTEND_URL = os.getenv('RAILWAY_FRONTEND_URL')
 if RAILWAY_FRONTEND_URL and RAILWAY_FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
     CORS_ALLOWED_ORIGINS.append(RAILWAY_FRONTEND_URL)
 
+# Add custom labs/frontend domain if available
+LABS_DOMAIN = os.getenv('LABS_DOMAIN')
+if LABS_DOMAIN and LABS_DOMAIN not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append(LABS_DOMAIN)
+
+# Add custom frontend URL if available (more general)
+FRONTEND_URL = os.getenv('FRONTEND_URL')
+if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
+
 # Add Railway static URL domain for CORS
 if RAILWAY_STATIC_URL:
     from urllib.parse import urlparse
