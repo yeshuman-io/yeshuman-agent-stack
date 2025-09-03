@@ -2,7 +2,7 @@
 builder = "Nixpacks"
 
 [deploy]
-healthcheckPath = "/"
+healthcheckPath = "/health.json"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 startCommand = "npm run preview -- --host 0.0.0.0 --port $PORT"
