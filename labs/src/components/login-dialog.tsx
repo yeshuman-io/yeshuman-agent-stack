@@ -7,7 +7,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { Button } from "@/components/ui/button"
 import { LoginForm } from "@/components/login-form"
 import { useAuth } from "@/hooks/use-auth"
 import { CURRENT_CLIENT } from "@/constants"

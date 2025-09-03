@@ -3,12 +3,9 @@
  * Tests collapsible functionality and client branding across all supported clients
  */
 
-// Mock environment variables for testing different clients
-const mockClients = ['yeshuman', 'bookedai', 'talentco', 'lumie'];
-
 // Mock process.env for testing
 if (typeof process === 'undefined') {
-  global.process = { env: {} };
+  (global as any).process = { env: {} };
 }
 
 interface SidebarTestConfig {
@@ -53,7 +50,7 @@ const sidebarTestConfigs: SidebarTestConfig[] = [
 // Test functions
 function testClientBranding() {
   console.log('🧪 Testing Client Branding in Sidebar');
-  console.log('=' * 60);
+  console.log('='.repeat(60));
 
   sidebarTestConfigs.forEach(config => {
     console.log(`\n📱 Testing client: ${config.client}`);
@@ -90,7 +87,7 @@ function testClientBranding() {
 
 function testCollapsibleFunctionality() {
   console.log('\n🔄 Testing Collapsible Sidebar Functionality');
-  console.log('=' * 60);
+  console.log('='.repeat(60));
 
   const testCases = [
     { state: 'expanded', expected: 'full sidebar visible' },
@@ -109,7 +106,7 @@ function testCollapsibleFunctionality() {
 
 function testThreadManagement() {
   console.log('\n🧵 Testing Thread Management in Sidebar');
-  console.log('=' * 60);
+  console.log('='.repeat(60));
 
   const threadTests = [
     'Thread loading state',
@@ -127,7 +124,7 @@ function testThreadManagement() {
 
 function testAuthenticationUI() {
   console.log('\n🔐 Testing Authentication UI in Sidebar');
-  console.log('=' * 60);
+  console.log('='.repeat(60));
 
   const authTests = [
     { state: 'authenticated', expected: 'show user info and logout' },
@@ -158,14 +155,14 @@ function checkLogoExists(logoPath: string): boolean {
 
 function runAllTests() {
   console.log('🚀 Starting AppSidebar Test Suite');
-  console.log('=' * 60);
+  console.log('='.repeat(60));
 
   testClientBranding();
   testCollapsibleFunctionality();
   testThreadManagement();
   testAuthenticationUI();
 
-  console.log('\n' + '=' * 60);
+  console.log('\n' + '='.repeat(60));
   console.log('🎉 All AppSidebar tests completed!');
   console.log('\n📋 Test Summary:');
   console.log('✅ Client branding verification');

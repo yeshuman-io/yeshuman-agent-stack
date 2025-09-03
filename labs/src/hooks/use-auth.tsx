@@ -83,6 +83,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('auth_user');
   };
 
+  const refreshThreads = () => {
+    // This function can be implemented to refresh threads
+    // For now, it's a placeholder to satisfy the interface
+    console.log('Refresh threads called');
+  };
+
   const value: AuthContextType = {
     user,
     token,
@@ -90,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     isAuthenticated: !!user && !!token,
+    refreshThreads,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

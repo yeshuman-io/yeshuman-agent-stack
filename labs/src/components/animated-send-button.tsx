@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react';
-import { 
-  Send, 
-  Zap, 
-  ArrowRight, 
-  ChevronRight, 
-  ArrowUpRight, 
-  MessageCircle, 
+import {
+  Send,
+  Zap,
+  ArrowRight,
+  ChevronRight,
+  ArrowUpRight,
+  MessageCircle,
   Radio,
   Activity,
   Wifi,
   Globe,
   Link,
-  Circle,
   Play,
   FastForward,
   // Additional transmission/system icons
