@@ -103,14 +103,33 @@ async def mcp_endpoint(request):
     try:
         # Parse the JSON-RPC request
         body = json.loads(request.body)
-        
+
+        # Handle Cursor's stdio-style initialization if no body
+        if not body or not body.get("method"):
+            # Send initialization response for Cursor compatibility
+            init_response = {
+                "jsonrpc": "2.0",
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "tools": {}
+                    },
+                    "serverInfo": {
+                        "name": "Yes Human MCP Server",
+                        "version": "1.0.0"
+                    }
+                },
+                "id": "init"
+            }
+            return {"jsonrpc": "2.0", "result": init_response["result"], "id": "init"}
+
         # Create MCPRequest from raw data
         mcp_request = MCPRequest(
             method=body.get("method", ""),
             params=body.get("params", {}),
             id=body.get("id")
         )
-        
+
         response = await mcp_server.handle_request(mcp_request)
         
         # Return as streaming response for MCP compatibility
