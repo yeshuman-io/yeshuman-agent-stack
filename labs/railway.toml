@@ -11,5 +11,5 @@ startCommand = "npm run preview -- --host 0.0.0.0 --port $PORT"
 NODE_ENV = "production"
 # Point frontend to your API deployment
 VITE_API_URL = "https://yh-api-talentco-production.up.railway.app"
-# Uncomment and set if you have a custom domain
-# VITE_CUSTOM_DOMAIN = "your-custom-domain.com"
+# Additional allowed hosts (comma-separated)
+VITE_ALLOWED_HOSTS = "yh-labs-ui-talentco-production.up.railway.app"

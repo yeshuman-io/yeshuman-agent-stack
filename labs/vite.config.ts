@@ -48,17 +48,12 @@ export default defineConfig({
     allowedHosts: [
       'healthcheck.railway.app',
       '*.up.railway.app',
-      'yh-labs-ui-talentco-production.up.railway.app',
-      // Add Railway deployment domain dynamically
-      ...(process.env.RAILWAY_STATIC_URL ? (() => {
-        try {
-          return [new URL(process.env.RAILWAY_STATIC_URL).hostname];
-        } catch {
-          return [];
-        }
-      })() : []),
-      // Add custom domain if provided
-      ...(process.env.VITE_CUSTOM_DOMAIN ? [process.env.VITE_CUSTOM_DOMAIN] : [])
+      // Railway deployment domain
+      ...(process.env.RAILWAY_STATIC_URL ?
+        [new URL(process.env.RAILWAY_STATIC_URL).hostname] : []),
+      // Additional domains from env var
+      ...(process.env.VITE_ALLOWED_HOSTS ?
+        process.env.VITE_ALLOWED_HOSTS.split(',') : [])
     ]
   }
 })
