@@ -49,8 +49,13 @@ export default defineConfig({
       'healthcheck.railway.app',
       '*.up.railway.app',
       // Railway deployment domain
-      ...(process.env.RAILWAY_STATIC_URL ?
-        [new URL(process.env.RAILWAY_STATIC_URL).hostname] : []),
+      ...(process.env.RAILWAY_STATIC_URL ? (() => {
+        try {
+          return [new URL(process.env.RAILWAY_STATIC_URL).hostname];
+        } catch {
+          return [];
+        }
+      })() : []),
       // Additional domains from env var
       ...(process.env.VITE_ALLOWED_HOSTS ?
         process.env.VITE_ALLOWED_HOSTS.split(',') : [])
