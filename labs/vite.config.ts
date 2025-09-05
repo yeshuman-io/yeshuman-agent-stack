@@ -45,6 +45,14 @@ export default defineConfig({
     include: ['@microsoft/fetch-event-source', 'lucide-react']
   },
   preview: {
-    allowedHosts: ['healthcheck.railway.app']
+    allowedHosts: [
+      'healthcheck.railway.app',
+      '*.up.railway.app',
+      // Add Railway deployment domain dynamically
+      ...(process.env.RAILWAY_STATIC_URL ?
+        [new URL(process.env.RAILWAY_STATIC_URL).hostname] : []),
+      // Add custom domain if provided
+      ...(process.env.VITE_CUSTOM_DOMAIN ? [process.env.VITE_CUSTOM_DOMAIN] : [])
+    ]
   }
 })
