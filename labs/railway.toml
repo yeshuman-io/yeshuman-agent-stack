@@ -9,3 +9,5 @@ startCommand = "npm run preview -- --host 0.0.0.0 --port $PORT"
 
 [deploy.env]
 NODE_ENV = "production"
+# Uncomment and set if you have a custom domain
+# VITE_CUSTOM_DOMAIN = "your-custom-domain.com"
