@@ -16,18 +16,20 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     open: false,
-    proxy: {
-      '/api': {
-        target: process.env.VITE_API_URL || 'http://127.0.0.1:8001',
-        changeOrigin: true,
-        secure: false,
-      },
-      '/agent': {
-        target: process.env.VITE_API_URL || 'http://127.0.0.1:8001',
-        changeOrigin: true,
-        secure: false,
-      },
-    },
+    ...(process.env.VITE_API_URL ? {
+      proxy: {
+        '/api': {
+          target: process.env.VITE_API_URL,
+          changeOrigin: true,
+          secure: true,
+        },
+        '/agent': {
+          target: process.env.VITE_API_URL,
+          changeOrigin: true,
+          secure: true,
+        },
+      }
+    } : {}),
   },
   build: {
     outDir: 'dist',
