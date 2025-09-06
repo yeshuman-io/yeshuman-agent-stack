@@ -226,3 +226,9 @@ export const FIRST_ANIMATION_MAX_DELAY = 8000;
 
 // API constants
 export const SSE_ENDPOINT = API_BASE_URL ? `${API_BASE_URL}/agent/stream/` : '/agent/stream/';
+
+// Debug logging for URL construction
+console.log('🔍 URL Construction Debug:');
+console.log('API_BASE_URL:', API_BASE_URL);
+console.log('SSE_ENDPOINT:', SSE_ENDPOINT);
+console.log('VITE_API_URL env:', import.meta.env.VITE_API_URL);

@@ -192,7 +192,9 @@ export const useSSE = (onMessageStart?: () => void) => {
     try {
       setIsLoading(true);
       setIsConnected(true);
-      
+
+      console.log('🚀 About to call fetchEventSource with URL:', SSE_ENDPOINT);
+
       await fetchEventSource(SSE_ENDPOINT, {
         method: 'POST',
         headers: {
