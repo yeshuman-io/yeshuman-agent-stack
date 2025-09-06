@@ -47,6 +47,20 @@ export default defineConfig({
   preview: {
     host: '0.0.0.0',
     port: process.env.PORT ? parseInt(process.env.PORT) : 4173,
+    ...(process.env.VITE_API_URL ? {
+      proxy: {
+        '/api': {
+          target: process.env.VITE_API_URL,
+          changeOrigin: true,
+          secure: true,
+        },
+        '/agent': {
+          target: process.env.VITE_API_URL,
+          changeOrigin: true,
+          secure: true,
+        },
+      }
+    } : {}),
     allowedHosts: [
       'healthcheck.railway.app',
       '*.up.railway.app',
