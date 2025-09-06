@@ -1,0 +1,56 @@
+# Cursor MCP Configuration for Local Development
+
+## Local MCP Server Configuration (Debug Version)
+```json
+{
+  "mcpServers": {
+    "yeshuman-local": {
+      "command": "curl",
+      "args": [
+        "-v",  // Add verbose output for debugging
+        "-X", "POST",
+        "http://127.0.0.1:8000/mcp/",
+        "-H", "Content-Type: application/json",
+        "-H", "User-Agent: Cursor-MCP-Client/1.0.0",  // Explicit User-Agent
+        "-d", "@-"
+      ]
+    }
+  }
+}
+```
+
+## Railway MCP Server Configuration (Production)
+```json
+{
+  "mcpServers": {
+    "yeshuman-production": {
+      "command": "curl",
+      "args": [
+        "-X", "POST",
+        "https://yh-api-talentco-production.up.railway.app/mcp/",
+        "-H", "Content-Type: application/json",
+        "-d", "@-"
+      ]
+    }
+  }
+}
+```
+
+## Debugging Steps
+
+1. **Check Django Logs**: Look for the detailed MCP logging in your Django server console
+2. **Test Manually**: Run the curl commands above to verify communication
+3. **Cursor Settings**: Make sure the MCP configuration is correctly added to Cursor settings
+4. **Restart Cursor**: Restart Cursor after adding/changing MCP configuration
+
+## Expected Django Log Output
+
+When Cursor connects successfully, you should see:
+```
+🚀 MCP REQUEST RECEIVED
+🎯 CURSOR MCP CLIENT DETECTED
+📍 Method: POST
+📍 User-Agent: Cursor-MCP-Client/1.0.0
+📦 RAW BODY: {"jsonrpc": "2.0", "method": "initialize", ...}
+Cursor init response: {...}
+```
