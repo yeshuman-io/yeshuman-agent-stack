@@ -10,21 +10,25 @@ alwaysApply: true
 ```bash
 railway link --project talentco --environment production --service yh-stack-talentco-ui
 railway variables
-railway logs
+railway logs --build        # View build logs
+railway logs --deployment   # View deployment logs
+railway redeploy           # Redeploy latest deployment
 ```
 
 ## API Service (yh-stack-talentco-api)
 ```bash
 railway link --project talentco --environment production --service yh-stack-talentco-api
 railway variables
-railway logs
+railway logs --build        # View build logs
+railway logs --deployment   # View deployment logs
+railway redeploy           # Redeploy latest deployment
 ```
 
 ## Postgres Database (yh-stack-talentco-postgres)
 ```bash
 railway link --project talentco --environment production --service yh-stack-talentco-postgres
 railway variables
-railway logs
+railway connect            # Connect to database
 ```
 
 ## Quick Switch Commands
@@ -48,8 +52,13 @@ railway list
 # Check current service status
 railway status
 
-# View recent deployments
-railway redeploy  # Redeploy latest deployment
+# View logs (try these variations)
+railway logs --build         # Build logs
+railway logs --deployment    # Deployment logs
+railway logs                 # Latest deployment logs
+
+# Redeploy service
+railway redeploy
 
 # Connect to database (if postgres service)
 railway connect
@@ -60,6 +69,10 @@ railway whoami
 # Open project dashboard
 railway open
 ```
+
+## Alternative: View Logs via Railway Dashboard
+If CLI logs aren't working, view logs at:
+- https://railway.com/projects → Select project → Service → "View Logs"
 
 ## Environment Variables
 - `VITE_API_URL`: API service URL
