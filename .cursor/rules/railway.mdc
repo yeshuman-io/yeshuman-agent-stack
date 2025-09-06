@@ -15,12 +15,12 @@ railway logs --deployment   # View deployment logs
 railway redeploy           # Redeploy latest deployment
 ```
 
-## API Service (yh-stack-talentco-api)
+## API Service (yh-stack-talentco-api) ✅ WORKING
 ```bash
 railway link --project talentco --environment production --service yh-stack-talentco-api
 railway variables
-railway logs --build        # View build logs
-railway logs --deployment   # View deployment logs
+railway logs --build        # ✅ View full build logs
+railway logs --deployment   # ✅ View runtime logs
 railway redeploy           # Redeploy latest deployment
 ```
 
@@ -69,6 +69,17 @@ railway whoami
 # Open project dashboard
 railway open
 ```
+
+## Troubleshooting: Logs Not Working
+
+**If `railway logs` shows "No deployments found":**
+1. **Switch services**: `railway service <service-name>`
+2. **Re-link project**: `railway link --project talentco --environment production --service <service>`
+3. **Use Railway Dashboard**: https://railway.com/projects → talentco → Service → "View Logs"
+
+**✅ Confirmed Working:**
+- API Service: Full build + deployment logs ✅
+- UI Service: May need service switching or dashboard fallback
 
 ## Alternative: View Logs via Railway Dashboard
 If CLI logs aren't working, view logs at:
