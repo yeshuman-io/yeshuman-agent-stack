@@ -1,0 +1,67 @@
+---
+description: Railway CLI commands for Yes Human services
+globs: ["**/railway.toml", "**/vite.config.ts", "**/.env*"]
+alwaysApply: true
+---
+
+# Railway CLI Quick Commands
+
+## Labs UI Service (yh-stack-talentco-ui)
+```bash
+railway link --project talentco --environment production --service yh-stack-talentco-ui
+railway variables
+railway logs
+```
+
+## API Service (yh-stack-talentco-api)
+```bash
+railway link --project talentco --environment production --service yh-stack-talentco-api
+railway variables
+railway logs
+```
+
+## Postgres Database (yh-stack-talentco-postgres)
+```bash
+railway link --project talentco --environment production --service yh-stack-talentco-postgres
+railway variables
+railway logs
+```
+
+## Quick Switch Commands
+```bash
+# Switch between services (after linking to project)
+railway service  # Interactive service selection
+railway service yh-stack-talentco-ui
+railway service yh-stack-talentco-api
+railway service yh-stack-talentco-postgres
+```
+
+## Service URLs
+- Labs: https://yh-labs-ui-talentco-production.up.railway.app
+- API: https://yh-api-talentco-production.up.railway.app
+
+## Useful Commands
+```bash
+# List all projects
+railway list
+
+# Check current service status
+railway status
+
+# View recent deployments
+railway redeploy  # Redeploy latest deployment
+
+# Connect to database (if postgres service)
+railway connect
+
+# Get current user
+railway whoami
+
+# Open project dashboard
+railway open
+```
+
+## Environment Variables
+- `VITE_API_URL`: API service URL
+- `VITE_ALLOWED_HOSTS`: Deployment domains
+- `VITE_CLIENT_CONFIG`: Multi-tenant config
