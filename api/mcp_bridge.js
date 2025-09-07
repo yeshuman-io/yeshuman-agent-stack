@@ -10,6 +10,9 @@ const https = require('https');
 class MCPBridge {
     constructor(serverUrl) {
         this.serverUrl = serverUrl;
+        // Cache for Railway to avoid repeated requests
+        this.responseCache = new Map();
+
         // Create both HTTP and HTTPS agents
         // Configure HTTP agents with connection pooling (optimized for Railway)
         this.httpAgent = new http.Agent({
@@ -283,6 +286,18 @@ class MCPBridge {
         try {
             console.error('📨 Received message:', JSON.stringify(message, null, 2));
 
+            // Check cache for Railway tools/list
+            if (this.serverUrl.includes('railway.app') && message.method === 'tools/list') {
+                const cacheKey = `tools_list_${this.serverUrl}`;
+                const cached = this.responseCache.get(cacheKey);
+                const cacheAge = cached ? Date.now() - cached.timestamp : Infinity;
+
+                if (cached && cacheAge < 30000) { // Cache for 30 seconds
+                    console.error('🚂 RAILWAY: Returning cached tools/list response');
+                    return cached.response;
+                }
+            }
+
             // Check circuit breaker state
             if (this.circuitBreaker.state === 'OPEN') {
                 const timeSinceLastFailure = Date.now() - this.circuitBreaker.lastFailureTime;
@@ -315,6 +330,13 @@ class MCPBridge {
                 this.connectionHealth.consecutiveFailures = 0; // Reset failures
                 console.error('✅ Server health check passed (via periodic monitoring)');
                 isHealthy = true; // Override health check result
+            }
+
+            // For tools/list specifically, be more aggressive for Railway
+            if (!isHealthy && message.method === 'tools/list' && this.serverUrl.includes('railway.app')) {
+                console.error('🚂 RAILWAY: Skipping health check for tools/list - tools are critical');
+                console.error('✅ Server health check bypassed for tools/list');
+                isHealthy = true;
             }
 
             if (!isHealthy) {
@@ -377,14 +399,25 @@ class MCPBridge {
 
             console.error('✅ Server health check passed');
 
-            // Retry logic with exponential backoff (more retries for Railway)
+            // Retry logic with exponential backoff (more retries for Railway, but faster for tools)
             const maxAttempts = this.serverUrl.includes('railway.app') ? 5 : 3;
             let lastError;
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
                     console.error(`🔄 Attempt ${attempt}/${maxAttempts}`);
-                    const result = await this.makeRequest(message);
+                    const result = await this.makeRequest(message, message);
                     this.updateCircuitBreaker(true);
+
+                    // Cache successful tools/list responses for Railway
+                    if (this.serverUrl.includes('railway.app') && message.method === 'tools/list') {
+                        const cacheKey = `tools_list_${this.serverUrl}`;
+                        this.responseCache.set(cacheKey, {
+                            response: result,
+                            timestamp: Date.now()
+                        });
+                        console.error('🚂 RAILWAY: Cached tools/list response');
+                    }
+
                     return result;
                 } catch (error) {
                     lastError = error;
@@ -396,8 +429,12 @@ class MCPBridge {
                     }
 
                     if (attempt < maxAttempts) {
+                        // Faster retries for tools/list on Railway (tools are critical)
+                        const isToolsList = message.method === 'tools/list';
                         const delay = this.serverUrl.includes('railway.app')
-                            ? Math.min(2000 * Math.pow(1.5, attempt - 1), 8000)  // Slower ramp up for Railway
+                            ? (isToolsList
+                                ? Math.min(1000 * Math.pow(1.2, attempt - 1), 3000)  // Faster for tools/list
+                                : Math.min(2000 * Math.pow(1.5, attempt - 1), 8000)) // Slower for others
                             : Math.min(1000 * Math.pow(2, attempt - 1), 5000);
                         console.error(`⏳ Waiting ${delay}ms before retry...`);
                         await new Promise(resolve => setTimeout(resolve, delay));
@@ -431,7 +468,7 @@ class MCPBridge {
         }
     }
 
-    async makeRequest(message) {
+    async makeRequest(message, originalMessage = null) {
         return new Promise((resolve, reject) => {
             const url = new URL(this.serverUrl);
             const options = {
@@ -445,7 +482,9 @@ class MCPBridge {
                     'Accept': 'application/json'
                 },
                 agent: url.protocol === 'https:' ? this.httpsAgent : this.httpAgent, // Use appropriate agent
-                timeout: url.hostname.includes('railway.app') ? 15000 : 10000, // Longer timeout for Railway
+                timeout: url.hostname.includes('railway.app')
+                    ? (originalMessage?.method === 'tools/list' ? 8000 : 15000)  // Shorter timeout for tools/list
+                    : 10000,
                 keepAlive: true,
                 keepAliveMsecs: 30000
             };
