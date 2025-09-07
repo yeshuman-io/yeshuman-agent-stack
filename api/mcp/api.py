@@ -97,11 +97,29 @@ def mcp_tools_sse(request):
     return SSEHttpResponse(tools_stream())
 
 
-@mcp_api.post("/")
+@mcp_api.api_operation(["GET", "POST"], "/")
 async def mcp_endpoint(request):
     """Main MCP endpoint with streaming response for MCP protocol."""
     try:
-        # Parse the JSON-RPC request
+        # Handle GET requests (MCP protocol negotiation)
+        if request.method == "GET":
+            init_response = {
+                "jsonrpc": "2.0",
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "tools": {}
+                    },
+                    "serverInfo": {
+                        "name": "Yes Human MCP Server",
+                        "version": "1.0.0"
+                    }
+                },
+                "id": "init"
+            }
+            return {"jsonrpc": "2.0", "result": init_response["result"], "id": "init"}
+
+        # Parse the JSON-RPC request for POST
         body = json.loads(request.body)
 
         # Handle Cursor's stdio-style initialization if no body
