@@ -11,19 +11,26 @@ class MCPBridge {
     constructor(serverUrl) {
         this.serverUrl = serverUrl;
         // Create both HTTP and HTTPS agents
-        this.httpsAgent = new https.Agent({
-            keepAlive: true,
-            keepAliveMsecs: 30000,
-            maxSockets: 10,
-            maxFreeSockets: 5,
-            timeout: 90000
-        });
+        // Configure HTTP agents with connection pooling (optimized for Railway)
         this.httpAgent = new http.Agent({
             keepAlive: true,
-            keepAliveMsecs: 30000,
-            maxSockets: 10,
-            maxFreeSockets: 5,
-            timeout: 90000
+            keepAliveMsecs: 60000,  // Longer keep-alive for Railway
+            maxSockets: 5,          // Fewer concurrent connections for Railway
+            maxFreeSockets: 3,
+            timeout: 120000,        // Longer timeout for Railway cold starts
+            scheduling: 'lifo'       // Last-in-first-out for Railway connections
+        });
+
+        this.httpsAgent = new https.Agent({
+            keepAlive: true,
+            keepAliveMsecs: 60000,  // Longer keep-alive for Railway
+            maxSockets: 5,          // Fewer concurrent connections for Railway
+            maxFreeSockets: 3,
+            timeout: 120000,        // Longer timeout for Railway cold starts
+            scheduling: 'lifo',      // Last-in-first-out for Railway connections
+            // Railway-specific SSL settings for better compatibility
+            rejectUnauthorized: true,
+            maxCachedSessions: 10
         });
         this.circuitBreaker = {
             failures: 0,
@@ -370,11 +377,12 @@ class MCPBridge {
 
             console.error('✅ Server health check passed');
 
-            // Retry logic with exponential backoff
+            // Retry logic with exponential backoff (more retries for Railway)
+            const maxAttempts = this.serverUrl.includes('railway.app') ? 5 : 3;
             let lastError;
-            for (let attempt = 1; attempt <= 3; attempt++) {
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
-                    console.error(`🔄 Attempt ${attempt}/3`);
+                    console.error(`🔄 Attempt ${attempt}/${maxAttempts}`);
                     const result = await this.makeRequest(message);
                     this.updateCircuitBreaker(true);
                     return result;
@@ -382,8 +390,15 @@ class MCPBridge {
                     lastError = error;
                     console.error(`❌ Attempt ${attempt} failed:`, error.message);
 
-                    if (attempt < 3) {
-                        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+                    // Special handling for Railway connection issues
+                    if (this.serverUrl.includes('railway.app') && error.code === 'ECONNRESET') {
+                        console.error('🚂 RAILWAY: Connection reset detected, using Railway-specific retry strategy');
+                    }
+
+                    if (attempt < maxAttempts) {
+                        const delay = this.serverUrl.includes('railway.app')
+                            ? Math.min(2000 * Math.pow(1.5, attempt - 1), 8000)  // Slower ramp up for Railway
+                            : Math.min(1000 * Math.pow(2, attempt - 1), 5000);
                         console.error(`⏳ Waiting ${delay}ms before retry...`);
                         await new Promise(resolve => setTimeout(resolve, delay));
                     }
@@ -392,11 +407,12 @@ class MCPBridge {
 
             // All retries failed
             this.updateCircuitBreaker(false);
+            const maxAttemptsMsg = this.serverUrl.includes('railway.app') ? '5 attempts' : '3 attempts';
             return {
                 jsonrpc: '2.0',
                 error: {
                     code: -32002,
-                    message: `Request failed after 3 attempts: ${lastError.message}`
+                    message: `Request failed after ${maxAttemptsMsg}: ${lastError.message}`
                 },
                 id: message.id
             };
@@ -428,7 +444,10 @@ class MCPBridge {
                     'User-Agent': 'MCP-Bridge/1.0',
                     'Accept': 'application/json'
                 },
-                agent: url.protocol === 'https:' ? this.httpsAgent : this.httpAgent // Use appropriate agent
+                agent: url.protocol === 'https:' ? this.httpsAgent : this.httpAgent, // Use appropriate agent
+                timeout: url.hostname.includes('railway.app') ? 15000 : 10000, // Longer timeout for Railway
+                keepAlive: true,
+                keepAliveMsecs: 30000
             };
 
             const client = url.protocol === 'https:' ? https : http;
