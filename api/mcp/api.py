@@ -29,7 +29,9 @@ def sse_mcp_endpoint(request):
             "result": {
                 "protocolVersion": "2025-06-18",  # Match Claude Desktop's version
                 "capabilities": {
-                    "tools": {},
+                    "tools": {
+                        "listChanged": True
+                    },
                     "logging": {}
                 },
                 "serverInfo": {
