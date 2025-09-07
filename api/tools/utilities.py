@@ -199,10 +199,12 @@ ALL_UTILITY_TOOLS = [
 # Voice generation is now handled directly in the agent_node
 AVAILABLE_TOOLS = BASIC_TOOLS
 
-# MCP/A2A tools include all tools including agent communication tools
-try:
-    from tools.agent_tools import AGENT_TOOLS
-    MCP_TOOLS = ALL_UTILITY_TOOLS + AGENT_TOOLS
-except ImportError:
-    # Fallback if circular import occurs
-    MCP_TOOLS = ALL_UTILITY_TOOLS
+# MCP/A2A tools - temporarily exclude agent tools to fix Claude Desktop connection issues
+# TODO: Re-enable agent tools after fixing circular import
+# try:
+#     from tools.agent_tools import AGENT_TOOLS
+#     MCP_TOOLS = ALL_UTILITY_TOOLS + AGENT_TOOLS
+# except ImportError:
+#     # Fallback if circular import occurs
+#     MCP_TOOLS = ALL_UTILITY_TOOLS
+MCP_TOOLS = ALL_UTILITY_TOOLS  # Basic tools only for now

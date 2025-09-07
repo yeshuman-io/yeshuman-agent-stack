@@ -27,6 +27,9 @@ def simple_health_check(request):
 
 def oauth_discovery_no_auth(request):
     """OAuth discovery endpoint indicating no authentication required."""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"OAuth discovery accessed by {request.META.get('REMOTE_ADDR')} - {request.META.get('HTTP_USER_AGENT', 'Unknown')}")
     return JsonResponse({
         "issuer": request.build_absolute_uri("/"),
         "service_documentation": "No authentication required for this MCP server"
@@ -34,6 +37,9 @@ def oauth_discovery_no_auth(request):
 
 def mcp_oauth_discovery_no_auth(request):
     """MCP-specific OAuth discovery endpoint indicating no authentication required."""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"MCP OAuth discovery accessed by {request.META.get('REMOTE_ADDR')} - {request.META.get('HTTP_USER_AGENT', 'Unknown')}")
     return JsonResponse({
         "issuer": request.build_absolute_uri("/"),
         "service_documentation": "MCP server - no authentication required"

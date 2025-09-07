@@ -26,7 +26,7 @@ def sse_mcp_endpoint(request):
         init_response = {
             "jsonrpc": "2.0",
             "result": {
-                "protocolVersion": "2024-11-05",
+                "protocolVersion": "2025-06-18",  # Match Claude Desktop's version
                 "capabilities": {
                     "tools": {},
                     "logging": {}
@@ -100,22 +100,43 @@ def mcp_tools_sse(request):
 @mcp_api.api_operation(["GET", "POST"], "/")
 async def mcp_endpoint(request):
     """Main MCP endpoint with streaming response for MCP protocol."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Log the incoming request immediately
+    logger.info("🔗 MCP endpoint called")
+    logger.info(f"   Method: {request.method}")
+    logger.info(f"   Path: {request.path}")
+    logger.info(f"   Headers: {dict(request.headers)}")
+
     try:
+        # Enhanced request logging for debugging
+        logger.info(f"MCP Request: {request.method} {request.path}")
+        logger.info(f"Headers: {dict(request.headers)}")
+        logger.info(f"User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+
         # Handle GET requests (MCP protocol negotiation)
         if request.method == "GET":
-            # Use the proper MCP server initialization
-            init_request = MCPRequest(method="initialize", id="init")
-            init_response = await mcp_server.handle_request(init_request)
-            return init_response.dict()
+            logger.info("Handling GET request - MCP protocol negotiation")
+            try:
+                init_request = MCPRequest(method="initialize", id="init")
+                init_response = await mcp_server.handle_request(init_request)
+                logger.info(f"GET Response: {init_response.dict()}")
+                return init_response.dict()
+            except Exception as e:
+                logger.error(f"❌ Error during GET initialization: {str(e)}", exc_info=True)
+                return {"error": f"Server initialization failed: {str(e)}"}
 
         # Parse the JSON-RPC request for POST
         body = json.loads(request.body)
+        logger.info(f"Request body: {body}")
 
         # Handle Cursor's stdio-style initialization if no body
         if not body or not body.get("method"):
-            # Send initialization response for Cursor compatibility using MCP server
+            logger.warning("Received POST with empty/malformed body - sending initialization response")
             init_request = MCPRequest(method="initialize", id="init")
             init_response = await mcp_server.handle_request(init_request)
+            logger.info(f"Empty body response: {init_response.dict()}")
             return init_response.dict()
 
         # Create MCPRequest from raw data
@@ -125,14 +146,23 @@ async def mcp_endpoint(request):
             id=body.get("id")
         )
 
+        logger.info(f"Processing MCP request: method={mcp_request.method}, id={mcp_request.id}")
+
+        # Track timing for performance monitoring
+        import time
+        start_time = time.time()
+
         response = await mcp_server.handle_request(mcp_request)
-        
+
+        processing_time = time.time() - start_time
+        logger.info(".2f")
+
         # Return as streaming response for MCP compatibility
         def generate_response():
-            # Convert to dict and exclude None values
             response_dict = response.dict(exclude_none=True)
+            logger.info(f"Final response: {response_dict}")
             yield json.dumps(response_dict)
-        
+
         return StreamingHttpResponse(
             generate_response(),
             content_type='application/json'
