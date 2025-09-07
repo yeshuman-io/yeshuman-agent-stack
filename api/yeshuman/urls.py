@@ -15,16 +15,24 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.urls import include, re_path
+from django.http import JsonResponse
 from .api import api
 from mcp.api import mcp_api
 from a2a.api import a2a_api
 from agent.api import agent_api
 
+def simple_health_check(request):
+    """Simple health check for Railway."""
+    return JsonResponse({"status": "healthy", "service": "yeshuman-api"})
+
 urlpatterns = [
     # API endpoints - flexible (accept both trailing slash and no trailing slash)
-    re_path(r'^api', api.urls),            # /api, /api/, /api/subpath, etc.
-    re_path(r'^mcp', mcp_api.urls),        # /mcp, /mcp/, /mcp/tools, /mcp/sse, etc.
-    re_path(r'^a2a', a2a_api.urls),        # /a2a, /a2a/, /a2a/subpath, etc.
-    re_path(r'^agent', agent_api.urls),    # /agent, /agent/, /agent/subpath, etc.
-    re_path(r'^auth', include('django.contrib.auth.urls')),    # /auth, /auth/, /auth/subpath, etc.
+    re_path(r'^api/?', api.urls),          # /api, /api/, /api/subpath, etc.
+    re_path(r'^mcp/?', mcp_api.urls),      # /mcp, /mcp/, /mcp/tools, /mcp/sse, etc.
+    re_path(r'^a2a/?', a2a_api.urls),      # /a2a, /a2a/, /a2a/subpath, etc.
+    re_path(r'^agent/?', agent_api.urls),  # /agent, /agent/, /agent/subpath, etc.
+    re_path(r'^auth/?', include('django.contrib.auth.urls')),  # /auth, /auth/, /auth/subpath, etc.
+
+    # Simple health check for Railway (bypasses potential URL routing issues)
+    re_path(r'^health$', simple_health_check),
 ]
