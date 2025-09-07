@@ -12,4 +12,4 @@ startCommand = "python manage.py migrate && daphne -b 0.0.0.0 -p $PORT yeshuman.
 
 [deploy.env]
 DJANGO_SETTINGS_MODULE = "yeshuman.settings"
-PYTHONPATH = "/opt/railway/app"
+PYTHONPATH = "/app"
