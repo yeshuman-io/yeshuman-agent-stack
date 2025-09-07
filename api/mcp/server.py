@@ -123,10 +123,10 @@ class MCPServer:
                     tools_list.append(tool_info)
 
                 result = {
-                    "protocolVersion": "2025-06-18",  # Match Claude Desktop's version
+                    "protocolVersion": "2024-11-05",  # Use widely compatible MCP version
                     "capabilities": {
                         "tools": {
-                            "listChanged": True  # Optional: indicates tools can change
+                            "listChanged": True
                         }
                     },
                     "serverInfo": {

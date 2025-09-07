@@ -27,7 +27,7 @@ def sse_mcp_endpoint(request):
         init_response = {
             "jsonrpc": "2.0",
             "result": {
-                "protocolVersion": "2025-06-18",  # Match Claude Desktop's version
+                "protocolVersion": "2024-11-05",  # Use widely compatible MCP version
                 "capabilities": {
                     "tools": {
                         "listChanged": True
@@ -35,7 +35,7 @@ def sse_mcp_endpoint(request):
                     "logging": {}
                 },
                 "serverInfo": {
-                    "name": "yeshuman-mcp-server",
+                    "name": "Yes Human MCP Server",
                     "version": "1.0.0"
                 }
             },
