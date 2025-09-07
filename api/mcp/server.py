@@ -81,13 +81,28 @@ class MCPServer:
         try:
             if request.method == "initialize":
                 # Handle MCP initialization
+                tools_list = []
+                for tool in self.tools.values():
+                    tool_info = {
+                        "name": tool.name,
+                        "description": tool.description,
+                    }
+
+                    # Add schema if available
+                    if hasattr(tool, 'args_schema') and tool.args_schema:
+                        tool_info["inputSchema"] = tool.args_schema.model_json_schema()
+
+                    tools_list.append(tool_info)
+
                 result = {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {
-                        "tools": {}
+                        "tools": {
+                            "listChanged": True  # Optional: indicates tools can change
+                        }
                     },
                     "serverInfo": {
-                        "name": "Yes Human",
+                        "name": "Yes Human MCP Server",
                         "version": "1.0.0"
                     }
                 }

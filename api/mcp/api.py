@@ -103,43 +103,20 @@ async def mcp_endpoint(request):
     try:
         # Handle GET requests (MCP protocol negotiation)
         if request.method == "GET":
-            init_response = {
-                "jsonrpc": "2.0",
-                "result": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {
-                        "tools": {}
-                    },
-                    "serverInfo": {
-                        "name": "Yes Human MCP Server",
-                        "version": "1.0.0"
-                    }
-                },
-                "id": "init"
-            }
-            return {"jsonrpc": "2.0", "result": init_response["result"], "id": "init"}
+            # Use the proper MCP server initialization
+            init_request = MCPRequest(method="initialize", id="init")
+            init_response = await mcp_server.handle_request(init_request)
+            return init_response.dict()
 
         # Parse the JSON-RPC request for POST
         body = json.loads(request.body)
 
         # Handle Cursor's stdio-style initialization if no body
         if not body or not body.get("method"):
-            # Send initialization response for Cursor compatibility
-            init_response = {
-                "jsonrpc": "2.0",
-                "result": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {
-                        "tools": {}
-                    },
-                    "serverInfo": {
-                        "name": "Yes Human MCP Server",
-                        "version": "1.0.0"
-                    }
-                },
-                "id": "init"
-            }
-            return {"jsonrpc": "2.0", "result": init_response["result"], "id": "init"}
+            # Send initialization response for Cursor compatibility using MCP server
+            init_request = MCPRequest(method="initialize", id="init")
+            init_response = await mcp_server.handle_request(init_request)
+            return init_response.dict()
 
         # Create MCPRequest from raw data
         mcp_request = MCPRequest(
