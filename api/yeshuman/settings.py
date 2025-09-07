@@ -56,48 +56,6 @@ else:
     # Default hosts for development
     ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver']
 
-# Railway-specific configuration (consolidated)
-def configure_railway_settings():
-    """Configure Railway-specific settings for deployment"""
-
-    # Railway health check domain (required for health checks)
-    if 'healthcheck.railway.app' not in ALLOWED_HOSTS:
-        ALLOWED_HOSTS.append('healthcheck.railway.app')
-
-    # Railway project pattern (covers most Railway deployments)
-    railway_project_id = os.getenv('RAILWAY_PROJECT_ID')
-    if railway_project_id:
-        railway_pattern = f'*.{railway_project_id}.up.railway.app'
-        if railway_pattern not in ALLOWED_HOSTS:
-            ALLOWED_HOSTS.append(railway_pattern)
-
-    # Railway static URL domain (for static file serving)
-    railway_static_url = os.getenv('RAILWAY_STATIC_URL')
-    if railway_static_url:
-        from urllib.parse import urlparse
-        railway_domain = urlparse(railway_static_url).netloc
-        if railway_domain and railway_domain not in ALLOWED_HOSTS:
-            ALLOWED_HOSTS.append(railway_domain)
-
-    # Railway custom domains (comma-separated)
-    railway_domains = os.getenv('RAILWAY_DOMAINS', '').split(',')
-    for domain in railway_domains:
-        domain = domain.strip()
-        if domain and domain not in ALLOWED_HOSTS:
-            ALLOWED_HOSTS.append(domain)
-
-    # Add Railway subdomain pattern as fallback
-    if '*.up.railway.app' not in ALLOWED_HOSTS:
-        ALLOWED_HOSTS.append('*.up.railway.app')
-
-# Configure Railway settings
-configure_railway_settings()
-
-# Add custom domain from environment
-CUSTOM_DOMAIN = os.getenv('CUSTOM_DOMAIN')
-if CUSTOM_DOMAIN:
-    ALLOWED_HOSTS.append(CUSTOM_DOMAIN)
-
 
 # Custom User model
 AUTH_USER_MODEL = 'yeshuman_auth.User'
@@ -284,23 +242,6 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 if not DEBUG:
     STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
 
-# Railway-specific configurations
-RAILWAY_ENVIRONMENT = os.getenv('RAILWAY_ENVIRONMENT')
-
-# Health check endpoint for Railway (uses existing /api/health)
-HEALTH_CHECK_URL = '/api/health/'
-
-# Configure Railway database optimizations
-railway_environment = os.getenv('RAILWAY_ENVIRONMENT')
-if railway_environment:
-    # Enable connection pooling for Railway
-    DATABASES['default']['CONN_MAX_AGE'] = 60
-    DATABASES['default']['CONN_HEALTH_CHECKS'] = True
-
-    # Optimize for Railway's environment
-    USE_TZ = True
-    USE_I18N = True
-
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
@@ -308,7 +249,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # URL Configuration - More forgiving URL matching
 # https://docs.djangoproject.com/en/5.2/ref/settings/#append-slash
-APPEND_SLASH = True  # Redirect GET requests with trailing slash
+APPEND_SLASH = False  # Disabled to avoid POST redirect issues with MCP
 
 # Note: TrailingSlashMiddleware has been moved to yeshuman/middleware.py
 
