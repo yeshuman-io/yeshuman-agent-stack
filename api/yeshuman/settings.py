@@ -371,6 +371,11 @@ LOGGING = {
             'level': 'DEBUG',
             'propagate': False,
         },
+        'yeshuman.middleware': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
         'tools': {
             'handlers': ['console'],
             'level': 'DEBUG',
