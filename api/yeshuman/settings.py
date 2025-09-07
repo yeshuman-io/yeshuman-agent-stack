@@ -159,28 +159,6 @@ if cors_origins_env:
 else:
     CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_DEFAULTS.copy()
 
-# Add Railway-specific CORS origins
-def configure_railway_cors():
-    """Configure Railway-specific CORS origins"""
-
-    # Railway frontend URL
-    railway_frontend_url = os.getenv('RAILWAY_FRONTEND_URL')
-    if railway_frontend_url and railway_frontend_url.startswith(('http://', 'https://')) and railway_frontend_url not in CORS_ALLOWED_ORIGINS:
-        CORS_ALLOWED_ORIGINS.append(railway_frontend_url)
-
-    # Railway static URL domain for CORS
-    railway_static_url = os.getenv('RAILWAY_STATIC_URL')
-    if railway_static_url:
-        from urllib.parse import urlparse
-        railway_domain = urlparse(railway_static_url).netloc
-        if railway_domain:
-            railway_cors_url = f"https://{railway_domain}"
-            if railway_cors_url not in CORS_ALLOWED_ORIGINS:
-                CORS_ALLOWED_ORIGINS.append(railway_cors_url)
-
-# Configure Railway CORS settings
-configure_railway_cors()
-
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = list(default_headers) + [
