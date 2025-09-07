@@ -10,13 +10,179 @@ const https = require('https');
 class MCPBridge {
     constructor(serverUrl) {
         this.serverUrl = serverUrl;
+        this.agent = new https.Agent({
+            keepAlive: true,
+            keepAliveMsecs: 30000,
+            maxSockets: 10,
+            maxFreeSockets: 5,
+            timeout: 90000
+        });
+        this.circuitBreaker = {
+            failures: 0,
+            lastFailureTime: 0,
+            state: 'CLOSED', // CLOSED, OPEN, HALF_OPEN
+            failureThreshold: 3,
+            recoveryTimeout: 30000
+        };
         console.error('🔧 MCP Bridge initialized with server:', serverUrl);
+        console.error('🔄 Connection pooling enabled with 90s timeout');
+
+        // Start connection warming
+        this.startConnectionWarming();
+    }
+
+    startConnectionWarming() {
+        // Warm up connection every 5 minutes to prevent Railway cold starts
+        setInterval(async () => {
+            try {
+                console.error('🔥 Warming up connection...');
+                const isHealthy = await this.checkHealth();
+                if (isHealthy) {
+                    console.error('✅ Connection warm - server ready');
+                } else {
+                    console.error('❌ Connection warming failed - server may be down');
+                }
+            } catch (error) {
+                console.error('❌ Connection warming error:', error.message);
+            }
+        }, 5 * 60 * 1000); // 5 minutes
+
+        console.error('🕒 Connection warming scheduled every 5 minutes');
+    }
+
+    async checkHealth() {
+        return new Promise((resolve, reject) => {
+            const url = new URL(this.serverUrl);
+            const options = {
+                hostname: url.hostname,
+                port: url.port || (url.protocol === 'https:' ? 443 : 80),
+                path: '/ping',
+                method: 'GET',
+                timeout: 5000, // 5 second timeout for health check
+                agent: this.agent
+            };
+
+            const client = url.protocol === 'https:' ? https : http;
+            const req = client.request(options, (res) => {
+                if (res.statusCode === 200) {
+                    resolve(true);
+                } else {
+                    resolve(false);
+                }
+            });
+
+            req.on('error', () => resolve(false));
+            req.on('timeout', () => {
+                req.destroy();
+                resolve(false);
+            });
+
+            req.end();
+        });
+    }
+
+    updateCircuitBreaker(success) {
+        if (success) {
+            this.circuitBreaker.failures = 0;
+            this.circuitBreaker.state = 'CLOSED';
+        } else {
+            this.circuitBreaker.failures++;
+            this.circuitBreaker.lastFailureTime = Date.now();
+
+            if (this.circuitBreaker.failures >= this.circuitBreaker.failureThreshold) {
+                this.circuitBreaker.state = 'OPEN';
+                console.error('🔴 Circuit breaker OPEN - too many failures');
+            }
+        }
     }
 
     async handleMessage(message) {
         try {
             console.error('📨 Received message:', JSON.stringify(message, null, 2));
 
+            // Check circuit breaker state
+            if (this.circuitBreaker.state === 'OPEN') {
+                const timeSinceLastFailure = Date.now() - this.circuitBreaker.lastFailureTime;
+                if (timeSinceLastFailure < this.circuitBreaker.recoveryTimeout) {
+                    console.error('⛔ Circuit breaker OPEN - rejecting request');
+                    return {
+                        jsonrpc: '2.0',
+                        error: {
+                            code: -32003,
+                            message: 'Service temporarily unavailable - circuit breaker open'
+                        },
+                        id: message.id
+                    };
+                } else {
+                    console.error('🔄 Circuit breaker HALF_OPEN - attempting recovery');
+                    this.circuitBreaker.state = 'HALF_OPEN';
+                }
+            }
+
+            // Check server health first
+            console.error('🏥 Checking server health...');
+            const isHealthy = await this.checkHealth();
+            if (!isHealthy) {
+                console.error('❌ Server health check failed');
+                this.updateCircuitBreaker(false);
+                return {
+                    jsonrpc: '2.0',
+                    error: {
+                        code: -32001,
+                        message: 'Server health check failed - service may be starting up'
+                    },
+                    id: message.id
+                };
+            }
+            console.error('✅ Server health check passed');
+
+            // Retry logic with exponential backoff
+            let lastError;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    console.error(`🔄 Attempt ${attempt}/3`);
+                    const result = await this.makeRequest(message);
+                    this.updateCircuitBreaker(true);
+                    return result;
+                } catch (error) {
+                    lastError = error;
+                    console.error(`❌ Attempt ${attempt} failed:`, error.message);
+
+                    if (attempt < 3) {
+                        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+                        console.error(`⏳ Waiting ${delay}ms before retry...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                }
+            }
+
+            // All retries failed
+            this.updateCircuitBreaker(false);
+            return {
+                jsonrpc: '2.0',
+                error: {
+                    code: -32002,
+                    message: `Request failed after 3 attempts: ${lastError.message}`
+                },
+                id: message.id
+            };
+
+        } catch (error) {
+            console.error('❌ Unexpected error in handleMessage:', error);
+            this.updateCircuitBreaker(false);
+            return {
+                jsonrpc: '2.0',
+                error: {
+                    code: -32603,
+                    message: `Bridge error: ${error.message}`
+                },
+                id: message.id
+            };
+        }
+    }
+
+    async makeRequest(message) {
+        return new Promise((resolve, reject) => {
             const url = new URL(this.serverUrl);
             const options = {
                 hostname: url.hostname,
@@ -27,12 +193,12 @@ class MCPBridge {
                     'Content-Type': 'application/json',
                     'User-Agent': 'MCP-Bridge/1.0',
                     'Accept': 'application/json'
-                }
+                },
+                agent: this.agent // Use connection pooling agent
             };
 
-            return new Promise((resolve, reject) => {
-                const client = url.protocol === 'https:' ? https : http;
-                const req = client.request(options, (res) => {
+            const client = url.protocol === 'https:' ? https : http;
+            const req = client.request(options, (res) => {
                     let data = '';
 
                     console.error('📡 HTTP Response status:', res.statusCode);
@@ -94,64 +260,14 @@ class MCPBridge {
                 req.on('error', (e) => {
                     console.error('❌ HTTP Request error:', e);
                     console.error('❌ Error code:', e.code);
-
-                    // Handle Railway-specific connection issues
-                    if (e.code === 'ECONNRESET') {
-                        console.error('🔄 ECONNRESET detected - Railway connection dropped, may be cold start');
-                        const errorResponse = {
-                            jsonrpc: '2.0',
-                            error: {
-                                code: -32000,
-                                message: 'Railway connection reset - server may be starting up. Please wait and try again.'
-                            },
-                            id: message.id
-                        };
-                        resolve(errorResponse);
-                        return;
-                    }
-
-                    if (e.code === 'ETIMEDOUT' || e.message.includes('timeout')) {
-                        console.error('⏰ Timeout detected - Railway server may be in cold start');
-                        const errorResponse = {
-                            jsonrpc: '2.0',
-                            error: {
-                                code: -32001,
-                                message: 'Railway server timeout - cold start may take up to 90 seconds. Please wait and try again in a moment.'
-                            },
-                            id: message.id
-                        };
-                        resolve(errorResponse);
-                        return;
-                    }
-
-                    // Send generic error for other issues
-                    const errorResponse = {
-                        jsonrpc: '2.0',
-                        error: {
-                            code: -32603,
-                            message: `Connection error: ${e.message}`
-                        },
-                        id: message.id
-                    };
-                    resolve(errorResponse);
+                    reject(new Error(`${e.code || 'UNKNOWN'}: ${e.message}`));
                 });
 
-                // Handle request timeout - increased for Railway cold starts
+                // Handle request timeout
                 req.setTimeout(90000, () => {
-                    console.error('⏰ Request timeout after 90 seconds (Railway cold start)');
+                    console.error('⏰ Request timeout after 90 seconds');
                     req.destroy();
-
-                    // Send Railway-specific timeout error with retry suggestion
-                    const errorResponse = {
-                        jsonrpc: '2.0',
-                        error: {
-                            code: -32002,
-                            message: 'Railway server timeout - cold start may take up to 90 seconds. Please wait and try again in a moment.'
-                        },
-                        id: message.id
-                    };
-                    console.error('📤 Sending timeout error response:', JSON.stringify(errorResponse));
-                    resolve(errorResponse);
+                    reject(new Error('Request timeout after 90 seconds'));
                 });
 
                 const messageData = JSON.stringify(message);
@@ -159,19 +275,7 @@ class MCPBridge {
                 req.write(messageData);
                 req.end();
             });
-
-        } catch (error) {
-            console.error('💥 Error in handleMessage:', error);
-            console.error('💥 Stack trace:', error.stack);
-            return {
-                jsonrpc: '2.0',
-                error: {
-                    code: -32603,
-                    message: `Bridge error: ${error.message}`
-                },
-                id: message.id
-            };
-        }
+        });
     }
 }
 
