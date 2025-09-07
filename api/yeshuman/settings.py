@@ -23,16 +23,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from .env file in the api directory
 load_dotenv(BASE_DIR / '.env')
 
-# Load shared configuration
-SHARED_CONFIG_PATH = BASE_DIR.parent / 'shared-config.json'
-with open(SHARED_CONFIG_PATH, 'r') as f:
-    shared_config = json.load(f)
+# Load API-specific client configuration
+CLIENT_CONFIG_PATH = BASE_DIR / 'client-config.json'
+with open(CLIENT_CONFIG_PATH, 'r') as f:
+    api_config = json.load(f)
 
 # Multi-tenant configuration
 CLIENT_CONFIG = os.getenv('CLIENT_CONFIG', 'yeshuman').lower()
 
-# Use shared client configurations to eliminate duplication
-CLIENT_CONFIGS = shared_config['clients']
+# Use API-specific client configurations
+CLIENT_CONFIGS = api_config['clients']
 
 # Get current client configuration
 CURRENT_CLIENT = CLIENT_CONFIGS.get(CLIENT_CONFIG, CLIENT_CONFIGS['yeshuman'])

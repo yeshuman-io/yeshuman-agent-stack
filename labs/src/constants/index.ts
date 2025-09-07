@@ -9,12 +9,11 @@ const CLIENT_CONFIG = import.meta.env.VITE_CLIENT_CONFIG || 'yeshuman';
 // Example: https://your-backend-api.com
 export const API_BASE_URL = (import.meta.env.VITE_API_URL || '').trim();
 
-// Import shared client configurations
-import sharedConfig from '../../../shared-config.json';
-import type { ClientConfig } from '../../../shared-config';
+// Import UI-specific client configurations
+import uiConfig from '../../client-config.json';
 
-// Use shared configuration to eliminate duplication
-export const CLIENT_CONFIGS: Record<string, ClientConfig> = sharedConfig.clients;
+// Use UI-specific configuration with all frontend fields
+export const CLIENT_CONFIGS = uiConfig.clients;
 
 // Get current client configuration
 export const CURRENT_CLIENT = CLIENT_CONFIGS[CLIENT_CONFIG as keyof typeof CLIENT_CONFIGS] || CLIENT_CONFIGS.yeshuman;

@@ -1,0 +1,40 @@
+{
+  "clients": {
+    "yeshuman": {
+      "name": "Yes Human",
+      "brand": "Yes Human",
+      "primaryColor": "#3b82f6",
+      "systemPrompt": "You are an AI assistant without a name.\n\nAddress the user as \"Human\" or \"human\".\nDon't use synonyms \"human\".\nUse different punctuations for \"yes\" and \"human\" such as ' ! , . ; ?.\nSubtly borrow terminology and language patterns from Blade Runner and Dune without directly referencing these works by name.\nBe subtle, don't over do it.  Be minimal and slightly robotic.  Be dead pan without exclamations.",
+      "welcomeMessage": "Yes, welcome human.",
+      "tagline": "Human Compute Interface",
+      "description": "Don't have an account? Contact an administrator to get access to Yes Human."
+    },
+    "bookedai": {
+      "name": "Booked AI",
+      "brand": "Booked AI",
+      "primaryColor": "#10b981",
+      "systemPrompt": "You are Booked AI, an intelligent booking and scheduling assistant.",
+      "welcomeMessage": "Welcome to Booked AI.",
+      "tagline": "Your AI travel companion",
+      "description": "Don't have an account? Contact your administrator to get access to Booked AI."
+    },
+    "talentco": {
+      "name": "TalentCo",
+      "brand": "TalentCo",
+      "primaryColor": "#8b5cf6",
+      "systemPrompt": "You are TalentCo, an AI assistant for sustainable talent management.",
+      "welcomeMessage": "Welcome to TalentCo.",
+      "tagline": "Sustainable talent for sustainable futures",
+      "description": "Don't have an account? Contact your HR administrator to get access to TalentCo."
+    },
+    "lumie": {
+      "name": "Lumie",
+      "brand": "Lumie",
+      "primaryColor": "#f59e0b",
+      "systemPrompt": "You are Lumie, an AI assistant for health and wellness.",
+      "welcomeMessage": "Welcome to Lumie.",
+      "tagline": "Your AI health companion",
+      "description": "Don't have an account? Contact your administrator to get access to Lumie."
+    }
+  }
+}
