@@ -5,7 +5,7 @@ const CLIENT_CONFIG = import.meta.env.VITE_CLIENT_CONFIG || 'yeshuman';
 // VITE_API_URL: Set to backend URL for cross-domain requests (optional)
 // Leave empty for same-domain requests (recommended for production)
 // Example: https://your-backend-api.com
-export const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || '').trim();
 
 // Client-specific configurations
 export const CLIENT_CONFIGS = {
@@ -230,6 +230,8 @@ export const SSE_ENDPOINT = API_BASE_URL ? `${API_BASE_URL}/agent/stream/` : '/a
 // Debug logging for URL construction
 console.log('🔍 URL Construction Debug:');
 console.log('window.location.origin:', window.location.origin);
+console.log('VITE_API_URL raw:', import.meta.env.VITE_API_URL);
+console.log('VITE_API_URL trimmed:', (import.meta.env.VITE_API_URL || '').trim());
 console.log('API_BASE_URL:', API_BASE_URL);
 console.log('API_BASE_URL type:', typeof API_BASE_URL);
 console.log('API_BASE_URL length:', API_BASE_URL.length);
@@ -237,7 +239,6 @@ console.log('SSE_ENDPOINT:', SSE_ENDPOINT);
 console.log('SSE_ENDPOINT type:', typeof SSE_ENDPOINT);
 console.log('SSE_ENDPOINT length:', SSE_ENDPOINT.length);
 console.log('SSE_ENDPOINT starts with http:', SSE_ENDPOINT.startsWith('http'));
-console.log('VITE_API_URL env:', import.meta.env.VITE_API_URL);
 console.log('VITE_API_URL env type:', typeof import.meta.env.VITE_API_URL);
 
 // Check for URL construction issues
