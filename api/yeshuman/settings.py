@@ -56,30 +56,42 @@ else:
     # Default hosts for development
     ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver']
 
-# Add Railway domain if RAILWAY_STATIC_URL is available
-RAILWAY_STATIC_URL = os.getenv('RAILWAY_STATIC_URL')
-if RAILWAY_STATIC_URL:
-    from urllib.parse import urlparse
-    railway_domain = urlparse(RAILWAY_STATIC_URL).netloc
-    if railway_domain and railway_domain not in ALLOWED_HOSTS:
-        ALLOWED_HOSTS.append(railway_domain)
+# Railway-specific configuration (consolidated)
+def configure_railway_settings():
+    """Configure Railway-specific settings for deployment"""
 
-# Add Railway project domain pattern
-RAILWAY_PROJECT_ID = os.getenv('RAILWAY_PROJECT_ID')
-if RAILWAY_PROJECT_ID:
-    railway_pattern = f'*.{RAILWAY_PROJECT_ID}.up.railway.app'
-    ALLOWED_HOSTS.append(railway_pattern)
+    # Railway health check domain (required for health checks)
+    if 'healthcheck.railway.app' not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append('healthcheck.railway.app')
 
-# Add Railway health check domain (required for Railway health checks)
-ALLOWED_HOSTS.append('healthcheck.railway.app')
+    # Railway project pattern (covers most Railway deployments)
+    railway_project_id = os.getenv('RAILWAY_PROJECT_ID')
+    if railway_project_id:
+        railway_pattern = f'*.{railway_project_id}.up.railway.app'
+        if railway_pattern not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(railway_pattern)
 
-# Add Railway domains dynamically (more flexible than hardcoded)
-RAILWAY_DOMAINS = os.getenv('RAILWAY_DOMAINS', '').split(',')
-if RAILWAY_DOMAINS and RAILWAY_DOMAINS != ['']:
-    ALLOWED_HOSTS.extend(RAILWAY_DOMAINS)
+    # Railway static URL domain (for static file serving)
+    railway_static_url = os.getenv('RAILWAY_STATIC_URL')
+    if railway_static_url:
+        from urllib.parse import urlparse
+        railway_domain = urlparse(railway_static_url).netloc
+        if railway_domain and railway_domain not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(railway_domain)
 
-# Add all Railway subdomains pattern
-ALLOWED_HOSTS.append('*.up.railway.app')
+    # Railway custom domains (comma-separated)
+    railway_domains = os.getenv('RAILWAY_DOMAINS', '').split(',')
+    for domain in railway_domains:
+        domain = domain.strip()
+        if domain and domain not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(domain)
+
+    # Add Railway subdomain pattern as fallback
+    if '*.up.railway.app' not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append('*.up.railway.app')
+
+# Configure Railway settings
+configure_railway_settings()
 
 # Add custom domain from environment
 CUSTOM_DOMAIN = os.getenv('CUSTOM_DOMAIN')
@@ -127,38 +139,47 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# CORS settings for Railway deployment
-CORS_ALLOWED_ORIGINS = [
+# CORS settings - configurable via environment variable
+CORS_ALLOWED_ORIGINS_DEFAULTS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:5173",  # Vite dev server
     "http://127.0.0.1:5173",  # Vite dev server
 ]
 
-# Add Railway frontend URL if available
-RAILWAY_FRONTEND_URL = os.getenv('RAILWAY_FRONTEND_URL')
-if RAILWAY_FRONTEND_URL and RAILWAY_FRONTEND_URL.startswith(('http://', 'https://')) and RAILWAY_FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS.append(RAILWAY_FRONTEND_URL)
+# Get CORS origins from environment variable or use defaults
+cors_origins_env = os.getenv('CORS_ALLOWED_ORIGINS', '')
+if cors_origins_env:
+    # Parse comma-separated list of origins
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins_env.split(',') if origin.strip()]
+    # Add defaults if they're not already included
+    for default_origin in CORS_ALLOWED_ORIGINS_DEFAULTS:
+        if default_origin not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(default_origin)
+else:
+    CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_DEFAULTS.copy()
 
-# Add custom labs/frontend domain if available
-LABS_DOMAIN = os.getenv('LABS_DOMAIN')
-if LABS_DOMAIN and LABS_DOMAIN.startswith(('http://', 'https://')) and LABS_DOMAIN not in CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS.append(LABS_DOMAIN)
+# Add Railway-specific CORS origins
+def configure_railway_cors():
+    """Configure Railway-specific CORS origins"""
 
-# Add custom frontend URL if available (more general)
-FRONTEND_URL = os.getenv('FRONTEND_URL')
-if FRONTEND_URL and FRONTEND_URL.startswith(('http://', 'https://')) and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
+    # Railway frontend URL
+    railway_frontend_url = os.getenv('RAILWAY_FRONTEND_URL')
+    if railway_frontend_url and railway_frontend_url.startswith(('http://', 'https://')) and railway_frontend_url not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(railway_frontend_url)
 
-# Add Railway static URL domain for CORS
-if RAILWAY_STATIC_URL:
-    from urllib.parse import urlparse
-    railway_domain = urlparse(RAILWAY_STATIC_URL).netloc
-    # Only add if domain is not empty (prevents 'https://' entries)
-    if railway_domain:
-        railway_url = f"https://{railway_domain}"
-        if railway_url not in CORS_ALLOWED_ORIGINS:
-            CORS_ALLOWED_ORIGINS.append(railway_url)
+    # Railway static URL domain for CORS
+    railway_static_url = os.getenv('RAILWAY_STATIC_URL')
+    if railway_static_url:
+        from urllib.parse import urlparse
+        railway_domain = urlparse(railway_static_url).netloc
+        if railway_domain:
+            railway_cors_url = f"https://{railway_domain}"
+            if railway_cors_url not in CORS_ALLOWED_ORIGINS:
+                CORS_ALLOWED_ORIGINS.append(railway_cors_url)
+
+# Configure Railway CORS settings
+configure_railway_cors()
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -291,8 +312,9 @@ RAILWAY_ENVIRONMENT = os.getenv('RAILWAY_ENVIRONMENT')
 # Health check endpoint for Railway (uses existing /api/health)
 HEALTH_CHECK_URL = '/api/health/'
 
-# Railway project configuration
-if RAILWAY_ENVIRONMENT:
+# Configure Railway database optimizations
+railway_environment = os.getenv('RAILWAY_ENVIRONMENT')
+if railway_environment:
     # Enable connection pooling for Railway
     DATABASES['default']['CONN_MAX_AGE'] = 60
     DATABASES['default']['CONN_HEALTH_CHECKS'] = True
