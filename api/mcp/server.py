@@ -175,19 +175,25 @@ class MCPServer:
 
 # Global MCP server instance
 import logging
+import sys
 logger = logging.getLogger(__name__)
 
 try:
+    print("🔧 Initializing MCP server...", file=sys.stderr)
     logger.info("Creating global MCP server instance with tools:")
     for tool in MCP_TOOLS:
         logger.info(f"  - {tool.name}: {tool.description}")
+        print(f"📋 Tool loaded: {tool.name}", file=sys.stderr)
 
     mcp_server = MCPServer(MCP_TOOLS)
     logger.info("✅ MCP server instance created successfully")
+    print("✅ MCP server instance created successfully", file=sys.stderr)
 
 except Exception as e:
     logger.error(f"❌ Failed to create MCP server: {str(e)}", exc_info=True)
+    print(f"❌ Failed to create MCP server: {str(e)}", file=sys.stderr)
     # Create with empty tools as fallback
     logger.warning("Creating MCP server with empty tools as fallback")
     mcp_server = MCPServer([])
     logger.info("⚠️ MCP server created with empty tools (fallback mode)")
+    print("⚠️ MCP server created with empty tools (fallback mode)", file=sys.stderr)

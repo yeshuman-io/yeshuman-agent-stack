@@ -109,6 +109,9 @@ async def mcp_endpoint(request):
     logger.info(f"   Path: {request.path}")
     logger.info(f"   Headers: {dict(request.headers)}")
 
+    print(f"🔗 MCP endpoint called: {request.method} {request.path}", file=sys.stderr)
+    print(f"   User-Agent: {request.headers.get('User-Agent', 'Unknown')}", file=sys.stderr)
+
     try:
         # Enhanced request logging for debugging
         logger.info(f"MCP Request: {request.method} {request.path}")
@@ -117,26 +120,34 @@ async def mcp_endpoint(request):
 
         # Handle GET requests (MCP protocol negotiation)
         if request.method == "GET":
+            print("📡 Handling GET request - MCP protocol negotiation", file=sys.stderr)
             logger.info("Handling GET request - MCP protocol negotiation")
             try:
                 init_request = MCPRequest(method="initialize", id="init")
+                print("🚀 Sending initialize request to server", file=sys.stderr)
                 init_response = await mcp_server.handle_request(init_request)
                 logger.info(f"GET Response: {init_response.dict()}")
+                print(f"✅ GET response generated: {init_response.dict()}", file=sys.stderr)
                 return init_response.dict()
             except Exception as e:
                 logger.error(f"❌ Error during GET initialization: {str(e)}", exc_info=True)
+                print(f"❌ Error during GET initialization: {str(e)}", file=sys.stderr)
                 return {"error": f"Server initialization failed: {str(e)}"}
 
         # Parse the JSON-RPC request for POST
+        print("📨 Handling POST request - parsing JSON-RPC", file=sys.stderr)
         body = json.loads(request.body)
         logger.info(f"Request body: {body}")
+        print(f"📋 Request body: {body}", file=sys.stderr)
 
         # Handle Cursor's stdio-style initialization if no body
         if not body or not body.get("method"):
+            print("⚠️ Empty/malformed body - sending initialization response", file=sys.stderr)
             logger.warning("Received POST with empty/malformed body - sending initialization response")
             init_request = MCPRequest(method="initialize", id="init")
             init_response = await mcp_server.handle_request(init_request)
             logger.info(f"Empty body response: {init_response.dict()}")
+            print(f"📤 Empty body response: {init_response.dict()}", file=sys.stderr)
             return init_response.dict()
 
         # Create MCPRequest from raw data
@@ -158,17 +169,31 @@ async def mcp_endpoint(request):
         logger.info(".2f")
 
         # Return as streaming response for MCP compatibility
+        print(f"🎯 Processing MCP request: {mcp_request.method} id={mcp_request.id}", file=sys.stderr)
+        print(f"⏱️ Starting request processing", file=sys.stderr)
+
+        response = await mcp_server.handle_request(mcp_request)
+
+        processing_time = time.time() - start_time
+        logger.info(".2f")
+        print(".2f", file=sys.stderr)
+
         def generate_response():
             response_dict = response.dict(exclude_none=True)
             logger.info(f"Final response: {response_dict}")
+            print(f"📤 Generated response: {response_dict}", file=sys.stderr)
             yield json.dumps(response_dict)
 
-        return StreamingHttpResponse(
+        print("🌊 Creating streaming response", file=sys.stderr)
+        streaming_response = StreamingHttpResponse(
             generate_response(),
             content_type='application/json'
         )
+        print("✅ Streaming response created", file=sys.stderr)
+        return streaming_response
         
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        print(f"❌ JSONDecodeError: {str(e)}", file=sys.stderr)
         error_response = {
             "jsonrpc": "2.0",
             "error": {
@@ -182,6 +207,9 @@ async def mcp_endpoint(request):
             content_type='application/json'
         )
     except Exception as e:
+        print(f"💥 Exception in MCP endpoint: {str(e)}", file=sys.stderr)
+        import traceback
+        print(f"Stack trace: {traceback.format_exc()}", file=sys.stderr)
         error_response = {
             "jsonrpc": "2.0",
             "error": {
