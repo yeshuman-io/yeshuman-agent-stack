@@ -9,7 +9,3 @@ startCommand = "npm run preview -- --host 0.0.0.0 --port $PORT"
 
 [deploy.env]
 NODE_ENV = "production"
-# Set VITE_API_URL in Railway Dashboard Variables section
-# VITE_API_URL = "https://your-api-service.up.railway.app"
-# Additional allowed hosts (comma-separated)
-VITE_ALLOWED_HOSTS = "yh-labs-ui-talentco-production.up.railway.app"

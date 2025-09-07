@@ -194,6 +194,9 @@ export const useSSE = (onMessageStart?: () => void) => {
       setIsConnected(true);
 
       console.log('🚀 About to call fetchEventSource with URL:', SSE_ENDPOINT);
+      console.log('🚀 SSE_ENDPOINT type:', typeof SSE_ENDPOINT);
+      console.log('🚀 SSE_ENDPOINT length:', SSE_ENDPOINT.length);
+      console.log('🚀 SSE_ENDPOINT chars:', SSE_ENDPOINT.split('').map(c => c.charCodeAt(0)));
 
       await fetchEventSource(SSE_ENDPOINT, {
         method: 'POST',

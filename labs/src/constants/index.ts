@@ -230,5 +230,10 @@ export const SSE_ENDPOINT = API_BASE_URL ? `${API_BASE_URL}/agent/stream/` : '/a
 // Debug logging for URL construction
 console.log('🔍 URL Construction Debug:');
 console.log('API_BASE_URL:', API_BASE_URL);
+console.log('API_BASE_URL type:', typeof API_BASE_URL);
+console.log('API_BASE_URL length:', API_BASE_URL.length);
 console.log('SSE_ENDPOINT:', SSE_ENDPOINT);
+console.log('SSE_ENDPOINT type:', typeof SSE_ENDPOINT);
+console.log('SSE_ENDPOINT length:', SSE_ENDPOINT.length);
 console.log('VITE_API_URL env:', import.meta.env.VITE_API_URL);
+console.log('VITE_API_URL env type:', typeof import.meta.env.VITE_API_URL);
