@@ -15,7 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from .api import api
 from mcp.api import mcp_api
 from a2a.api import a2a_api
@@ -24,7 +24,8 @@ from agent.api import agent_api
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', api.urls),  # Includes /api/health endpoint
-    path('mcp/', mcp_api.urls),
+    # MCP endpoint - handle both /mcp and /mcp/ to avoid redirects
+    re_path(r'^mcp/?', include(mcp_api.urls)),
     path('a2a/', a2a_api.urls),
     path('agent/', agent_api.urls),
     path('auth/', include('django.contrib.auth.urls')),
