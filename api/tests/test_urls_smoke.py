@@ -19,13 +19,15 @@ class TestURLPatterns:
         response_with_slash = self.client.get('/api/health/')
         response_without_slash = self.client.get('/api/health')
 
-        # Both should return the same status (either 200 or whatever the actual status is)
-        assert response_with_slash.status_code == response_without_slash.status_code
+        # Both should return 200 (health endpoint should work)
+        assert response_with_slash.status_code == 200
+        assert response_without_slash.status_code == 200
 
         # Test /api (root API endpoint)
         response_with_slash = self.client.get('/api/')
         response_without_slash = self.client.get('/api')
 
+        # Root API endpoint may not be defined, so both should return same status
         assert response_with_slash.status_code == response_without_slash.status_code
 
     def test_mcp_endpoints_flexible_slashes(self):
