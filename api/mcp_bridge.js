@@ -69,7 +69,18 @@ class MCPBridge {
                         } catch (e) {
                             console.error('❌ Failed to parse JSON response:', e.message);
                             console.error('❌ Raw response that failed to parse:', data);
-                            reject(new Error(`Invalid JSON response from server: ${e.message}`));
+
+                            // Send a more compatible error response for Claude Desktop
+                            const errorResponse = {
+                                jsonrpc: '2.0',
+                                error: {
+                                    code: -32700,
+                                    message: 'Parse error: Invalid JSON response from server'
+                                },
+                                id: message.id
+                            };
+                            console.error('📤 Sending parse error response:', JSON.stringify(errorResponse));
+                            resolve(errorResponse); // Resolve instead of reject to send error to Claude
                         }
                     });
 
@@ -82,14 +93,65 @@ class MCPBridge {
 
                 req.on('error', (e) => {
                     console.error('❌ HTTP Request error:', e);
-                    reject(new Error(`HTTP request error: ${e.message}`));
+                    console.error('❌ Error code:', e.code);
+
+                    // Handle Railway-specific connection issues
+                    if (e.code === 'ECONNRESET') {
+                        console.error('🔄 ECONNRESET detected - Railway connection dropped, may be cold start');
+                        const errorResponse = {
+                            jsonrpc: '2.0',
+                            error: {
+                                code: -32000,
+                                message: 'Railway connection reset - server may be starting up'
+                            },
+                            id: message.id
+                        };
+                        resolve(errorResponse);
+                        return;
+                    }
+
+                    if (e.code === 'ETIMEDOUT' || e.message.includes('timeout')) {
+                        console.error('⏰ Timeout detected - Railway server may be in cold start');
+                        const errorResponse = {
+                            jsonrpc: '2.0',
+                            error: {
+                                code: -32001,
+                                message: 'Railway server timeout - please try again'
+                            },
+                            id: message.id
+                        };
+                        resolve(errorResponse);
+                        return;
+                    }
+
+                    // Send generic error for other issues
+                    const errorResponse = {
+                        jsonrpc: '2.0',
+                        error: {
+                            code: -32603,
+                            message: `Connection error: ${e.message}`
+                        },
+                        id: message.id
+                    };
+                    resolve(errorResponse);
                 });
 
-                // Handle request timeout
-                req.setTimeout(10000, () => {
-                    console.error('⏰ Request timeout after 10 seconds');
+                // Handle request timeout - increased for Railway cold starts
+                req.setTimeout(30000, () => {
+                    console.error('⏰ Request timeout after 30 seconds (Railway cold start)');
                     req.destroy();
-                    reject(new Error('Request timeout after 10 seconds'));
+
+                    // Send Railway-specific timeout error
+                    const errorResponse = {
+                        jsonrpc: '2.0',
+                        error: {
+                            code: -32002,
+                            message: 'Railway server timeout - cold start may take up to 30 seconds'
+                        },
+                        id: message.id
+                    };
+                    console.error('📤 Sending timeout error response:', JSON.stringify(errorResponse));
+                    resolve(errorResponse);
                 });
 
                 const messageData = JSON.stringify(message);
@@ -167,7 +229,7 @@ async function main() {
             console.error('❌ Error processing message:', e);
             console.error('❌ Stack trace:', e.stack);
 
-            // Send error response
+            // Send error response with proper format for Claude Desktop
             const errorResponse = {
                 jsonrpc: '2.0',
                 error: {
@@ -176,6 +238,8 @@ async function main() {
                 },
                 id: message.id || null
             };
+
+            console.error('📤 Sending processing error response:', JSON.stringify(errorResponse));
 
             try {
                 const errorStr = JSON.stringify(errorResponse) + '\n';
