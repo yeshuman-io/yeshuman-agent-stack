@@ -56,6 +56,37 @@ else:
     # Default hosts for development
     ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver']
 
+# Railway optimization: Add Railway domains automatically for production
+if os.getenv('RAILWAY_ENVIRONMENT'):
+    railway_domains = [
+        '.up.railway.app',
+        '.railway.app'
+    ]
+    for domain in railway_domains:
+        if domain not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(domain)
+
+# Railway optimization: Production performance settings
+if not DEBUG:
+    # Disable auto-reloading in production for faster cold starts
+    USE_TZ = True
+    # Disable Django's development server features
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': True,
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+            },
+        },
+        'loggers': {
+            'django': {
+                'handlers': ['console'],
+                'level': 'INFO',
+            },
+        },
+    }
+
 
 # Custom User model
 AUTH_USER_MODEL = 'yeshuman_auth.User'
@@ -171,6 +202,15 @@ if DATABASE_URL:
             conn_max_age=600,
             conn_health_checks=True,
         )
+    }
+    # Railway optimization: Disable connection pooling for faster cold starts
+    DATABASES['default']['CONN_MAX_AGE'] = 0  # Disable persistent connections
+    DATABASES['default']['OPTIONS'] = {
+        'connect_timeout': 10,  # Faster connection timeout
+        'keepalives': 1,  # Enable TCP keepalives
+        'keepalives_idle': 30,  # TCP keepalive idle time
+        'keepalives_interval': 10,  # TCP keepalive interval
+        'keepalives_count': 5,  # TCP keepalive count
     }
 else:
     # Fallback configuration for development/local
