@@ -6,6 +6,7 @@ from .server import mcp_server, MCPRequest
 from django.http import StreamingHttpResponse
 from utils.sse import SSEHttpResponse
 import json
+import sys
 
 # Create MCP API instance
 mcp_api = NinjaAPI(

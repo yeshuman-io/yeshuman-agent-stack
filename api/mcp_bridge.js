@@ -86,10 +86,10 @@ class MCPBridge {
                 });
 
                 // Handle request timeout
-                req.setTimeout(30000, () => {
-                    console.error('⏰ Request timeout');
+                req.setTimeout(10000, () => {
+                    console.error('⏰ Request timeout after 10 seconds');
                     req.destroy();
-                    reject(new Error('Request timeout'));
+                    reject(new Error('Request timeout after 10 seconds'));
                 });
 
                 const messageData = JSON.stringify(message);
@@ -192,6 +192,7 @@ async function main() {
     }
 
     process.stdin.on('data', (chunk) => {
+        console.error('📦 Received chunk, length:', chunk.length);
         buffer += chunk;
 
         // Try to parse complete JSON-RPC messages
@@ -202,13 +203,12 @@ async function main() {
             if (line.trim()) {
                 try {
                     const message = JSON.parse(line.trim());
-                    console.error('📨 Queued message for processing:', message);
+                    console.error('✅ Parsed message:', message.method, 'id:', message.id);
                     messageQueue.push(message);
                     processNextMessage();
                 } catch (e) {
-                    console.error('❌ Failed to parse incoming message:', e);
-                    console.error('❌ Raw line:', line);
-                    console.error('❌ Parse error:', e.message);
+                    console.error('❌ JSON parse error:', e.message);
+                    console.error('❌ Raw input:', line.substring(0, 100));
                 }
             }
         }
