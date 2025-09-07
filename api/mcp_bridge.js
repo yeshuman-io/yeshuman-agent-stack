@@ -297,7 +297,7 @@ class MCPBridge {
 
             // Check server health first
             console.error('🏥 Checking server health...');
-            const isHealthy = await this.checkHealth();
+            let isHealthy = await this.checkHealth();
 
             // Check if we should trust periodic monitoring for Railway
             const timeSinceLastSuccess = Date.now() - this.connectionHealth.lastSuccessfulHealthCheck;
