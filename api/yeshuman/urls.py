@@ -25,7 +25,25 @@ def simple_health_check(request):
     """Simple health check for Railway."""
     return JsonResponse({"status": "healthy", "service": "yeshuman-api"})
 
+def oauth_discovery_no_auth(request):
+    """OAuth discovery endpoint indicating no authentication required."""
+    return JsonResponse({
+        "issuer": request.build_absolute_uri("/"),
+        "service_documentation": "No authentication required for this MCP server"
+    })
+
+def mcp_oauth_discovery_no_auth(request):
+    """MCP-specific OAuth discovery endpoint indicating no authentication required."""
+    return JsonResponse({
+        "issuer": request.build_absolute_uri("/"),
+        "service_documentation": "MCP server - no authentication required"
+    })
+
 urlpatterns = [
+    # OAuth discovery endpoints (must come first)
+    re_path(r'^\.well-known/oauth-authorization-server/?$', oauth_discovery_no_auth),
+    re_path(r'^\.well-known/oauth-authorization-server/mcp/?$', mcp_oauth_discovery_no_auth),
+
     # API endpoints - flexible (accept both trailing slash and no trailing slash)
     re_path(r'^api/?', api.urls),          # /api, /api/, /api/subpath, etc.
     re_path(r'^mcp/?', mcp_api.urls),      # /mcp, /mcp/, /mcp/tools, /mcp/sse, etc.
