@@ -116,7 +116,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'yeshuman.settings.TrailingSlashMiddleware',  # Handle POST redirects with trailing slashes
+    'yeshuman.middleware.TrailingSlashMiddleware',  # Handle trailing slash normalization for NinjaAPI
     'corsheaders.middleware.CorsMiddleware',  # CORS middleware must be before CommonMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -310,41 +310,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#append-slash
 APPEND_SLASH = True  # Redirect GET requests with trailing slash
 
-# Custom middleware to handle POST redirects with trailing slashes
-# This makes Django more forgiving for POST requests to URLs without trailing slashes
-class TrailingSlashMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
-
-    def __call__(self, request):
-        response = self.get_response(request)
-
-        # If it's a 405 and the request is POST, try with trailing slash
-        if (response.status_code == 405 and
-            request.method == 'POST' and
-            not request.path.endswith('/')):
-
-            # Create a new request with trailing slash
-            from django.http import HttpRequest
-            new_request = HttpRequest()
-            new_request.method = request.method
-            new_request.path = request.path + '/'
-            new_request.path_info = request.path_info + '/'
-            new_request.META = request.META.copy()
-            new_request.META['PATH_INFO'] = request.path_info + '/'
-            new_request.POST = request.POST.copy()
-            new_request.FILES = request.FILES.copy()
-
-            # Try the request again with trailing slash
-            try:
-                return self.get_response(new_request)
-            except:
-                pass  # Fall back to original response if it fails
-
-        return response
-
-# Note: For production reliability, we've kept the frontend fix (adding trailing slash)
-# This middleware provides additional fallback protection
+# Note: TrailingSlashMiddleware has been moved to yeshuman/middleware.py
 
 # Custom colored formatter
 class ColoredFormatter(logging.Formatter):

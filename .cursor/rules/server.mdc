@@ -1,0 +1,14 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+Do NOT kill running servers.
+Do NOT start servers.
+
+The user will get servers running in terminal windows attached to YOUR CONTEXT
+
+Ask the user to run these if you need and provide instructions if necessary
+
+If you cannot see the server terminals in context STOP and ask the user to attach.

@@ -57,7 +57,7 @@ async def stream(request):
     Returns:
         SSEHttpResponse with Anthropic-compatible streaming events
     """
-    
+
     # Handle CORS preflight
     if request.method == "OPTIONS":
         from django.http import HttpResponse
@@ -66,7 +66,7 @@ async def stream(request):
         response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         response["Access-Control-Allow-Headers"] = "Content-Type, Accept"
         return response
-    
+
     if request.method == "POST":
         # Handle POST request with JSON body
         try:
@@ -90,12 +90,12 @@ async def stream(request):
             response = SSEHttpResponse(error_stream())
             response["Access-Control-Allow-Origin"] = "*"
             return response
-            
+
     else:  # GET request
         # Handle GET request with query parameters
         message = request.GET.get('message')
         user_state = request.GET.get('user_state', 'new_user')
-        
+
         if not message:
             # No hardcoded messages - return error if no message provided
             async def error_stream():
@@ -103,7 +103,7 @@ async def stream(request):
             response = SSEHttpResponse(error_stream())
             response["Access-Control-Allow-Origin"] = "*"
             return response
-    
+
     # Stream the agent response using AnthropicSSEGenerator
     try:
         # Handle thread/session context for conversation continuity
@@ -210,7 +210,7 @@ async def stream(request):
         response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         response["Access-Control-Allow-Headers"] = "Content-Type, Accept"
         return response
-        
+
     except Exception as e:
         logger.error(f"Agent streaming error: {str(e)}")
         # Return error as SSE stream for consistency
