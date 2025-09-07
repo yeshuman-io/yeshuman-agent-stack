@@ -116,7 +116,7 @@ class MCPBridge {
                             jsonrpc: '2.0',
                             error: {
                                 code: -32001,
-                                message: 'Railway server timeout - cold start may take up to 60 seconds. Please wait and try again.'
+                                message: 'Railway server timeout - cold start may take up to 90 seconds. Please wait and try again in a moment.'
                             },
                             id: message.id
                         };
@@ -137,8 +137,8 @@ class MCPBridge {
                 });
 
                 // Handle request timeout - increased for Railway cold starts
-                req.setTimeout(60000, () => {
-                    console.error('⏰ Request timeout after 60 seconds (Railway cold start)');
+                req.setTimeout(90000, () => {
+                    console.error('⏰ Request timeout after 90 seconds (Railway cold start)');
                     req.destroy();
 
                     // Send Railway-specific timeout error with retry suggestion
@@ -146,7 +146,7 @@ class MCPBridge {
                         jsonrpc: '2.0',
                         error: {
                             code: -32002,
-                            message: 'Railway server timeout - cold start may take up to 60 seconds. Please try again.'
+                            message: 'Railway server timeout - cold start may take up to 90 seconds. Please wait and try again in a moment.'
                         },
                         id: message.id
                     };
@@ -189,7 +189,7 @@ async function main() {
 
         // Add Railway-specific logging
         if (serverUrl.includes('railway.app')) {
-            console.error('🚂 Railway Mode: Enabled with 60-second cold start timeout');
+            console.error('🚂 Railway Mode: Enabled with 90-second cold start timeout');
         }
     } catch (e) {
         console.error('❌ Failed to initialize MCP Bridge:', e);

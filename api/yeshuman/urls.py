@@ -25,6 +25,10 @@ def simple_health_check(request):
     """Simple health check for Railway."""
     return JsonResponse({"status": "healthy", "service": "yeshuman-api"})
 
+def fast_health_check(request):
+    """Ultra-fast health check for Railway cold start detection."""
+    return JsonResponse({"status": "ok", "timestamp": __import__('time').time()})
+
 def oauth_discovery_no_auth(request):
     """OAuth discovery endpoint indicating no authentication required."""
     import logging
@@ -46,6 +50,9 @@ def mcp_oauth_discovery_no_auth(request):
     })
 
 urlpatterns = [
+    # Fast health check (must come first - ultra-fast response for Railway cold start detection)
+    re_path(r'^ping$', fast_health_check),  # /ping - ultra-fast response
+
     # OAuth discovery endpoints (must come first)
     re_path(r'^\.well-known/oauth-authorization-server/?$', oauth_discovery_no_auth),
     re_path(r'^\.well-known/oauth-authorization-server/mcp/?$', mcp_oauth_discovery_no_auth),
