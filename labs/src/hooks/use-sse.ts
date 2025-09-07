@@ -197,6 +197,14 @@ export const useSSE = (onMessageStart?: () => void) => {
       console.log('🚀 SSE_ENDPOINT type:', typeof SSE_ENDPOINT);
       console.log('🚀 SSE_ENDPOINT length:', SSE_ENDPOINT.length);
       console.log('🚀 SSE_ENDPOINT chars:', SSE_ENDPOINT.split('').map(c => c.charCodeAt(0)));
+      console.log('🚀 window.location.origin:', window.location.origin);
+      console.log('🚀 document.baseURI:', document.baseURI);
+
+      // Check if URL is malformed
+      if (SSE_ENDPOINT.includes('=')) {
+        console.error('🚨 MALFORMED URL DETECTED:', SSE_ENDPOINT);
+        console.error('🚨 URL contains = character at position:', SSE_ENDPOINT.indexOf('='));
+      }
 
       await fetchEventSource(SSE_ENDPOINT, {
         method: 'POST',
