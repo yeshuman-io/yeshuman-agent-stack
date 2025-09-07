@@ -10,7 +10,15 @@ const https = require('https');
 class MCPBridge {
     constructor(serverUrl) {
         this.serverUrl = serverUrl;
-        this.agent = new https.Agent({
+        // Create both HTTP and HTTPS agents
+        this.httpsAgent = new https.Agent({
+            keepAlive: true,
+            keepAliveMsecs: 30000,
+            maxSockets: 10,
+            maxFreeSockets: 5,
+            timeout: 90000
+        });
+        this.httpAgent = new http.Agent({
             keepAlive: true,
             keepAliveMsecs: 30000,
             maxSockets: 10,
@@ -24,8 +32,33 @@ class MCPBridge {
             failureThreshold: 3,
             recoveryTimeout: 30000
         };
+
+        // Connection health tracking
+        this.connectionHealth = {
+            lastSuccessfulHealthCheck: Date.now(),
+            consecutiveFailures: 0,
+            isHealthy: false,
+            reconnectAttempts: 0,
+            maxTotalTime: serverUrl.includes('railway.app') ? 600000 : 300000, // 10min Railway, 5min others
+            reconnectDelay: serverUrl.includes('railway.app') ? 3000 : 5000, // Faster for Railway
+            maxReconnectDelay: serverUrl.includes('railway.app') ? 30000 : 20000, // Shorter max for Railway
+            startTime: Date.now()
+        };
+
         console.error('🔧 MCP Bridge initialized with server:', serverUrl);
         console.error('🔄 Connection pooling enabled with 90s timeout');
+
+        // Railway-specific configuration
+        if (this.serverUrl.includes('railway.app')) {
+            console.error('🚂 RAILWAY MODE: Persistent reconnection enabled');
+            console.error('🚂 RAILWAY MODE: Health monitoring every 15 seconds');
+            console.error('🚂 RAILWAY MODE: Reconnection on first failure');
+            console.error('🚂 RAILWAY MODE: 10-minute maximum persistence');
+            console.error('🚂 RAILWAY MODE: 3s-30s exponential backoff');
+            console.error('🚂 RAILWAY MODE: 10s health check timeout');
+            console.error('🚂 RAILWAY MODE: Using /health endpoint (Railway-specific)');
+            console.error('🚂 RAILWAY MODE: Trust periodic monitoring (30s window)');
+        }
 
         // Start connection warming
         this.startConnectionWarming();
@@ -48,6 +81,36 @@ class MCPBridge {
         }, 5 * 60 * 1000); // 5 minutes
 
         console.error('🕒 Connection warming scheduled every 5 minutes');
+
+        // Start health monitoring for Railway connections
+        if (this.serverUrl.includes('railway.app')) {
+            this.startHealthMonitoring();
+        }
+    }
+
+    startHealthMonitoring() {
+        // Monitor connection health more aggressively for Railway
+        setInterval(async () => {
+            console.error('🔍 Periodic health check for Railway connection...');
+            await this.checkHealth();
+        }, 15 * 1000); // 15 seconds - more aggressive for Railway
+
+        console.error('📊 Health monitoring started - checking Railway connection every 15 seconds');
+    }
+
+    getConnectionStatus() {
+        const timeSinceLastSuccess = Date.now() - this.connectionHealth.lastSuccessfulHealthCheck;
+        const status = {
+            isHealthy: this.connectionHealth.isHealthy,
+            consecutiveFailures: this.connectionHealth.consecutiveFailures,
+            reconnectAttempts: this.connectionHealth.reconnectAttempts,
+            timeSinceLastSuccess: Math.round(timeSinceLastSuccess / 1000),
+            circuitBreakerState: this.circuitBreaker.state,
+            currentDelay: Math.round(this.connectionHealth.reconnectDelay / 1000)
+        };
+
+        console.error('📊 Connection Status:', JSON.stringify(status, null, 2));
+        return status;
     }
 
     async checkHealth() {
@@ -56,29 +119,142 @@ class MCPBridge {
             const options = {
                 hostname: url.hostname,
                 port: url.port || (url.protocol === 'https:' ? 443 : 80),
-                path: '/ping',
+                path: this.serverUrl.includes('railway.app') ? '/health' : '/ping', // Railway uses /health, others use /ping
                 method: 'GET',
-                timeout: 5000, // 5 second timeout for health check
-                agent: this.agent
+                timeout: this.serverUrl.includes('railway.app') ? 10000 : 5000, // 10s for Railway, 5s for others
+                agent: url.protocol === 'https:' ? this.httpsAgent : this.httpAgent
             };
+
+            console.error(`🏥 Checking health endpoint: ${options.path} (timeout: ${options.timeout}ms)`);
 
             const client = url.protocol === 'https:' ? https : http;
             const req = client.request(options, (res) => {
+                console.error(`📡 Health check response: ${res.statusCode} ${res.statusMessage || ''}`);
                 if (res.statusCode === 200) {
+                    // Update connection health on success
+                    this.connectionHealth.lastSuccessfulHealthCheck = Date.now();
+                    this.connectionHealth.consecutiveFailures = 0;
+                    this.connectionHealth.isHealthy = true;
+                    this.connectionHealth.reconnectAttempts = 0;
+                    this.connectionHealth.reconnectDelay = 5000; // Reset delay
+                    console.error('✅ Server health check passed - connection healthy');
                     resolve(true);
                 } else {
+                    console.error('⚠️ Server health check failed - status:', res.statusCode);
+                    this.updateConnectionHealth(false);
                     resolve(false);
                 }
             });
 
-            req.on('error', () => resolve(false));
+            req.on('error', (error) => {
+                console.error('❌ Health check request error:', error.message);
+                this.updateConnectionHealth(false);
+                resolve(false);
+            });
+
             req.on('timeout', () => {
+                console.error('⏰ Health check timeout');
                 req.destroy();
+                this.updateConnectionHealth(false);
                 resolve(false);
             });
 
             req.end();
         });
+    }
+
+    updateConnectionHealth(success) {
+        if (success) {
+            this.connectionHealth.consecutiveFailures = 0;
+            this.connectionHealth.isHealthy = true;
+            console.error('✅ Connection health updated - SUCCESS');
+        } else {
+            this.connectionHealth.consecutiveFailures++;
+            this.connectionHealth.isHealthy = false;
+            console.error(`❌ Connection health updated - FAILURE (${this.connectionHealth.consecutiveFailures} consecutive)`);
+
+            // For Railway connections, be more aggressive
+            const failureThreshold = this.serverUrl.includes('railway.app') ? 1 : 3;
+
+            if (this.connectionHealth.consecutiveFailures >= failureThreshold) {
+                this.connectionHealth.reconnectAttempts++;
+                console.error(`🔄 Connection unhealthy - attempt ${this.connectionHealth.reconnectAttempts}`);
+
+                // Check if we've exceeded total time limit
+                const elapsedTime = Date.now() - this.connectionHealth.startTime;
+                if (elapsedTime >= this.connectionHealth.maxTotalTime) {
+                    console.error(`⏰ Maximum reconnection time (${Math.round(this.connectionHealth.maxTotalTime / 60000)}min) exceeded`);
+                    return;
+                }
+
+                // Exponential backoff with jitter
+                const baseDelay = Math.min(
+                    this.connectionHealth.reconnectDelay * Math.pow(2, Math.min(this.connectionHealth.reconnectAttempts - 1, 4)), // Cap exponent
+                    this.connectionHealth.maxReconnectDelay
+                );
+                const jitter = Math.random() * 1000; // Add up to 1 second jitter
+                this.connectionHealth.reconnectDelay = baseDelay + jitter;
+
+                console.error(`⏳ Next reconnection attempt in ${Math.round(this.connectionHealth.reconnectDelay / 1000)}s (elapsed: ${Math.round(elapsedTime / 1000)}s)`);
+            }
+        }
+    }
+
+    async waitForReconnection() {
+        // Check if we've exceeded total time limit
+        const elapsedTime = Date.now() - this.connectionHealth.startTime;
+        if (elapsedTime >= this.connectionHealth.maxTotalTime) {
+            console.error(`🚫 Maximum reconnection time (${Math.round(this.connectionHealth.maxTotalTime / 60000)}min) exceeded - giving up`);
+            return false;
+        }
+
+        console.error(`⏳ Waiting ${Math.round(this.connectionHealth.reconnectDelay / 1000)}s before reconnection attempt...`);
+
+        // Check connection status during wait - Railway might wake up early
+        let earlySuccess = false;
+        let earlySuccessCheck = () => {
+            if (this.connectionHealth.isHealthy) {
+                console.error('🎉 Connection became healthy during wait - early success!');
+                earlySuccess = true;
+                // Reset reconnection counters since we're healthy now
+                this.connectionHealth.reconnectAttempts = 0;
+                this.connectionHealth.reconnectDelay = this.serverUrl.includes('railway.app') ? 3000 : 5000;
+                return true;
+            }
+            return false;
+        };
+
+        const checkInterval = setInterval(earlySuccessCheck, 2000); // Check every 2 seconds during wait
+
+        await new Promise(resolve => setTimeout(resolve, this.connectionHealth.reconnectDelay));
+        clearInterval(checkInterval);
+
+        // Check if we detected early success
+        if (earlySuccess) {
+            console.error('✅ Early reconnection success detected!');
+            console.error('🚂 RAILWAY EARLY RECONNECT: Connection restored during wait!');
+            return true;
+        }
+
+        // Final check before attempting
+        if (this.connectionHealth.isHealthy) {
+            console.error('🎉 Connection is already healthy!');
+            console.error('🚂 RAILWAY HEALTHY: No reconnection needed!');
+            return true;
+        }
+
+        // Try to reconnect
+        console.error('🔄 Attempting to reconnect...');
+        const isHealthy = await this.checkHealth();
+
+        if (isHealthy) {
+            console.error('🎉 Reconnection successful!');
+            console.error('🚂 RAILWAY SUCCESSFUL RECONNECT: MCP connection fully restored!');
+            return true;
+        } else {
+            console.error('❌ Reconnection failed, will retry...');
+            return false;
+        }
     }
 
     updateCircuitBreaker(success) {
@@ -122,18 +298,76 @@ class MCPBridge {
             // Check server health first
             console.error('🏥 Checking server health...');
             const isHealthy = await this.checkHealth();
-            if (!isHealthy) {
-                console.error('❌ Server health check failed');
-                this.updateCircuitBreaker(false);
-                return {
-                    jsonrpc: '2.0',
-                    error: {
-                        code: -32001,
-                        message: 'Server health check failed - service may be starting up'
-                    },
-                    id: message.id
-                };
+
+            // Check if we should trust periodic monitoring for Railway
+            const timeSinceLastSuccess = Date.now() - this.connectionHealth.lastSuccessfulHealthCheck;
+            const hasRecentSuccess = timeSinceLastSuccess < 30000; // Within last 30 seconds
+
+            if (!isHealthy && hasRecentSuccess && this.serverUrl.includes('railway.app')) {
+                console.error('🚂 RAILWAY: Periodic monitoring detected recent health - proceeding with request');
+                this.connectionHealth.consecutiveFailures = 0; // Reset failures
+                console.error('✅ Server health check passed (via periodic monitoring)');
+                isHealthy = true; // Override health check result
             }
+
+            if (!isHealthy) {
+                // Debug logging for connection health
+                console.error(`📊 Connection Health Debug: consecutiveFailures=${this.connectionHealth.consecutiveFailures}, reconnectAttempts=${this.connectionHealth.reconnectAttempts}, isHealthy=${this.connectionHealth.isHealthy}`);
+
+                // For Railway connections, be more aggressive with reconnection
+                const shouldAttemptReconnect = this.serverUrl.includes('railway.app')
+                    ? (this.connectionHealth.consecutiveFailures >= 1)
+                    : (this.connectionHealth.consecutiveFailures >= 3);
+
+                if (shouldAttemptReconnect) {
+                    console.error('🔄 Connection unhealthy - attempting reconnection...');
+                    const reconnected = await this.waitForReconnection();
+
+                    if (!reconnected) {
+                        console.error('❌ Reconnection failed - returning error');
+                        this.updateCircuitBreaker(false);
+                        const elapsedTime = Math.round((Date.now() - this.connectionHealth.startTime) / 1000);
+                        return {
+                            jsonrpc: '2.0',
+                            error: {
+                                code: -32004,
+                                message: `Connection failed after ${elapsedTime} seconds of reconnection attempts. Railway may be experiencing issues.`
+                            },
+                            id: message.id
+                        };
+                    }
+                    console.error('✅ Reconnection successful - proceeding with request');
+                    console.error('🚂 RAILWAY RECONNECTED: MCP connection restored!');
+                } else {
+                    // Check if we've exceeded total time limit
+                    const elapsedTime = Date.now() - this.connectionHealth.startTime;
+                    if (elapsedTime >= this.connectionHealth.maxTotalTime) {
+                        console.error(`🚫 Maximum reconnection time (${Math.round(this.connectionHealth.maxTotalTime / 60000)}min) exceeded - giving up`);
+                        this.updateCircuitBreaker(false);
+                        return {
+                            jsonrpc: '2.0',
+                            error: {
+                                code: -32004,
+                                message: `Connection failed after ${Math.round(elapsedTime / 1000)} seconds of reconnection attempts. Railway may be experiencing issues.`
+                            },
+                            id: message.id
+                        };
+                    }
+
+                    console.error(`❌ Server health check failed (failures: ${this.connectionHealth.consecutiveFailures}, threshold: ${this.serverUrl.includes('railway.app') ? 1 : 3})`);
+                    console.error(`⏰ Elapsed time: ${Math.round((Date.now() - this.connectionHealth.startTime) / 1000)}s, Max time: ${Math.round(this.connectionHealth.maxTotalTime / 1000)}s`);
+                    this.updateCircuitBreaker(false);
+                    return {
+                        jsonrpc: '2.0',
+                        error: {
+                            code: -32001,
+                            message: 'Server health check failed - service may be starting up'
+                        },
+                        id: message.id
+                    };
+                }
+            }
+
             console.error('✅ Server health check passed');
 
             // Retry logic with exponential backoff
@@ -194,87 +428,86 @@ class MCPBridge {
                     'User-Agent': 'MCP-Bridge/1.0',
                     'Accept': 'application/json'
                 },
-                agent: this.agent // Use connection pooling agent
+                agent: url.protocol === 'https:' ? this.httpsAgent : this.httpAgent // Use appropriate agent
             };
 
             const client = url.protocol === 'https:' ? https : http;
             const req = client.request(options, (res) => {
-                    let data = '';
+                let data = '';
 
-                    console.error('📡 HTTP Response status:', res.statusCode);
-                    console.error('📡 HTTP Response headers:', JSON.stringify(res.headers, null, 2));
+                console.error('📡 HTTP Response status:', res.statusCode);
+                console.error('📡 HTTP Response headers:', JSON.stringify(res.headers, null, 2));
 
-                    res.on('data', (chunk) => {
-                        const chunkStr = chunk.toString();
-                        data += chunkStr;
-                        console.error('📦 Received chunk:', chunkStr);
-                    });
-
-                    res.on('end', () => {
-                        console.error('✅ HTTP Response complete, total length:', data.length);
-                        console.error('✅ Raw response data:', data);
-
-                        // Handle empty response
-                        if (!data.trim()) {
-                            console.error('⚠️ Empty response from server');
-                            resolve({
-                                jsonrpc: '2.0',
-                                error: {
-                                    code: -32603,
-                                    message: 'Empty response from server'
-                                },
-                                id: message.id
-                            });
-                            return;
-                        }
-
-                        try {
-                            const response = JSON.parse(data);
-                            console.error('✅ Parsed response:', JSON.stringify(response, null, 2));
-                            resolve(response);
-                        } catch (e) {
-                            console.error('❌ Failed to parse JSON response:', e.message);
-                            console.error('❌ Raw response that failed to parse:', data);
-
-                            // Send a more compatible error response for Claude Desktop
-                            const errorResponse = {
-                                jsonrpc: '2.0',
-                                error: {
-                                    code: -32700,
-                                    message: 'Parse error: Invalid JSON response from server'
-                                },
-                                id: message.id
-                            };
-                            console.error('📤 Sending parse error response:', JSON.stringify(errorResponse));
-                            resolve(errorResponse); // Resolve instead of reject to send error to Claude
-                        }
-                    });
-
-                    // Handle response errors
-                    res.on('error', (e) => {
-                        console.error('❌ HTTP Response error:', e);
-                        reject(new Error(`HTTP response error: ${e.message}`));
-                    });
+                res.on('data', (chunk) => {
+                    const chunkStr = chunk.toString();
+                    data += chunkStr;
+                    console.error('📦 Received chunk:', chunkStr);
                 });
 
-                req.on('error', (e) => {
-                    console.error('❌ HTTP Request error:', e);
-                    console.error('❌ Error code:', e.code);
-                    reject(new Error(`${e.code || 'UNKNOWN'}: ${e.message}`));
+                res.on('end', () => {
+                    console.error('✅ HTTP Response complete, total length:', data.length);
+                    console.error('✅ Raw response data:', data);
+
+                    // Handle empty response
+                    if (!data.trim()) {
+                        console.error('⚠️ Empty response from server');
+                        resolve({
+                            jsonrpc: '2.0',
+                            error: {
+                                code: -32603,
+                                message: 'Empty response from server'
+                            },
+                            id: message.id
+                        });
+                        return;
+                    }
+
+                    try {
+                        const response = JSON.parse(data);
+                        console.error('✅ Parsed response:', JSON.stringify(response, null, 2));
+                        resolve(response);
+                    } catch (e) {
+                        console.error('❌ Failed to parse JSON response:', e.message);
+                        console.error('❌ Raw response that failed to parse:', data);
+
+                        // Send a more compatible error response for Claude Desktop
+                        const errorResponse = {
+                            jsonrpc: '2.0',
+                            error: {
+                                code: -32700,
+                                message: 'Parse error: Invalid JSON response from server'
+                            },
+                            id: message.id
+                        };
+                        console.error('📤 Sending parse error response:', JSON.stringify(errorResponse));
+                        resolve(errorResponse); // Resolve instead of reject to send error to Claude
+                    }
                 });
 
-                // Handle request timeout
-                req.setTimeout(90000, () => {
-                    console.error('⏰ Request timeout after 90 seconds');
-                    req.destroy();
-                    reject(new Error('Request timeout after 90 seconds'));
+                // Handle response errors
+                res.on('error', (e) => {
+                    console.error('❌ HTTP Response error:', e);
+                    reject(new Error(`HTTP response error: ${e.message}`));
                 });
-
-                const messageData = JSON.stringify(message);
-                console.error('📤 Sending request data:', messageData);
-                req.write(messageData);
-                req.end();
             });
+
+            req.on('error', (e) => {
+                console.error('❌ HTTP Request error:', e);
+                console.error('❌ Error code:', e.code);
+                reject(new Error(`${e.code || 'UNKNOWN'}: ${e.message}`));
+            });
+
+            // Handle request timeout
+            req.setTimeout(90000, () => {
+                console.error('⏰ Request timeout after 90 seconds');
+                req.destroy();
+                reject(new Error('Request timeout after 90 seconds'));
+            });
+
+            const messageData = JSON.stringify(message);
+            console.error('📤 Sending request data:', messageData);
+            req.write(messageData);
+            req.end();
         });
     }
 }
