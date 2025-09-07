@@ -22,9 +22,9 @@ from agent.api import agent_api
 
 urlpatterns = [
     # API endpoints - flexible (accept both trailing slash and no trailing slash)
-    re_path(r'^api/?', api.urls),          # /api, /api/, /api/subpath, etc.
-    re_path(r'^mcp/?', mcp_api.urls),      # /mcp, /mcp/, /mcp/tools, /mcp/sse, etc.
-    re_path(r'^a2a/?', a2a_api.urls),      # /a2a, /a2a/, /a2a/subpath, etc.
-    re_path(r'^agent/?', agent_api.urls),  # /agent, /agent/, /agent/subpath, etc.
-    re_path(r'^auth/?', include('django.contrib.auth.urls')),  # /auth, /auth/, /auth/subpath, etc.
+    re_path(r'^api', api.urls),            # /api, /api/, /api/subpath, etc.
+    re_path(r'^mcp', mcp_api.urls),        # /mcp, /mcp/, /mcp/tools, /mcp/sse, etc.
+    re_path(r'^a2a', a2a_api.urls),        # /a2a, /a2a/, /a2a/subpath, etc.
+    re_path(r'^agent', agent_api.urls),    # /agent, /agent/, /agent/subpath, etc.
+    re_path(r'^auth', include('django.contrib.auth.urls')),    # /auth, /auth/, /auth/subpath, etc.
 ]

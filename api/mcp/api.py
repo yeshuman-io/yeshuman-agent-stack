@@ -194,11 +194,6 @@ def list_tools_endpoint(request):
     """Convenience endpoint to list available tools."""
     return mcp_server.list_tools()
 
-@mcp_api.get("/tools/")
-def list_tools_endpoint_slash(request):
-    """Convenience endpoint to list available tools (with trailing slash)."""
-    return mcp_server.list_tools()
-
 
 class ToolCallRequest(Schema):
     tool_name: str
@@ -206,7 +201,6 @@ class ToolCallRequest(Schema):
 
 
 @mcp_api.post("/tools/call")
-@mcp_api.post("/tools/call/")
 async def call_tool_endpoint(request, payload: ToolCallRequest):
     """Convenience endpoint to call a tool directly."""
     try:
@@ -221,29 +215,14 @@ def mcp_sse_endpoint_get(request):
     """SSE endpoint for MCP protocol - proper streaming connection."""
     return sse_mcp_endpoint(request)
 
-@mcp_api.get("/sse/")
-def mcp_sse_endpoint_get_slash(request):
-    """SSE endpoint for MCP protocol - proper streaming connection (with trailing slash)."""
-    return sse_mcp_endpoint(request)
-
 
 @mcp_api.post("/sse")
 def mcp_sse_endpoint_post(request):
     """SSE endpoint for MCP protocol - handle POST requests."""
     return sse_mcp_endpoint(request)
 
-@mcp_api.post("/sse/")
-def mcp_sse_endpoint_post_slash(request):
-    """SSE endpoint for MCP protocol - handle POST requests (with trailing slash)."""
-    return sse_mcp_endpoint(request)
-
 
 @mcp_api.get("/tools/sse")
 def tools_sse_endpoint(request):
     """SSE endpoint for streaming tools list."""
-    return mcp_tools_sse(request)
-
-@mcp_api.get("/tools/sse/")
-def tools_sse_endpoint_slash(request):
-    """SSE endpoint for streaming tools list (with trailing slash)."""
     return mcp_tools_sse(request)
