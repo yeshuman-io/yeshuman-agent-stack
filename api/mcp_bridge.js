@@ -25,7 +25,8 @@ class MCPBridge {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'User-Agent': 'MCP-Bridge/1.0'
+                    'User-Agent': 'MCP-Bridge/1.0',
+                    'Accept': 'application/json'
                 }
             };
 
@@ -35,36 +36,71 @@ class MCPBridge {
                     let data = '';
 
                     console.error('📡 HTTP Response status:', res.statusCode);
-                    console.error('📡 HTTP Response headers:', res.headers);
+                    console.error('📡 HTTP Response headers:', JSON.stringify(res.headers, null, 2));
 
                     res.on('data', (chunk) => {
-                        data += chunk;
-                        console.error('📦 Received chunk:', chunk.toString());
+                        const chunkStr = chunk.toString();
+                        data += chunkStr;
+                        console.error('📦 Received chunk:', chunkStr);
                     });
 
                     res.on('end', () => {
-                        console.error('✅ HTTP Response complete:', data);
+                        console.error('✅ HTTP Response complete, total length:', data.length);
+                        console.error('✅ Raw response data:', data);
+
+                        // Handle empty response
+                        if (!data.trim()) {
+                            console.error('⚠️ Empty response from server');
+                            resolve({
+                                jsonrpc: '2.0',
+                                error: {
+                                    code: -32603,
+                                    message: 'Empty response from server'
+                                },
+                                id: message.id
+                            });
+                            return;
+                        }
+
                         try {
                             const response = JSON.parse(data);
+                            console.error('✅ Parsed response:', JSON.stringify(response, null, 2));
                             resolve(response);
                         } catch (e) {
-                            console.error('❌ Failed to parse response:', e);
-                            reject(new Error('Invalid JSON response from server'));
+                            console.error('❌ Failed to parse JSON response:', e.message);
+                            console.error('❌ Raw response that failed to parse:', data);
+                            reject(new Error(`Invalid JSON response from server: ${e.message}`));
                         }
+                    });
+
+                    // Handle response errors
+                    res.on('error', (e) => {
+                        console.error('❌ HTTP Response error:', e);
+                        reject(new Error(`HTTP response error: ${e.message}`));
                     });
                 });
 
                 req.on('error', (e) => {
                     console.error('❌ HTTP Request error:', e);
-                    reject(e);
+                    reject(new Error(`HTTP request error: ${e.message}`));
                 });
 
-                req.write(JSON.stringify(message));
+                // Handle request timeout
+                req.setTimeout(30000, () => {
+                    console.error('⏰ Request timeout');
+                    req.destroy();
+                    reject(new Error('Request timeout'));
+                });
+
+                const messageData = JSON.stringify(message);
+                console.error('📤 Sending request data:', messageData);
+                req.write(messageData);
                 req.end();
             });
 
         } catch (error) {
-            console.error('💥 Error handling message:', error);
+            console.error('💥 Error in handleMessage:', error);
+            console.error('💥 Stack trace:', error.stack);
             return {
                 jsonrpc: '2.0',
                 error: {
@@ -82,12 +118,80 @@ async function main() {
     const serverUrl = process.argv[2] || 'http://localhost:8000';
 
     console.error('🚀 Starting MCP Bridge...');
-    const bridge = new MCPBridge(serverUrl);
+    console.error('🔗 Server URL:', serverUrl);
+
+    let bridge;
+    try {
+        bridge = new MCPBridge(serverUrl);
+        console.error('✅ MCP Bridge initialized successfully');
+    } catch (e) {
+        console.error('❌ Failed to initialize MCP Bridge:', e);
+        process.exit(1);
+    }
 
     process.stdin.setEncoding('utf8');
 
     let buffer = '';
-    process.stdin.on('data', async (chunk) => {
+    let messageQueue = [];
+    let processing = false;
+
+    // Process messages sequentially to avoid race conditions
+    async function processNextMessage() {
+        if (processing || messageQueue.length === 0) {
+            return;
+        }
+
+        processing = true;
+        const message = messageQueue.shift();
+
+        try {
+            console.error('🎯 Processing message:', JSON.stringify(message, null, 2));
+
+            const response = await bridge.handleMessage(message);
+
+            // Send response back to Claude Desktop
+            const responseStr = JSON.stringify(response) + '\n';
+            console.error('📤 Sending response:', responseStr);
+
+            // Ensure stdout is written synchronously
+            if (process.stdout.write(responseStr)) {
+                console.error('✅ Response sent successfully');
+            } else {
+                console.error('⚠️ Response buffered, waiting for drain...');
+                process.stdout.once('drain', () => {
+                    console.error('✅ Response sent after drain');
+                });
+            }
+
+        } catch (e) {
+            console.error('❌ Error processing message:', e);
+            console.error('❌ Stack trace:', e.stack);
+
+            // Send error response
+            const errorResponse = {
+                jsonrpc: '2.0',
+                error: {
+                    code: -32603,
+                    message: `Bridge processing error: ${e.message}`
+                },
+                id: message.id || null
+            };
+
+            try {
+                const errorStr = JSON.stringify(errorResponse) + '\n';
+                process.stdout.write(errorStr);
+                console.error('📤 Sent error response:', errorStr);
+            } catch (sendError) {
+                console.error('❌ Failed to send error response:', sendError);
+            }
+        } finally {
+            processing = false;
+            // Process next message if any
+            setImmediate(processNextMessage);
+        }
+    }
+
+    process.stdin.on('data', (chunk) => {
         buffer += chunk;
 
         // Try to parse complete JSON-RPC messages
@@ -98,26 +202,44 @@ async function main() {
             if (line.trim()) {
                 try {
                     const message = JSON.parse(line.trim());
-                    console.error('🎯 Processing message:', message);
-
-                    const response = await bridge.handleMessage(message);
-
-                    // Send response back to Claude Desktop
-                    const responseStr = JSON.stringify(response) + '\n';
-                    process.stdout.write(responseStr);
-                    console.error('📤 Sent response:', responseStr);
-
+                    console.error('📨 Queued message for processing:', message);
+                    messageQueue.push(message);
+                    processNextMessage();
                 } catch (e) {
-                    console.error('❌ Failed to parse message:', e);
-                    console.error('   Raw line:', line);
+                    console.error('❌ Failed to parse incoming message:', e);
+                    console.error('❌ Raw line:', line);
+                    console.error('❌ Parse error:', e.message);
                 }
             }
         }
     });
 
     process.stdin.on('end', () => {
-        console.error('🔚 Stdin ended, exiting...');
+        console.error('🔚 Stdin ended, exiting gracefully...');
         process.exit(0);
+    });
+
+    // Handle process termination signals
+    process.on('SIGINT', () => {
+        console.error('🛑 Received SIGINT, exiting...');
+        process.exit(0);
+    });
+
+    process.on('SIGTERM', () => {
+        console.error('🛑 Received SIGTERM, exiting...');
+        process.exit(0);
+    });
+
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (err) => {
+        console.error('💥 Uncaught exception:', err);
+        console.error('💥 Stack trace:', err.stack);
+        process.exit(1);
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('💥 Unhandled rejection at:', promise, 'reason:', reason);
+        process.exit(1);
     });
 
     console.error('✅ MCP Bridge ready for messages...');

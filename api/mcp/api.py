@@ -136,9 +136,22 @@ async def mcp_endpoint(request):
 
         # Parse the JSON-RPC request for POST
         print("📨 Handling POST request - parsing JSON-RPC", file=sys.stderr)
+        print(f"📦 Raw request body: {request.body}", file=sys.stderr)
+
+        if not request.body:
+            print("⚠️ Empty request body", file=sys.stderr)
+            return StreamingHttpResponse(
+                [json.dumps({
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32600, "message": "Empty request body"},
+                    "id": None
+                })],
+                content_type='application/json'
+            )
+
         body = json.loads(request.body)
         logger.info(f"Request body: {body}")
-        print(f"📋 Request body: {body}", file=sys.stderr)
+        print(f"📋 Parsed request body: {body}", file=sys.stderr)
 
         # Handle Cursor's stdio-style initialization if no body
         if not body or not body.get("method"):
@@ -227,7 +240,21 @@ async def mcp_endpoint(request):
 @mcp_api.get("/tools")
 def list_tools_endpoint(request):
     """Convenience endpoint to list available tools."""
-    return mcp_server.list_tools()
+    print("🛠️ Tools endpoint called", file=sys.stderr)
+    tools = mcp_server.list_tools()
+    print(f"📋 Returning tools: {tools}", file=sys.stderr)
+    return tools
+
+
+@mcp_api.get("/test")
+def test_endpoint(request):
+    """Test endpoint to verify MCP server is working."""
+    print("🧪 Test endpoint called", file=sys.stderr)
+    return {
+        "status": "ok",
+        "message": "MCP server is working",
+        "tools_count": len(mcp_server.list_tools().get("tools", []))
+    }
 
 
 class ToolCallRequest(Schema):
