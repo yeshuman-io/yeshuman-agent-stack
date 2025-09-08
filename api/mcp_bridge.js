@@ -303,17 +303,20 @@ class MCPBridge {
                 const timeSinceLastFailure = Date.now() - this.circuitBreaker.lastFailureTime;
                 if (timeSinceLastFailure < this.circuitBreaker.recoveryTimeout) {
                     console.error('⛔ Circuit breaker OPEN - rejecting request');
-                    const errorResponse = {
-                        jsonrpc: '2.0',
-                        error: {
-                            code: -32003,
-                            message: 'Service temporarily unavailable - circuit breaker open'
-                        }
-                    };
                     if (message.id !== undefined) {
-                        errorResponse.id = message.id;
+                        const errorResponse = {
+                            jsonrpc: '2.0',
+                            error: {
+                                code: -32003,
+                                message: 'Service temporarily unavailable - circuit breaker open'
+                            },
+                            id: message.id
+                        };
+                        return errorResponse;
+                    } else {
+                        console.error('📢 Notification rejected by circuit breaker - no response sent');
+                        return null; // Don't return anything for notifications
                     }
-                    return errorResponse;
                 } else {
                     console.error('🔄 Circuit breaker HALF_OPEN - attempting recovery');
                     this.circuitBreaker.state = 'HALF_OPEN';
@@ -360,18 +363,21 @@ class MCPBridge {
                     if (!reconnected) {
                         console.error('❌ Reconnection failed - returning error');
                         this.updateCircuitBreaker(false);
-                        const elapsedTime = Math.round((Date.now() - this.connectionHealth.startTime) / 1000);
-                        const errorResponse = {
-                            jsonrpc: '2.0',
-                            error: {
-                                code: -32004,
-                                message: `Connection failed after ${elapsedTime} seconds of reconnection attempts. Railway may be experiencing issues.`
-                            }
-                        };
                         if (message.id !== undefined) {
-                            errorResponse.id = message.id;
+                            const elapsedTime = Math.round((Date.now() - this.connectionHealth.startTime) / 1000);
+                            const errorResponse = {
+                                jsonrpc: '2.0',
+                                error: {
+                                    code: -32004,
+                                    message: `Connection failed after ${elapsedTime} seconds of reconnection attempts. Railway may be experiencing issues.`
+                                },
+                                id: message.id
+                            };
+                            return errorResponse;
+                        } else {
+                            console.error('📢 Notification failed reconnection - no response sent');
+                            return null; // Don't return anything for notifications
                         }
-                        return errorResponse;
                     }
                     console.error('✅ Reconnection successful - proceeding with request');
                     console.error('🚂 RAILWAY RECONNECTED: MCP connection restored!');
@@ -381,33 +387,39 @@ class MCPBridge {
                     if (elapsedTime >= this.connectionHealth.maxTotalTime) {
                         console.error(`🚫 Maximum reconnection time (${Math.round(this.connectionHealth.maxTotalTime / 60000)}min) exceeded - giving up`);
                         this.updateCircuitBreaker(false);
-                        const errorResponse = {
-                            jsonrpc: '2.0',
-                            error: {
-                                code: -32004,
-                                message: `Connection failed after ${Math.round(elapsedTime / 1000)} seconds of reconnection attempts. Railway may be experiencing issues.`
-                            }
-                        };
                         if (message.id !== undefined) {
-                            errorResponse.id = message.id;
+                            const errorResponse = {
+                                jsonrpc: '2.0',
+                                error: {
+                                    code: -32004,
+                                    message: `Connection failed after ${Math.round(elapsedTime / 1000)} seconds of reconnection attempts. Railway may be experiencing issues.`
+                                },
+                                id: message.id
+                            };
+                            return errorResponse;
+                        } else {
+                            console.error('📢 Notification exceeded max time - no response sent');
+                            return null; // Don't return anything for notifications
                         }
-                        return errorResponse;
                     }
 
                     console.error(`❌ Server health check failed (failures: ${this.connectionHealth.consecutiveFailures}, threshold: ${this.serverUrl.includes('railway.app') ? 1 : 3})`);
                     console.error(`⏰ Elapsed time: ${Math.round((Date.now() - this.connectionHealth.startTime) / 1000)}s, Max time: ${Math.round(this.connectionHealth.maxTotalTime / 1000)}s`);
                     this.updateCircuitBreaker(false);
-                    const errorResponse = {
-                        jsonrpc: '2.0',
-                        error: {
-                            code: -32001,
-                            message: 'Server health check failed - service may be starting up'
-                        }
-                    };
                     if (message.id !== undefined) {
-                        errorResponse.id = message.id;
+                        const errorResponse = {
+                            jsonrpc: '2.0',
+                            error: {
+                                code: -32001,
+                                message: 'Server health check failed - service may be starting up'
+                            },
+                            id: message.id
+                        };
+                        return errorResponse;
+                    } else {
+                        console.error('📢 Notification health check failed - no response sent');
+                        return null; // Don't return anything for notifications
                     }
-                    return errorResponse;
                 }
             }
 
@@ -458,33 +470,39 @@ class MCPBridge {
 
             // All retries failed
             this.updateCircuitBreaker(false);
-            const maxAttemptsMsg = this.serverUrl.includes('railway.app') ? '5 attempts' : '3 attempts';
-            const errorResponse = {
-                jsonrpc: '2.0',
-                error: {
-                    code: -32002,
-                    message: `Request failed after ${maxAttemptsMsg}: ${lastError.message}`
-                }
-            };
             if (message.id !== undefined) {
-                errorResponse.id = message.id;
+                const maxAttemptsMsg = this.serverUrl.includes('railway.app') ? '5 attempts' : '3 attempts';
+                const errorResponse = {
+                    jsonrpc: '2.0',
+                    error: {
+                        code: -32002,
+                        message: `Request failed after ${maxAttemptsMsg}: ${lastError.message}`
+                    },
+                    id: message.id
+                };
+                return errorResponse;
+            } else {
+                console.error('📢 Notification failed after retries - no response sent');
+                return null; // Don't return anything for notifications
             }
-            return errorResponse;
 
         } catch (error) {
             console.error('❌ Unexpected error in handleMessage:', error);
             this.updateCircuitBreaker(false);
-            const errorResponse = {
-                jsonrpc: '2.0',
-                error: {
-                    code: -32603,
-                    message: `Bridge error: ${error.message}`
-                }
-            };
             if (message.id !== undefined) {
-                errorResponse.id = message.id;
+                const errorResponse = {
+                    jsonrpc: '2.0',
+                    error: {
+                        code: -32603,
+                        message: `Bridge error: ${error.message}`
+                    },
+                    id: message.id
+                };
+                return errorResponse;
+            } else {
+                console.error('📢 Notification caused unexpected error - no response sent');
+                return null; // Don't return anything for notifications
             }
-            return errorResponse;
         }
     }
 
@@ -629,7 +647,25 @@ async function main() {
         try {
             console.error('🎯 Processing message:', JSON.stringify(message, null, 2));
 
+            // Check if this is a notification (no id field) - notifications don't get responses
+            if (message.id === undefined) {
+                console.error('📢 Notification received (no id) - no response needed');
+                // Handle notification if needed, but don't send response
+                await bridge.handleMessage(message);
+                processing = false;
+                processNextMessage();
+                return;
+            }
+
             const response = await bridge.handleMessage(message);
+
+            // Don't send response if handleMessage returned null (for notifications)
+            if (response === null) {
+                console.error('📢 Notification handled - no response needed');
+                processing = false;
+                processNextMessage();
+                return;
+            }
 
             // Send response back to Claude Desktop
             const responseStr = JSON.stringify(response) + '\n';
@@ -649,26 +685,27 @@ async function main() {
             console.error('❌ Error processing message:', e);
             console.error('❌ Stack trace:', e.stack);
 
-            // Send error response with proper format for Claude Desktop
-            const errorResponse = {
-                jsonrpc: '2.0',
-                error: {
-                    code: -32603,
-                    message: `Bridge processing error: ${e.message}`
-                }
-            };
+            // Only send error responses for requests (messages with id), not notifications
             if (message.id !== undefined) {
-                errorResponse.id = message.id;
-            }
+                // Send error response with proper format for Claude Desktop
+                const errorResponse = {
+                    jsonrpc: '2.0',
+                    error: {
+                        code: -32603,
+                        message: `Bridge processing error: ${e.message}`
+                    },
+                    id: message.id
+                };
 
-            console.error('📤 Sending processing error response:', JSON.stringify(errorResponse));
+                console.error('📤 Sending processing error response:', JSON.stringify(errorResponse));
 
-            try {
-                const errorStr = JSON.stringify(errorResponse) + '\n';
-                process.stdout.write(errorStr);
-                console.error('📤 Sent error response:', errorStr);
-            } catch (sendError) {
-                console.error('❌ Failed to send error response:', sendError);
+                try {
+                    const errorStr = JSON.stringify(errorResponse) + '\n';
+                    process.stdout.write(errorStr);
+                    console.error('📤 Sent error response:', errorStr);
+                } catch (sendError) {
+                    console.error('❌ Failed to send error response:', sendError);
+                }
             }
         } finally {
             processing = false;
