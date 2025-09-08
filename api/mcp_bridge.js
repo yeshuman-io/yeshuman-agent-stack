@@ -319,7 +319,9 @@ class MCPBridge {
 
             // Check server health first
             console.error('🏥 Checking server health...');
-            let isHealthy = await this.checkHealth();
+            let isHealthy = message.method === 'tools/list' && this.serverUrl.includes('railway.app')
+                ? true  // Skip health check entirely for Railway tools/list
+                : await this.checkHealth();
 
             // Check if we should trust periodic monitoring for Railway
             const timeSinceLastSuccess = Date.now() - this.connectionHealth.lastSuccessfulHealthCheck;
@@ -332,10 +334,10 @@ class MCPBridge {
                 isHealthy = true; // Override health check result
             }
 
-            // For tools/list specifically, be more aggressive for Railway
-            if (!isHealthy && message.method === 'tools/list' && this.serverUrl.includes('railway.app')) {
-                console.error('🚂 RAILWAY: Skipping health check for tools/list - tools are critical');
-                console.error('✅ Server health check bypassed for tools/list');
+            // For tools/list specifically, be ultra-aggressive for Railway - ALWAYS skip health checks
+            if (message.method === 'tools/list' && this.serverUrl.includes('railway.app')) {
+                console.error('🚂 RAILWAY: ULTRA-FAST MODE for tools/list - bypassing all health checks');
+                console.error('✅ Server health check bypassed completely for tools/list');
                 isHealthy = true;
             }
 
@@ -429,11 +431,11 @@ class MCPBridge {
                     }
 
                     if (attempt < maxAttempts) {
-                        // Faster retries for tools/list on Railway (tools are critical)
+                        // Ultra-fast retries for tools/list on Railway (tools are critical)
                         const isToolsList = message.method === 'tools/list';
                         const delay = this.serverUrl.includes('railway.app')
                             ? (isToolsList
-                                ? Math.min(1000 * Math.pow(1.2, attempt - 1), 3000)  // Faster for tools/list
+                                ? Math.min(500 * Math.pow(1.1, attempt - 1), 1000)  // Ultra-fast for tools/list
                                 : Math.min(2000 * Math.pow(1.5, attempt - 1), 8000)) // Slower for others
                             : Math.min(1000 * Math.pow(2, attempt - 1), 5000);
                         console.error(`⏳ Waiting ${delay}ms before retry...`);
@@ -483,7 +485,7 @@ class MCPBridge {
                 },
                 agent: url.protocol === 'https:' ? this.httpsAgent : this.httpAgent, // Use appropriate agent
                 timeout: url.hostname.includes('railway.app')
-                    ? (originalMessage?.method === 'tools/list' ? 8000 : 15000)  // Shorter timeout for tools/list
+                    ? (originalMessage?.method === 'tools/list' ? 3000 : 15000)  // Ultra-fast timeout for tools/list
                     : 10000,
                 keepAlive: true,
                 keepAliveMsecs: 30000
