@@ -30,7 +30,9 @@ class MCPServer:
         self.logger = logging.getLogger(__name__)
         self.tools = {tool.name: tool for tool in tools}
 
-        # Log server initialization
+        # Pre-cache the tools list response for faster access
+        self.logger.info("Pre-caching tools list response...")
+        self._cached_tools_response = self._build_tools_list()
         self.logger.info(f"MCP Server initialized with {len(self.tools)} tools: {list(self.tools.keys())}")
 
         # Log tool details
@@ -40,9 +42,9 @@ class MCPServer:
                 schema_info = tool.args_schema.model_json_schema()
                 self.logger.info(f"Tool {tool.name} schema: {schema_info}")
     
-    def list_tools(self) -> Dict[str, Any]:
-        """List available tools."""
-        self.logger.info("Listing available tools")
+    def _build_tools_list(self) -> Dict[str, Any]:
+        """Build the tools list response (called once during initialization)."""
+        self.logger.info("Building tools list for caching")
         tools_list = []
 
         for tool in self.tools.values():
@@ -60,8 +62,13 @@ class MCPServer:
             tools_list.append(tool_info)
 
         result = {"tools": tools_list}
-        self.logger.info(f"Returning {len(tools_list)} tools to client")
+        self.logger.info(f"Built tools list with {len(tools_list)} tools")
         return result
+
+    def list_tools(self) -> Dict[str, Any]:
+        """List available tools."""
+        self.logger.info("Returning cached tools list response")
+        return self._cached_tools_response
     
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Call a specific tool."""
@@ -122,6 +129,9 @@ class MCPServer:
 
                     tools_list.append(tool_info)
 
+                # Get tools immediately for initialize response
+                tools_info = self.list_tools()
+
                 result = {
                     "protocolVersion": "2024-11-05",  # Use widely compatible MCP version
                     "capabilities": {
@@ -132,7 +142,8 @@ class MCPServer:
                     "serverInfo": {
                         "name": "Yes Human MCP Server",
                         "version": "1.0.0"
-                    }
+                    },
+                    "instructions": "This MCP server provides access to Yes Human's utility tools for calculations, weather information, and text analysis."
                 }
                 self.logger.info(f"Initialize response: {result}")
             elif request.method == "tools/list":
