@@ -303,14 +303,17 @@ class MCPBridge {
                 const timeSinceLastFailure = Date.now() - this.circuitBreaker.lastFailureTime;
                 if (timeSinceLastFailure < this.circuitBreaker.recoveryTimeout) {
                     console.error('⛔ Circuit breaker OPEN - rejecting request');
-                    return {
+                    const errorResponse = {
                         jsonrpc: '2.0',
                         error: {
                             code: -32003,
                             message: 'Service temporarily unavailable - circuit breaker open'
-                        },
-                        id: message.id
+                        }
                     };
+                    if (message.id !== undefined) {
+                        errorResponse.id = message.id;
+                    }
+                    return errorResponse;
                 } else {
                     console.error('🔄 Circuit breaker HALF_OPEN - attempting recovery');
                     this.circuitBreaker.state = 'HALF_OPEN';
@@ -358,14 +361,17 @@ class MCPBridge {
                         console.error('❌ Reconnection failed - returning error');
                         this.updateCircuitBreaker(false);
                         const elapsedTime = Math.round((Date.now() - this.connectionHealth.startTime) / 1000);
-                        return {
+                        const errorResponse = {
                             jsonrpc: '2.0',
                             error: {
                                 code: -32004,
                                 message: `Connection failed after ${elapsedTime} seconds of reconnection attempts. Railway may be experiencing issues.`
-                            },
-                            id: message.id
+                            }
                         };
+                        if (message.id !== undefined) {
+                            errorResponse.id = message.id;
+                        }
+                        return errorResponse;
                     }
                     console.error('✅ Reconnection successful - proceeding with request');
                     console.error('🚂 RAILWAY RECONNECTED: MCP connection restored!');
@@ -375,27 +381,33 @@ class MCPBridge {
                     if (elapsedTime >= this.connectionHealth.maxTotalTime) {
                         console.error(`🚫 Maximum reconnection time (${Math.round(this.connectionHealth.maxTotalTime / 60000)}min) exceeded - giving up`);
                         this.updateCircuitBreaker(false);
-                        return {
+                        const errorResponse = {
                             jsonrpc: '2.0',
                             error: {
                                 code: -32004,
                                 message: `Connection failed after ${Math.round(elapsedTime / 1000)} seconds of reconnection attempts. Railway may be experiencing issues.`
-                            },
-                            id: message.id
+                            }
                         };
+                        if (message.id !== undefined) {
+                            errorResponse.id = message.id;
+                        }
+                        return errorResponse;
                     }
 
                     console.error(`❌ Server health check failed (failures: ${this.connectionHealth.consecutiveFailures}, threshold: ${this.serverUrl.includes('railway.app') ? 1 : 3})`);
                     console.error(`⏰ Elapsed time: ${Math.round((Date.now() - this.connectionHealth.startTime) / 1000)}s, Max time: ${Math.round(this.connectionHealth.maxTotalTime / 1000)}s`);
                     this.updateCircuitBreaker(false);
-                    return {
+                    const errorResponse = {
                         jsonrpc: '2.0',
                         error: {
                             code: -32001,
                             message: 'Server health check failed - service may be starting up'
-                        },
-                        id: message.id
+                        }
                     };
+                    if (message.id !== undefined) {
+                        errorResponse.id = message.id;
+                    }
+                    return errorResponse;
                 }
             }
 
@@ -447,26 +459,32 @@ class MCPBridge {
             // All retries failed
             this.updateCircuitBreaker(false);
             const maxAttemptsMsg = this.serverUrl.includes('railway.app') ? '5 attempts' : '3 attempts';
-            return {
+            const errorResponse = {
                 jsonrpc: '2.0',
                 error: {
                     code: -32002,
                     message: `Request failed after ${maxAttemptsMsg}: ${lastError.message}`
-                },
-                id: message.id
+                }
             };
+            if (message.id !== undefined) {
+                errorResponse.id = message.id;
+            }
+            return errorResponse;
 
         } catch (error) {
             console.error('❌ Unexpected error in handleMessage:', error);
             this.updateCircuitBreaker(false);
-            return {
+            const errorResponse = {
                 jsonrpc: '2.0',
                 error: {
                     code: -32603,
                     message: `Bridge error: ${error.message}`
-                },
-                id: message.id
+                }
             };
+            if (message.id !== undefined) {
+                errorResponse.id = message.id;
+            }
+            return errorResponse;
         }
     }
 
@@ -637,9 +655,11 @@ async function main() {
                 error: {
                     code: -32603,
                     message: `Bridge processing error: ${e.message}`
-                },
-                id: message.id || null
+                }
             };
+            if (message.id !== undefined) {
+                errorResponse.id = message.id;
+            }
 
             console.error('📤 Sending processing error response:', JSON.stringify(errorResponse));
 
