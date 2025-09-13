@@ -4,7 +4,7 @@ Tests for Django authentication backend - testing real functionality without moc
 import os
 from unittest.mock import patch
 from django.test import TestCase, RequestFactory
-from auth.backends import UniversalAPIKeyBackend, APIKeyUser
+from apps.accounts.backends import UniversalAPIKeyBackend, APIKeyUser
 
 
 class TestDjangoAuthentication(TestCase):

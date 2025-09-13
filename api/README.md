@@ -48,7 +48,7 @@ MCP_AUTH_ENABLED=True
 ### Usage in Views
 
 ```python
-from auth import require_a2a_auth, require_mcp_auth
+from apps.accounts import require_a2a_auth, require_mcp_auth
 
 @require_a2a_auth
 def my_a2a_endpoint(request):

@@ -35,7 +35,7 @@ class JSONRPCRequest(Schema):
 @a2a_api.post("/", summary="A2A JSON-RPC endpoint (message/send)")
 async def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
     # Check authentication
-    from auth.backends import APIKeyUser
+    from apps.accounts.backends import APIKeyUser
     
     # Check if user is authenticated via API key
     if not isinstance(request.user, APIKeyUser):
@@ -162,7 +162,7 @@ async def a2a_jsonrpc_handler(request, payload: JSONRPCRequest):
 @a2a_api.post("/stream", summary="A2A JSON-RPC streaming endpoint (message/stream)")
 async def a2a_jsonrpc_stream_handler(request):
     # Check authentication
-    from auth.backends import APIKeyUser
+    from apps.accounts.backends import APIKeyUser
     
     # Check if user is authenticated via API key
     if not isinstance(request.user, APIKeyUser):
@@ -291,7 +291,7 @@ class TaskResponse(Schema):
 def register_agent(request, payload: AgentRegisterRequest):
     """Register a new agent or update existing one."""
     # Check authentication
-    from auth.backends import APIKeyUser
+    from apps.accounts.backends import APIKeyUser
     
     # Check if user is authenticated via API key
     if not isinstance(request.user, APIKeyUser):
@@ -529,7 +529,7 @@ def _send_message_callback_safe(message_id: str, event: str):
 def create_task(request, payload: TaskRequest):
     """Create a new task."""
     # Check authentication
-    from auth.backends import APIKeyUser
+    from apps.accounts.backends import APIKeyUser
     
     # Check if user is authenticated via API key
     if not isinstance(request.user, APIKeyUser):

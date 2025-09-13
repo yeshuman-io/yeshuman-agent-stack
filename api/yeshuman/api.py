@@ -6,10 +6,17 @@ from ninja import NinjaAPI, Schema
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from agent.graph import ainvoke_agent, ainvoke_agent_sync, astream_agent_tokens
-from auth.api import auth_router
+from apps.accounts.api import auth_router
+from apps.profiles.api import profiles_router
+from apps.organisations.api import organisations_router
+from apps.skills.api import skills_router
+from apps.opportunities.api import opportunities_router
+from apps.evaluations.api import evaluations_router
+from apps.applications.api import applications_router
+from apps.memories.api import memories_router
 from utils.sse import SSEHttpResponse
 from streaming.generators import AnthropicSSEGenerator
-from threads.services import (
+from apps.threads.services import (
     get_user_threads,
     get_thread,
     get_or_create_thread,
@@ -18,7 +25,7 @@ from threads.services import (
     create_human_message,
     create_assistant_message
 )
-from threads.models import Thread, Message, HumanMessage, AssistantMessage
+from apps.threads.models import Thread, Message, HumanMessage, AssistantMessage
 from django.contrib.auth import get_user_model
 import jwt
 from django.conf import settings
@@ -58,7 +65,28 @@ api = NinjaAPI(
 )
 
 # Add auth router
-api.add_router("/auth", auth_router, tags=["Authentication"])
+api.add_router("/accounts", auth_router, tags=["Authentication"])
+
+# Add profiles router
+api.add_router("/profiles", profiles_router, tags=["Profiles"])
+
+# Add organisations router
+api.add_router("/organisations", organisations_router, tags=["Organisations"])
+
+# Add skills router
+api.add_router("/skills", skills_router, tags=["Skills"])
+
+# Add opportunities router
+api.add_router("/opportunities", opportunities_router, tags=["Opportunities"])
+
+# Add evaluations router
+api.add_router("/evaluations", evaluations_router, tags=["Evaluations"])
+
+# Add applications router
+api.add_router("/applications", applications_router, tags=["Applications"])
+
+# Add memories router
+api.add_router("/memories", memories_router, tags=["Memories"])
 
 
 # Schemas

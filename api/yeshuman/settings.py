@@ -89,11 +89,11 @@ if not DEBUG:
 
 
 # Custom User model
-AUTH_USER_MODEL = 'yeshuman_auth.User'
+AUTH_USER_MODEL = 'accounts.User'
 
 # Authentication backends
 AUTHENTICATION_BACKENDS = [
-    'auth.backends.UniversalAPIKeyBackend',  # API key authentication for A2A/MCP
+    'apps.accounts.backends.UniversalAPIKeyBackend',  # API key authentication for A2A/MCP
     'django.contrib.auth.backends.ModelBackend',  # Default Django authentication
 ]
 
@@ -103,15 +103,23 @@ INSTALLED_APPS = [
     'daphne',
     'corsheaders',  # CORS support
     'polymorphic',  # Polymorphic models
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     # Yes Human apps
-    'auth.apps.AuthConfig',  # Custom auth app with unique label
-    'threads',  # Conversation threads
+    'apps.accounts',  # Custom accounts app with unique label
+    'apps.applications',  # Job applications
+    'apps.embeddings',  # AI/ML embeddings (provides pgvector)
+    'apps.evaluations',  # Performance/candidate evaluations
+    'apps.memories',  # Memory management
+    'apps.opportunities',  # Opportunities
+    'apps.organisations',  # Organizations
+    'apps.profiles',  # User profiles
+    'apps.seed',  # Data seeding utilities
+    'apps.skills',  # Skills
+    'apps.threads',  # Conversation threads
     'a2a',
 ]
 
@@ -123,7 +131,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'auth.middleware.APIKeyAuthenticationMiddleware',  # API key authentication
+    'apps.accounts.middleware.APIKeyAuthenticationMiddleware',  # API key authentication
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
