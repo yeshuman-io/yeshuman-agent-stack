@@ -5,11 +5,11 @@
   "main": "mcp_stdio_bridge.py",
   "scripts": {
     "bridge": "python mcp_stdio_bridge.py",
-    "server": "python manage.py runserver 0.0.0.0:8000",
+    "server": "python manage.py runserver 0.0.0.0:8001",
     "dev": "concurrently \"npm run server\" \"npm run bridge\"",
-    "bridge-pnpm": "pnpm dlx @thefoot/mcp-stdio-http-bridge --url http://127.0.0.1:8000/mcp/",
-    "bridge-npx": "npx @thefoot/mcp-stdio-http-bridge --url http://127.0.0.1:8000/mcp/",
-    "start-bridge": "pnpm dlx @thefoot/mcp-stdio-http-bridge --url http://127.0.0.1:8000/mcp/"
+    "bridge-pnpm": "pnpm dlx @thefoot/mcp-stdio-http-bridge --url http://127.0.0.1:8001/mcp/",
+    "bridge-npx": "npx @thefoot/mcp-stdio-http-bridge --url http://127.0.0.1:8001/mcp/",
+    "start-bridge": "pnpm dlx @thefoot/mcp-stdio-http-bridge --url http://127.0.0.1:8001/mcp/"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

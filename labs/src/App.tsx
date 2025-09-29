@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from './components/theme-provider'
 import { Activity, RotateCcw } from 'lucide-react'
 import { AnimatedTitle } from './components/animated-title'
@@ -7,6 +8,7 @@ import { ChatMessages, ChatInput } from './components/chat'
 import { ThinkingPanel, VoicePanel, ToolsPanel, SystemPanel } from './components/panels'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { AppSidebar } from './components/app-sidebar'
+import { Profile } from './components/profile'
 import { useSSE } from './hooks/use-sse'
 import { useAuth } from './hooks/use-auth'
 import './App.css'
@@ -94,68 +96,79 @@ function App() {
   }, []);
 
   return (
-    <ThemeProvider defaultTheme="dark" storageKey="yeshuman-v2-theme">
-      <SidebarProvider defaultOpen={false}>
-          <AppSidebar onThreadSelect={handleThreadSelect} />
-          <SidebarInset className="flex flex-col h-screen">
-          {/* Header */}
-          <div className="border-b p-4 flex justify-between items-center flex-shrink-0">
-            <div className="flex items-center space-x-2">
-              <SidebarTrigger />
-              <AnimatedTitle onAnimationTrigger={(triggerFn) => {
-                animationTriggerRef.current = triggerFn;
-              }} />
-              {currentThreadId && (
-                <div className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
-                  Thread: {currentThreadId.slice(-8)}
-                </div>
-              )}
+    <Router>
+      <ThemeProvider defaultTheme="dark" storageKey="yeshuman-v2-theme">
+        <SidebarProvider defaultOpen={false}>
+            <AppSidebar onThreadSelect={handleThreadSelect} />
+            <SidebarInset className="flex flex-col h-screen">
+            {/* Header */}
+            <div className="border-b p-4 flex justify-between items-center flex-shrink-0">
+              <div className="flex items-center space-x-2">
+                <SidebarTrigger />
+                <AnimatedTitle onAnimationTrigger={(triggerFn) => {
+                  animationTriggerRef.current = triggerFn;
+                }} />
+                {currentThreadId && (
+                  <div className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
+                    Thread: {currentThreadId.slice(-8)}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center space-x-4">
+                <Activity className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
+                <button
+                  onClick={startNewConversation}
+                  className="flex items-center space-x-2 px-3 py-1 bg-muted hover:bg-muted/80 rounded-md text-sm transition-colors"
+                  title="Start new conversation"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  <span>New</span>
+                </button>
+                <ModeToggle />
+              </div>
             </div>
-            <div className="flex items-center space-x-4">
-              <Activity className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
-              <button
-                onClick={startNewConversation}
-                className="flex items-center space-x-2 px-3 py-1 bg-muted hover:bg-muted/80 rounded-md text-sm transition-colors"
-                title="Start new conversation"
-              >
-                <RotateCcw className="h-4 w-4" />
-                <span>New</span>
-              </button>
-              <ModeToggle />
-            </div>
-          </div>
-          
-          {/* Main Layout */}
-          <div className="flex-1 flex min-h-0">
-            {/* Left: Chat */}
-            <div className="w-1/2 border-r flex flex-col min-h-0">
-              <ChatMessages messages={messages} />
-              <ChatInput 
-                inputText={inputText}
-                setInputText={setInputText}
-                onSubmit={handleSubmit}
-                isLoading={isLoading}
-              />
-            </div>
-            
-            {/* Right: 4-Panel Grid */}
-            <div className="w-1/2 flex flex-col">
-              {/* Top Row */}
-              <div className="flex-1 flex">
+
+            {/* Main Layout */}
+            <div className="flex-1 flex min-h-0">
+              {/* Chat: 1/4 width */}
+              <div className="flex-none w-1/4 border-r flex flex-col min-h-0">
+                <ChatMessages messages={messages} />
+                <ChatInput
+                  inputText={inputText}
+                  setInputText={setInputText}
+                  onSubmit={handleSubmit}
+                  isLoading={isLoading}
+                />
+              </div>
+
+              {/* Content Area: ~5/8 width (flex-1 makes it take remaining space) */}
+              <div className="flex-1 border-r bg-background">
+                <Routes>
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/" element={
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center text-muted-foreground">
+                        <div className="text-lg font-medium mb-2">Content Area</div>
+                        <div className="text-sm">Profile, Opportunities, and other pages will appear here</div>
+                      </div>
+                    </div>
+                  } />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </div>
+
+              {/* Panels: 1/8 width, single column with equal height distribution */}
+              <div className="flex-none w-1/8 flex flex-col h-full">
                 <ThinkingPanel content={thinkingContent} />
                 <VoicePanel voiceLines={voiceLines} />
-              </div>
-              
-              {/* Bottom Row */}
-              <div className="flex-1 flex">
                 <ToolsPanel activeTools={activeTools} />
                 <SystemPanel systemLogs={systemLogs} />
               </div>
             </div>
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
-    </ThemeProvider>
+          </SidebarInset>
+        </SidebarProvider>
+      </ThemeProvider>
+    </Router>
   );
 }
 

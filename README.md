@@ -133,7 +133,7 @@ yeshuman/
 cd api
 source .venv/bin/activate
 python manage.py check          # Verify Django setup
-python manage.py runserver      # Start development server at http://localhost:8000
+python manage.py runserver      # Start development server at http://localhost:3001
 ```
 
 ### 2. Start the A2A Inspector (Optional)
@@ -152,7 +152,7 @@ In a separate terminal window:
 echo '{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}' | python mcp_client.py
 
 # Test A2A functionality
-curl http://localhost:8000/a2a/agent-card/a2a
+curl http://localhost:3001/a2a/agent-card/a2a
 
 # Run comprehensive tests
 pytest                          # All 50 tests should pass
@@ -172,10 +172,10 @@ The Yes Human stack includes a complete MCP implementation:
 ```bash
 cd api
 source .venv/bin/activate
-python manage.py runserver      # Starts Django server on http://localhost:8000
+python manage.py runserver      # Starts Django server on http://localhost:3001
 ```
 
-The MCP server will be available at `http://localhost:8000/mcp/`
+The MCP server will be available at `http://localhost:3001/mcp/`
 
 ### Using the MCP Client
 
@@ -284,10 +284,10 @@ You can also interact with the MCP server directly via HTTP:
 
 ```bash
 # List tools
-curl -X GET http://localhost:8000/mcp/tools
+curl -X GET http://localhost:3001/mcp/tools
 
 # Call tool directly
-curl -X POST http://localhost:8000/mcp/tools/call \
+curl -X POST http://localhost:3001/mcp/tools/call \
   -H "Content-Type: application/json" \
   -d '{"tool_name": "calculator", "arguments": {"expression": "2+2"}}'
 ```
@@ -413,7 +413,7 @@ The A2A Inspector provides a web-based interface for testing and debugging A2A c
 ### Prerequisites
 - Node.js and npm installed
 - Python 3.13+ with uv package manager
-- Yes Human Agent Stack running on http://localhost:8000
+- Yes Human Agent Stack running on http://localhost:3001
 
 ### Installation & Setup
 
@@ -454,7 +454,7 @@ cd .. && chmod +x run.sh   # Make run script executable
 
 4. **Connect to Yes Human Agent**:
    - Click "Add Agent" or "Connect to Agent"
-   - Enter the Agent Card URL: `http://localhost:8000/a2a/agent-card/a2a`
+   - Enter the Agent Card URL: `http://localhost:3001/a2a/agent-card/a2a`
    - Click "Connect"
 
 5. **Test Streaming Communication**:
@@ -508,7 +508,7 @@ cd a2a-inspector && ./run.sh
 #### Connection Issues
 ```bash
 # Verify Yes Human agent is running
-curl http://localhost:8000/a2a/agent-card/a2a
+curl http://localhost:3001/a2a/agent-card/a2a
 
 # Check agent card format
 curl -s http://localhost:8000/a2a/agent-card/a2a | jq .
@@ -570,12 +570,12 @@ python mcp_client.py          # Interactive MCP client (expects stdin)
 echo '{"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}' | python mcp_client.py
 
 # A2A testing
-curl -X GET http://localhost:8000/a2a/discover
-curl -X GET http://localhost:8000/a2a/agent-card/a2a
-curl -X POST http://localhost:8000/a2a/capability-match -H "Content-Type: application/json" -d '{"required_capabilities": ["calculation"]}'
+curl -X GET http://localhost:3001/a2a/discover
+curl -X GET http://localhost:3001/a2a/agent-card/a2a
+curl -X POST http://localhost:3001/a2a/capability-match -H "Content-Type: application/json" -d '{"required_capabilities": ["calculation"]}'
 
 # A2A streaming testing
-curl -X POST http://localhost:8000/a2a/ -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "id": "1", "method": "message/send", "params": {"message": {"role": "user", "parts": [{"kind": "text", "text": "Hello!"}]}}}'
+curl -X POST http://localhost:3001/a2a/ -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "id": "1", "method": "message/send", "params": {"message": {"role": "user", "parts": [{"kind": "text", "text": "Hello!"}]}}}'
 
 # A2A Inspector testing
 ./a2a-inspector/run.sh        # Start visual testing tool at http://localhost:3000

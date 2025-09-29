@@ -1,5 +1,6 @@
-import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, Briefcase, Users, Shield } from "lucide-react"
+import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, Briefcase, Shield, Search, FileText, Users } from "lucide-react"
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 
 import {
   Sidebar,
@@ -16,7 +17,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { LoginDialog } from "@/components/login-dialog"
-import { TalentCoBrand } from "@/components/talentco-brand"
 import { useAuth } from "@/hooks/use-auth"
 import { CURRENT_CLIENT } from "@/constants"
 
@@ -57,12 +57,12 @@ interface UserFocus {
 }
 
 export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps = {}) {
+  const navigate = useNavigate()
   const { user, token, isAuthenticated, logout } = useAuth()
   const { state } = useSidebar()
   const [threads, setThreads] = useState<Thread[]>([])
   const [threadsLoading, setThreadsLoading] = useState(false)
   const [userFocus, setUserFocus] = useState<UserFocus | null>(null)
-  const [focusLoading, setFocusLoading] = useState(false)
 
   const isCollapsed = state === "collapsed"
 
@@ -75,6 +75,13 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
       setThreads([])
     }
   }, [isAuthenticated, user, token])
+
+  // Navigate to profile when seeker focus is selected
+  useEffect(() => {
+    if (userFocus?.current_focus === 'candidate') {
+      navigate('/profile')
+    }
+  }, [userFocus?.current_focus, navigate])
 
   // Also fetch threads and focus on component mount if already authenticated
   useEffect(() => {
@@ -226,7 +233,6 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
     }
 
     try {
-      setFocusLoading(true)
       console.log('Making request to: /api/accounts/focus')
 
       const response = await fetch('/api/accounts/focus', {
@@ -251,8 +257,6 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
     } catch (error) {
       console.error('Error fetching user focus:', error)
       setUserFocus(null)
-    } finally {
-      setFocusLoading(false)
     }
   }
 
@@ -264,8 +268,11 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
       return
     }
 
+    // Optimistic update: immediately update UI
+    const previousFocus = userFocus
+    setUserFocus(prev => prev ? { ...prev, current_focus: focus } : null)
+
     try {
-      setFocusLoading(true)
       console.log('Making request to: /api/accounts/focus')
 
       const response = await fetch('/api/accounts/focus', {
@@ -282,15 +289,19 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
       if (response.ok) {
         const result = await response.json()
         console.log('Focus set successfully:', result)
-        setUserFocus(result) // Update local state
+        setUserFocus(result) // Update with server response
       } else {
         const errorText = await response.text()
         console.error('Failed to set focus:', response.status, response.statusText, errorText)
+        // Revert optimistic update on failure
+        setUserFocus(previousFocus)
+        // TODO: Show user-friendly error message (toast notification)
       }
     } catch (error) {
       console.error('Error setting user focus:', error)
-    } finally {
-      setFocusLoading(false)
+      // Revert optimistic update on error
+      setUserFocus(previousFocus)
+      // TODO: Show user-friendly error message (toast notification)
     }
   }
 
@@ -326,38 +337,14 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="#">
-                <div className="flex items-center gap-3 w-full">
-                  <div className="flex-shrink-0">
-                    {CURRENT_CLIENT.logoPath ? (
-                      <img
-                        src={CURRENT_CLIENT.logoPath}
-                        alt={`${CURRENT_CLIENT.brand} logo`}
-                        className="h-8 w-8 object-contain rounded-md"
-                        onError={(e) => {
-                          // Fallback to Bot icon if logo fails to load
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const fallbackIcon = document.createElement('div');
-                          fallbackIcon.innerHTML = `<svg class="h-8 w-8 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>`;
-                          target.parentNode?.appendChild(fallbackIcon.firstChild as Node);
-                        }}
-                      />
-                    ) : (
-                      <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-muted text-sidebar-primary-foreground">
-                        {(() => {
-                          const IconComponent = getBrandIcon(CURRENT_CLIENT.brandIcon || 'Bot');
-                          return <IconComponent className="size-4 text-foreground" />;
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
-                    <TalentCoBrand />
-                    <span className="truncate text-xs text-muted-foreground">{CURRENT_CLIENT.tagline}</span>
-                  </div>
+              <div className="flex items-center justify-center">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-muted text-sidebar-primary-foreground">
+                  {(() => {
+                    const IconComponent = getBrandIcon(CURRENT_CLIENT.brandIcon || 'Bot');
+                    return <IconComponent className="size-4 text-foreground" />;
+                  })()}
                 </div>
-              </a>
+              </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -366,14 +353,7 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
       {/* Focus Selection */}
       {isAuthenticated && (
         <div className={`${isCollapsed ? 'px-2 py-3' : 'px-3 py-2'} border-b`}>
-          {!isCollapsed && (
-            <div className="text-xs text-muted-foreground mb-2">Focus Mode</div>
-          )}
-          {focusLoading ? (
-            <div className={`text-xs text-muted-foreground ${isCollapsed ? 'text-center' : ''}`}>
-              {isCollapsed ? '...' : 'Loading...'}
-            </div>
-          ) : userFocus ? (
+          {userFocus ? (
             <div className={`space-y-1 ${isCollapsed ? 'flex flex-col items-center space-y-2' : ''}`}>
               {userFocus.available_foci.map((focus) => {
                 const isSelected = userFocus.current_focus === focus
@@ -381,7 +361,6 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
                   <button
                     key={focus}
                     onClick={() => handleSetUserFocus(focus)}
-                    disabled={focusLoading}
                     className={`
                       flex items-center justify-center p-2 rounded-md transition-all duration-200
                       ${isCollapsed ? 'w-8 h-8' : 'w-full space-x-2 cursor-pointer hover:bg-muted/50 px-1 py-0.5'}
@@ -406,6 +385,62 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
             </div>
           )}
         </div>
+      )}
+
+      {/* Focus-Specific Navigation */}
+      {isAuthenticated && userFocus && (
+        <SidebarGroup>
+          <SidebarGroupLabel>Actions</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {userFocus.current_focus === 'candidate' ? (
+                // Job Seeker menu items
+                <>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Update your profile" onClick={() => navigate('/profile')}>
+                      <User className="size-4" />
+                      {!isCollapsed && <span>My Profile</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Browse job opportunities">
+                      <Search className="size-4" />
+                      {!isCollapsed && <span>Find Jobs</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="View application status">
+                      <FileText className="size-4" />
+                      {!isCollapsed && <span>My Applications</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </>
+              ) : userFocus.current_focus === 'employer' ? (
+                // Employer menu items
+                <>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Post a new job">
+                      <Briefcase className="size-4" />
+                      {!isCollapsed && <span>Post Job</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Manage your jobs">
+                      <Briefcase className="size-4" />
+                      {!isCollapsed && <span>My Jobs</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Review candidates">
+                      <Users className="size-4" />
+                      {!isCollapsed && <span>Candidates</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </>
+              ) : null}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       )}
 
       <SidebarContent className="custom-scrollbar">

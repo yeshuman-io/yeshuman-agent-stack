@@ -59,3 +59,4 @@ class Command(BaseCommand):
         for group_data in groups_data:
             self.stdout.write(f'  - {group_data["name"]}: {group_data["description"]}')
 
+
