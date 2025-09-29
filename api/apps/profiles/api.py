@@ -5,7 +5,8 @@ API endpoints for profiles app using Django Ninja.
 from ninja import Router, Schema
 from typing import List, Optional
 from asgiref.sync import sync_to_async
-from apps.profiles.models import Profile
+from apps.profiles.models import Profile, ProfileSkill
+from apps.skills.models import Skill
 from django.contrib.auth.models import User
 from django.contrib.auth import get_user_model
 import jwt
@@ -25,7 +26,8 @@ class ProfileSchema(Schema):
     full_name: Optional[str] = None
     email: Optional[str] = None
     bio: Optional[str] = None
-    location: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
     skills: Optional[List[str]] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -66,12 +68,18 @@ async def get_my_profile(request):
     def get_profile_sync():
         try:
             profile = Profile.objects.get(email=user.email)
+            # Get skills from ProfileSkill relationships
+            skills = list(profile.profile_skills.values_list('skill__name', flat=True))
             return ProfileSchema(
                 id=str(profile.id),
                 full_name=f"{profile.first_name} {profile.last_name}".strip(),
                 email=profile.email,
+                bio=profile.bio,
+                city=profile.city,
+                country=profile.country,
                 first_name=profile.first_name,
                 last_name=profile.last_name,
+                skills=skills,
             ), None
         except Profile.DoesNotExist:
             # Return profile data from user model if no profile exists
@@ -116,23 +124,61 @@ async def update_my_profile(request, payload: ProfileSchema):
             defaults={
                 'first_name': payload.first_name or user.first_name or '',
                 'last_name': payload.last_name or user.last_name or '',
+                'bio': payload.bio,
+                'city': payload.city,
+                'country': payload.country,
             }
         )
 
         if not created:
+            # Update existing profile
             if payload.first_name is not None:
                 profile.first_name = payload.first_name
             if payload.last_name is not None:
                 profile.last_name = payload.last_name
+            if payload.bio is not None:
+                profile.bio = payload.bio
+            if payload.city is not None:
+                profile.city = payload.city
+            if payload.country is not None:
+                profile.country = payload.country
             profile.save()
+
+        # Handle skills
+        if payload.skills is not None:
+            current_skills = set(profile.profile_skills.values_list('skill__name', flat=True))
+            new_skills = set(payload.skills)
+
+            # Skills to add
+            skills_to_add = new_skills - current_skills
+            for skill_name in skills_to_add:
+                skill, _ = Skill.objects.get_or_create(name=skill_name)
+                ProfileSkill.objects.get_or_create(
+                    profile=profile,
+                    skill=skill,
+                    defaults={'evidence_level': 'stated'}
+                )
+
+            # Skills to remove
+            skills_to_remove = current_skills - new_skills
+            for skill_name in skills_to_remove:
+                try:
+                    skill = Skill.objects.get(name=skill_name)
+                    ProfileSkill.objects.filter(profile=profile, skill=skill).delete()
+                except Skill.DoesNotExist:
+                    pass  # Skill doesn't exist, nothing to remove
+
+        # Get updated skills list
+        skills = list(profile.profile_skills.values_list('skill__name', flat=True))
 
         return ProfileSchema(
             id=str(profile.id),
             full_name=f"{profile.first_name} {profile.last_name}".strip(),
             email=profile.email,
-            bio=payload.bio,
-            location=payload.location,
-            skills=payload.skills or [],
+            bio=profile.bio,
+            city=profile.city,
+            country=profile.country,
+            skills=skills,
             first_name=profile.first_name,
             last_name=profile.last_name,
         )
