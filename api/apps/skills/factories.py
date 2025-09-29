@@ -15,3 +15,7 @@ class SkillFactory(DjangoModelFactory):
         model = Skill
 
     name = Sequence(lambda n: f"Skill {n}")
+
+
+
+

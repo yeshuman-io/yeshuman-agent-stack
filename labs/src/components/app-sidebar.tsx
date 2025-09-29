@@ -1,4 +1,4 @@
-import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart } from "lucide-react"
+import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, Briefcase, Users, Shield } from "lucide-react"
 import { useState, useEffect } from "react"
 
 import {
@@ -13,6 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { LoginDialog } from "@/components/login-dialog"
 import { TalentCoBrand } from "@/components/talentco-brand"
@@ -48,10 +49,22 @@ interface AppSidebarProps {
   onRefreshThreads?: () => void
 }
 
+// Focus interface
+interface UserFocus {
+  current_focus: string
+  available_foci: string[]
+  focus_confirmed: boolean
+}
+
 export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps = {}) {
   const { user, token, isAuthenticated, logout } = useAuth()
+  const { state } = useSidebar()
   const [threads, setThreads] = useState<Thread[]>([])
   const [threadsLoading, setThreadsLoading] = useState(false)
+  const [userFocus, setUserFocus] = useState<UserFocus | null>(null)
+  const [focusLoading, setFocusLoading] = useState(false)
+
+  const isCollapsed = state === "collapsed"
 
   // Fetch threads when user is authenticated
   useEffect(() => {
@@ -63,13 +76,29 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
     }
   }, [isAuthenticated, user, token])
 
-  // Also fetch threads on component mount if already authenticated
+  // Also fetch threads and focus on component mount if already authenticated
   useEffect(() => {
-    if (isAuthenticated && user && token && threads.length === 0) {
-      console.log('Component mounted with authentication, fetching threads...')
-      fetchThreads()
+    if (isAuthenticated && user && token) {
+      if (threads.length === 0) {
+        console.log('Component mounted with authentication, fetching threads...')
+        fetchThreads()
+      }
+      if (!userFocus) {
+        console.log('Component mounted with authentication, fetching focus...')
+        fetchUserFocus()
+      }
     }
   }, []) // Only run on mount
+
+  // Fetch user focus when authentication state changes
+  useEffect(() => {
+    if (isAuthenticated && user && token) {
+      console.log('Authentication state changed, fetching focus...')
+      fetchUserFocus()
+    } else {
+      setUserFocus(null)
+    }
+  }, [isAuthenticated, user, token])
 
   const fetchThreads = async () => {
     console.log('fetchThreads called, token:', token ? token.substring(0, 20) + '...' : 'null')
@@ -187,6 +216,110 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
     }
   }
 
+  const fetchUserFocus = async () => {
+    console.log('fetchUserFocus called, token:', token ? token.substring(0, 20) + '...' : 'null')
+    console.log('isAuthenticated:', isAuthenticated, 'user:', user?.username)
+
+    if (!token) {
+      console.warn('No token available for focus fetch')
+      return
+    }
+
+    try {
+      setFocusLoading(true)
+      console.log('Making request to: /api/accounts/focus')
+
+      const response = await fetch('/api/accounts/focus', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      console.log('Focus fetch response status:', response.status)
+
+      if (response.ok) {
+        const focusData = await response.json()
+        console.log('Fetched user focus:', focusData)
+        setUserFocus(focusData)
+      } else {
+        const errorText = await response.text()
+        console.error('Failed to fetch focus:', response.status, response.statusText, errorText)
+        setUserFocus(null)
+      }
+    } catch (error) {
+      console.error('Error fetching user focus:', error)
+      setUserFocus(null)
+    } finally {
+      setFocusLoading(false)
+    }
+  }
+
+  const handleSetUserFocus = async (focus: string) => {
+    console.log('handleSetUserFocus called with focus:', focus)
+
+    if (!token) {
+      console.warn('No token available for focus setting')
+      return
+    }
+
+    try {
+      setFocusLoading(true)
+      console.log('Making request to: /api/accounts/focus')
+
+      const response = await fetch('/api/accounts/focus', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ focus }),
+      })
+
+      console.log('Focus set response status:', response.status)
+
+      if (response.ok) {
+        const result = await response.json()
+        console.log('Focus set successfully:', result)
+        setUserFocus(result) // Update local state
+      } else {
+        const errorText = await response.text()
+        console.error('Failed to set focus:', response.status, response.statusText, errorText)
+      }
+    } catch (error) {
+      console.error('Error setting user focus:', error)
+    } finally {
+      setFocusLoading(false)
+    }
+  }
+
+  const getFocusIcon = (focus: string) => {
+    switch (focus) {
+      case 'candidate':
+        return <User className="size-4" />
+      case 'employer':
+        return <Briefcase className="size-4" />
+      case 'admin':
+        return <Shield className="size-4" />
+      default:
+        return <User className="size-4" />
+    }
+  }
+
+  const getFocusLabel = (focus: string) => {
+    switch (focus) {
+      case 'candidate':
+        return 'Job Seeker'
+      case 'employer':
+        return 'Employer'
+      case 'admin':
+        return 'Admin'
+      default:
+        return focus
+    }
+  }
+
   return (
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
@@ -229,7 +362,52 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      
+
+      {/* Focus Selection */}
+      {isAuthenticated && (
+        <div className={`${isCollapsed ? 'px-2 py-3' : 'px-3 py-2'} border-b`}>
+          {!isCollapsed && (
+            <div className="text-xs text-muted-foreground mb-2">Focus Mode</div>
+          )}
+          {focusLoading ? (
+            <div className={`text-xs text-muted-foreground ${isCollapsed ? 'text-center' : ''}`}>
+              {isCollapsed ? '...' : 'Loading...'}
+            </div>
+          ) : userFocus ? (
+            <div className={`space-y-1 ${isCollapsed ? 'flex flex-col items-center space-y-2' : ''}`}>
+              {userFocus.available_foci.map((focus) => {
+                const isSelected = userFocus.current_focus === focus
+                return (
+                  <button
+                    key={focus}
+                    onClick={() => handleSetUserFocus(focus)}
+                    disabled={focusLoading}
+                    className={`
+                      flex items-center justify-center p-2 rounded-md transition-all duration-200
+                      ${isCollapsed ? 'w-8 h-8' : 'w-full space-x-2 cursor-pointer hover:bg-muted/50 px-1 py-0.5'}
+                      ${isSelected
+                        ? 'bg-primary/10 text-primary border border-primary/20'
+                        : 'text-muted-foreground hover:text-foreground opacity-50 hover:opacity-100'
+                      }
+                    `}
+                    title={isCollapsed ? getFocusLabel(focus) : undefined}
+                  >
+                    {getFocusIcon(focus)}
+                    {!isCollapsed && (
+                      <span className="text-xs">{getFocusLabel(focus)}</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className={`text-xs text-muted-foreground ${isCollapsed ? 'text-center' : ''}`}>
+              {isCollapsed ? '!' : 'Unable to load focus options'}
+            </div>
+          )}
+        </div>
+      )}
+
       <SidebarContent className="custom-scrollbar">
         <SidebarGroup>
           <SidebarGroupLabel>Threads</SidebarGroupLabel>

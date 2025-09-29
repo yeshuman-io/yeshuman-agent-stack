@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
+      const response = await fetch(`${API_URL}/api/accounts/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

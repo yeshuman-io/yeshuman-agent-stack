@@ -5,3 +5,7 @@ import pytest
 def skill():
     from ..factories import SkillFactory
     return SkillFactory()
+
+
+
+

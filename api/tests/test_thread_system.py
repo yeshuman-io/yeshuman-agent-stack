@@ -17,8 +17,8 @@ from django.urls import reverse
 from unittest.mock import patch, AsyncMock
 from asgiref.sync import sync_to_async
 
-from threads.models import Thread, HumanMessage, AssistantMessage
-from threads.services import (
+from apps.threads.models import Thread, HumanMessage, AssistantMessage
+from apps.threads.services import (
     get_or_create_thread,
     get_user_threads,
     get_session_threads,

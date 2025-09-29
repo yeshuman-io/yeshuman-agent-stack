@@ -138,10 +138,14 @@ MIDDLEWARE = [
 
 # CORS settings - configurable via environment variable
 CORS_ALLOWED_ORIGINS_DEFAULTS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",  # Vite dev server
-    "http://127.0.0.1:5173",  # Vite dev server
+    "http://localhost:3000",    # Legacy frontend port
+    "http://127.0.0.1:3000",   # Legacy frontend port
+    "http://localhost:3001",    # Current frontend port (labs pnpm)
+    "http://127.0.0.1:3001",   # Current frontend port (labs pnpm)
+    "http://localhost:8001",    # Current backend port (django)
+    "http://127.0.0.1:8001",   # Current backend port (django)
+    "http://localhost:5173",    # Vite dev server
+    "http://127.0.0.1:5173",   # Vite dev server
 ]
 
 # Get CORS origins from environment variable or use defaults
@@ -243,6 +247,10 @@ else:
                 'NAME': BASE_DIR / 'db.sqlite3',
             }
         }
+
+
+# OpenAI Configuration
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 
 # Password validation

@@ -8,17 +8,20 @@ import { ThinkingPanel, VoicePanel, ToolsPanel, SystemPanel } from './components
 import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { AppSidebar } from './components/app-sidebar'
 import { useSSE } from './hooks/use-sse'
-import { AuthProvider } from './hooks/use-auth'
+import { useAuth } from './hooks/use-auth'
 import './App.css'
 
 function App() {
+  // Get auth token
+  const { token } = useAuth();
+
   // Input state (separate from SSE hook)
   const [inputText, setInputText] = useState('');
   const [systemLogs] = useState<string[]>([]);
-  
+
   // Animation trigger
   const animationTriggerRef = useRef<(() => void) | null>(null);
-  
+
   // Use SSE hook for all streaming functionality
   const {
     messages,
@@ -36,7 +39,7 @@ function App() {
     if (animationTriggerRef.current) {
       animationTriggerRef.current();
     }
-  });
+  }, token);
 
   // Handle input submission
   const handleSubmit = useCallback(() => {
@@ -92,8 +95,7 @@ function App() {
 
   return (
     <ThemeProvider defaultTheme="dark" storageKey="yeshuman-v2-theme">
-      <AuthProvider>
-        <SidebarProvider>
+      <SidebarProvider defaultOpen={false}>
           <AppSidebar onThreadSelect={handleThreadSelect} />
           <SidebarInset className="flex flex-col h-screen">
           {/* Header */}
@@ -153,7 +155,6 @@ function App() {
           </div>
         </SidebarInset>
       </SidebarProvider>
-    </AuthProvider>
     </ThemeProvider>
   );
 }

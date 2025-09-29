@@ -64,6 +64,26 @@ class LoginSchema(Schema):
     password: str
 
 
+class FocusResponse(Schema):
+    """Response schema for user focus."""
+    current_focus: str
+    available_foci: list[str]
+    focus_confirmed: bool
+
+
+class SetFocusRequest(Schema):
+    """Schema for setting user focus."""
+    focus: str
+
+    @field_validator('focus')
+    @classmethod
+    def validate_focus(cls, v):
+        valid_foci = ['candidate', 'employer', 'admin']
+        if v not in valid_foci:
+            raise ValueError(f'Focus must be one of: {", ".join(valid_foci)}')
+        return v
+
+
 def create_jwt_token(user):
     """Create JWT token for user."""
     payload = {
@@ -167,6 +187,96 @@ def get_current_user(request):
             username=user.username,
             email=user.email
         )
+    except jwt.ExpiredSignatureError:
+        return 401, {"error": "Token expired"}
+    except jwt.InvalidTokenError:
+        return 401, {"error": "Invalid token"}
+    except User.DoesNotExist:
+        return 401, {"error": "User not found"}
+
+
+@auth_router.get("/focus", response={200: FocusResponse, 401: dict})
+def get_user_focus(request):
+    """Get current user focus and available options."""
+    from .utils import get_available_foci_for_user, negotiate_user_focus
+
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+
+    if not auth_header.startswith('Bearer '):
+        return 401, {"error": "No token provided"}
+
+    token = auth_header.split(' ')[1]
+
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        User = get_user_model()
+        user = User.objects.get(id=payload['user_id'])
+
+        # Set request.user for session functions
+        request.user = user
+
+        current_focus, error = negotiate_user_focus(request)
+        available_foci = get_available_foci_for_user(user)
+        focus_confirmed = request.session.get('focus_confirmed', False)
+
+        return 200, FocusResponse(
+            current_focus=current_focus,
+            available_foci=available_foci,
+            focus_confirmed=focus_confirmed
+        )
+    except jwt.ExpiredSignatureError:
+        return 401, {"error": "Token expired"}
+    except jwt.InvalidTokenError:
+        return 401, {"error": "Invalid token"}
+    except User.DoesNotExist:
+        return 401, {"error": "User not found"}
+
+
+@auth_router.post("/focus", response={200: dict, 400: dict, 401: dict})
+def set_user_focus(request, data: SetFocusRequest):
+    """Set user focus."""
+    from .utils import negotiate_user_focus, get_available_foci_for_user
+    import logging
+    logger = logging.getLogger(__name__)
+
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+    logger.info(f"🔐 Focus POST auth header: '{auth_header}'")
+
+    if not auth_header.startswith('Bearer '):
+        logger.error("🔐 No Bearer token in header")
+        return 401, {"error": "No token provided"}
+
+    token = auth_header.split(' ')[1]
+    logger.info(f"🔐 Extracted token: '{token[:20]}...'")
+
+    try:
+        logger.info(f"🔐 Decoding with secret: {JWT_SECRET_KEY[:10]}... and algo: {JWT_ALGORITHM}")
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        logger.info(f"🔐 Decoded payload: {payload}")
+        User = get_user_model()
+        user = User.objects.get(id=payload['user_id'])
+        logger.info(f"🔐 Found user: {user.username} (id: {user.id})")
+
+        # Set request.user for session functions
+        request.user = user
+        logger.info(f"🔐 Set request.user to: {request.user}")
+
+        available_foci = get_available_foci_for_user(user)
+        if data.focus not in available_foci:
+            return 400, {"error": f"Focus '{data.focus}' not available for this user"}
+
+        # Set the focus
+        current_focus, error = negotiate_user_focus(request, data.focus)
+
+        if error:
+            return 400, {"error": error}
+
+        return 200, {
+            "success": True,
+            "message": f"Focus set to {current_focus}",
+            "current_focus": current_focus,
+            "available_foci": available_foci
+        }
     except jwt.ExpiredSignatureError:
         return 401, {"error": "Token expired"}
     except jwt.InvalidTokenError:

@@ -194,17 +194,32 @@ ALL_UTILITY_TOOLS = [
     TextAnalysisTool(),
 ]
 
+# Import all application tools for the ReAct agent
+try:
+    from apps.applications.tools import APPLICATION_TOOLS
+    from apps.evaluations.tools import EVALUATION_TOOLS
+    from apps.opportunities.tools import OPPORTUNITY_TOOLS
+    from apps.profiles.tools import PROFILE_TOOLS
+
+    # Combine all tools for the agent
+    ALL_APP_TOOLS = APPLICATION_TOOLS + EVALUATION_TOOLS + OPPORTUNITY_TOOLS + PROFILE_TOOLS
+
+    print(f"✅ Loaded {len(ALL_APP_TOOLS)} application tools", file=__import__('sys').stderr)
+except ImportError as e:
+    print(f"⚠️ Application tools not loaded due to import error: {e}", file=__import__('sys').stderr)
+    ALL_APP_TOOLS = []
+
 # Export available tools for ReAct agent (user conversation tools only)
 # Note: agent_chat and agent_capabilities are excluded as they're for MCP/A2A use
 # Voice generation is now handled directly in the agent_node
-AVAILABLE_TOOLS = BASIC_TOOLS
+AVAILABLE_TOOLS = BASIC_TOOLS + ALL_APP_TOOLS
 
-# MCP/A2A tools - temporarily exclude agent tools to fix Claude Desktop connection issues
-# TODO: Re-enable agent tools after fixing circular import
-# try:
-#     from tools.agent_tools import AGENT_TOOLS
-#     MCP_TOOLS = ALL_UTILITY_TOOLS + AGENT_TOOLS
-# except ImportError:
-#     # Fallback if circular import occurs
-#     MCP_TOOLS = ALL_UTILITY_TOOLS
-MCP_TOOLS = ALL_UTILITY_TOOLS  # Basic tools only for now
+# MCP/A2A tools - include agent tools for full functionality
+try:
+    from tools.agent_tools import AGENT_TOOLS
+    MCP_TOOLS = ALL_UTILITY_TOOLS + AGENT_TOOLS + ALL_APP_TOOLS
+    print(f"✅ Loaded {len(AGENT_TOOLS)} agent tools", file=__import__('sys').stderr)
+except ImportError as e:
+    # Fallback if circular import occurs
+    print(f"⚠️ Agent tools not loaded due to import error: {e}", file=__import__('sys').stderr)
+    MCP_TOOLS = ALL_UTILITY_TOOLS + ALL_APP_TOOLS

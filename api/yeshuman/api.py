@@ -486,7 +486,7 @@ async def delete_thread(request, thread_id: str):
     # await thread.adelete()
 
     # Option 2: Manual cascade deletion (current working approach)
-    from threads.services import get_all_thread_messages
+    from apps.threads.services import get_all_thread_messages
     messages = await get_all_thread_messages(thread_id)
     for message in messages:
         await sync_to_async(message.delete)()

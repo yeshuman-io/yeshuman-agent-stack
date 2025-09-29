@@ -5,7 +5,7 @@ import json
 from django.test import TestCase, Client
 from django.contrib.auth import get_user_model
 from unittest.mock import patch
-from threads.models import Thread, HumanMessage, AssistantMessage
+from apps.threads.models import Thread, HumanMessage, AssistantMessage
 
 User = get_user_model()
 

@@ -1,10 +1,9 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { SSE_ENDPOINT } from '../constants';
-import { useAuth } from './use-auth';
 import type { ChatMessage, SSEEvent, ContentBlock } from '../types';
 
-export const useSSE = (onMessageStart?: () => void) => {
+export const useSSE = (onMessageStart?: () => void, token?: string | null) => {
   // Core state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -13,15 +12,13 @@ export const useSSE = (onMessageStart?: () => void) => {
   // Thread management
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
 
-  // Get auth token (conditionally to avoid dependency issues)
+  // Token ref
   const tokenRef = useRef<string | null>(null);
-  try {
-    const { token } = useAuth();
-    tokenRef.current = token;
-  } catch (error) {
-    // AuthProvider not available yet, token will be null
-    tokenRef.current = null;
-  }
+
+  // Update token ref when token changes
+  useEffect(() => {
+    tokenRef.current = token || null;
+  }, [token]);
   
   // Content streaming state
   const [thinkingContent, setThinkingContent] = useState('');
@@ -114,12 +111,25 @@ export const useSSE = (onMessageStart?: () => void) => {
               // Parse tool content to extract tool names
               const content = (text || '');
               setToolOutput(prev => prev + content);
-              
+
               // Extract tool names from content like "🔧 Calling tools: weather, weather, weather"
               const toolMatch = content.match(/Calling tools: (.+)/);
               if (toolMatch) {
                 const toolNames = toolMatch[1].split(', ').map((name: string) => name.trim());
                 setActiveTools(toolNames);
+              }
+              break;
+
+            case 'tool_complete_delta':
+              // Clear completed tools
+              const completeContent = (text || '');
+              setToolOutput(prev => prev + completeContent);
+
+              // Extract completed tool names and remove them from active tools
+              const completeMatch = completeContent.match(/Completed tools: (.+)/);
+              if (completeMatch) {
+                const completedToolNames = completeMatch[1].split(', ').map((name: string) => name.trim());
+                setActiveTools(prev => prev.filter(tool => !completedToolNames.includes(tool)));
               }
               break;
               

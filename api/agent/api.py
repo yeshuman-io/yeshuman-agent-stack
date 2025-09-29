@@ -115,15 +115,25 @@ async def stream(request):
             user = None
             try:
                 from yeshuman.api import get_user_from_token
+                auth_header = request.headers.get('authorization', '')
+                logger.info(f"🔐 Agent auth header: '{auth_header}'")
                 user = await get_user_from_token(request)
-            except:
+                logger.info(f"🔐 Agent user extracted: {user}, type: {type(user)}, is_anon: {user.is_anonymous if user else 'N/A'}")
+                if user and not user.is_anonymous:
+                    logger.info(f"🔐 Authenticated user: {user.username} (id: {user.id})")
+                else:
+                    logger.info(f"🔐 Anonymous or no user: {user}")
+            except Exception as e:
+                logger.error(f"🔐 Agent auth error: {str(e)}")
+                import traceback
+                logger.error(f"🔐 Auth traceback: {traceback.format_exc()}")
                 pass
 
             # Handle thread/session context
             if thread_id:
                 # User is referencing a specific thread
                 try:
-                    from threads.services import get_thread, get_thread_messages_as_langchain
+                    from apps.threads.services import get_thread, get_thread_messages_as_langchain
                     current_thread = await get_thread(thread_id)
 
                     # Check ownership
@@ -140,7 +150,7 @@ async def stream(request):
                     if current_thread:
                         thread_messages = await get_thread_messages_as_langchain(thread_id)
                         # Add the new message to the thread
-                        from threads.services import create_human_message
+                        from apps.threads.services import create_human_message
                         await create_human_message(thread_id, message)
 
                 except Exception as e:
@@ -150,7 +160,7 @@ async def stream(request):
             elif session_id or (not user or user.is_anonymous):
                 # Anonymous user - create or get session-based thread
                 try:
-                    from threads.services import get_session_threads, get_or_create_session_thread, get_thread_messages_as_langchain
+                    from apps.threads.services import get_session_threads, get_or_create_session_thread, get_thread_messages_as_langchain
 
                     # Get existing session threads
                     session_threads = await get_session_threads(session_id or "anonymous")
@@ -160,7 +170,7 @@ async def stream(request):
                         current_thread = session_threads[0]
                         thread_messages = await get_thread_messages_as_langchain(str(current_thread.id))
                         # Add message to existing thread
-                        from threads.services import create_human_message
+                        from apps.threads.services import create_human_message
                         await create_human_message(str(current_thread.id), message)
                     else:
                         # Create new session thread
@@ -170,18 +180,31 @@ async def stream(request):
                         )
                         thread_messages = None  # No previous messages for new thread
                         # Add the initial message
-                        from threads.services import create_human_message
+                        from apps.threads.services import create_human_message
                         await create_human_message(str(current_thread.id), message)
 
                 except Exception as e:
                     logger.warning(f"Failed to create session thread: {str(e)}")
                     thread_messages = None
 
+        # Determine user focus for tool selection
+        user_focus = None
+        if user and not user.is_anonymous:
+            logger.info(f"🎯 User authenticated: {user}, username: '{user.username}', id: {user.id}")
+            from apps.accounts.utils import negotiate_user_focus
+            user_focus, focus_error = negotiate_user_focus(request)
+            if focus_error:
+                logger.warning(f"Focus negotiation error for user {user.username}: {focus_error}")
+                user_focus = 'candidate'  # Default fallback
+            logger.info(f"🎯 Determined user focus: {user_focus}")
+        else:
+            logger.info(f"🎯 No authenticated user or anonymous user: {user}")
+
         # Create streaming generator with conversation context
         async def stream_generator():
             accumulated_response = []
 
-            async for chunk in astream_agent_tokens(message, thread_messages):
+            async for chunk in astream_agent_tokens(message, thread_messages, user=user, focus=user_focus):
                 # Accumulate message content for thread saving
                 if chunk.get("type") == "content_block_delta":
                     delta = chunk.get("delta", {})
@@ -197,7 +220,7 @@ async def stream(request):
             # Save response to thread if we have one
             if current_thread and accumulated_response:
                 try:
-                    from threads.services import create_assistant_message
+                    from apps.threads.services import create_assistant_message
                     full_response = "".join(accumulated_response)
                     await create_assistant_message(str(current_thread.id), full_response)
                 except Exception as e:
