@@ -279,7 +279,7 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
   }, []);
 
   // Send message function
-  const sendMessage = useCallback(async (message: string) => {
+  const sendMessage = useCallback(async (message: string, threadId?: string) => {
     if (!message.trim()) return;
 
     // If we're in persistent mode, disconnect first
@@ -333,7 +333,7 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
         },
         body: JSON.stringify({
           message,
-          ...(currentThreadId && { thread_id: currentThreadId })
+          ...((threadId || currentThreadId) && { thread_id: threadId || currentThreadId })
         }),
         signal: abortController.signal,
         

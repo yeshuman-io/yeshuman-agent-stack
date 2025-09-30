@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
 import { ThemeProvider } from './components/theme-provider'
 import { Activity, RotateCcw } from 'lucide-react'
 import { AnimatedTitle } from './components/animated-title'
@@ -13,13 +13,70 @@ import { useSSE } from './hooks/use-sse'
 import { useAuth } from './hooks/use-auth'
 import './App.css'
 
-function App() {
+function AppContent() {
+  const [searchParams, setSearchParams] = useSearchParams();
   // Get auth token
   const { token } = useAuth();
 
   // Input state (separate from SSE hook)
   const [inputText, setInputText] = useState('');
   const [systemLogs] = useState<string[]>([]);
+
+  // Thread state
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(
+    searchParams.get('thread') || null
+  );
+
+  // Sync URL params with thread state
+  useEffect(() => {
+    const urlThreadId = searchParams.get('thread');
+    if (urlThreadId !== currentThreadId) {
+      if (urlThreadId) {
+        setCurrentThreadId(urlThreadId);
+        // Load thread messages when URL changes
+        loadThreadMessages(urlThreadId);
+      } else {
+        setCurrentThreadId(null);
+        setMessages([]); // Clear messages for new conversation
+      }
+    }
+  }, [searchParams, loadThreadMessages, setMessages]);
+
+  // Load thread messages from API
+  const loadThreadMessages = useCallback(async (threadId: string) => {
+    try {
+      console.log('Loading thread messages for:', threadId);
+      setMessages([]); // Clear current messages
+
+      const response = await fetch(`/api/threads/${threadId}/messages`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const threadMessages = await response.json();
+        console.log('Loaded thread messages:', threadMessages.length);
+
+        // Convert API messages to ChatMessage format
+        const chatMessages = threadMessages.map((msg: any) => ({
+          id: msg.id || `msg-${Date.now()}`,
+          content: msg.text || msg.content || '',
+          isUser: msg.message_type === 'human' || msg.role === 'user'
+        }));
+
+        setMessages(chatMessages);
+      } else {
+        console.error('Failed to load thread messages:', response.status);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('Error loading thread messages:', error);
+      setMessages([]);
+    }
+  }, [token, setMessages]);
 
   // Animation trigger
   const animationTriggerRef = useRef<(() => void) | null>(null);
@@ -46,128 +103,101 @@ function App() {
   // Handle input submission
   const handleSubmit = useCallback(() => {
     if (inputText.trim()) {
-      sendMessage(inputText);
+      sendMessage(inputText, currentThreadId);
       setInputText('');
     }
-  }, [inputText, sendMessage]);
+  }, [inputText, sendMessage, currentThreadId]);
 
   // Handle thread selection from sidebar
-  const handleThreadSelect = useCallback(async (threadId: string) => {
-    console.log('Loading thread:', threadId)
-
-    try {
-      // Clear current messages first
-      setMessages([])
-
-      // Fetch thread messages from API
-      const response = await fetch(`/api/threads/${threadId}/messages`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (response.ok) {
-        const threadMessages = await response.json()
-        console.log('Loaded thread messages:', threadMessages.length)
-
-        // Convert API messages to ChatMessage format
-        const chatMessages = threadMessages.map((msg: any) => ({
-          id: msg.id || `msg-${Date.now()}`,
-          content: msg.text || msg.content || '',
-          isUser: msg.message_type === 'human' || msg.role === 'user'
-        }))
-
-        // Update messages state using the SSE hook's setMessages
-        setMessages(chatMessages)
-        console.log('Thread loaded with', chatMessages.length, 'messages')
-
-      } else {
-        console.error('Failed to load thread messages:', response.status, response.statusText)
-        // Clear messages on error
-        setMessages([])
-      }
-
-    } catch (error) {
-      console.error('Error loading thread:', error)
-      setMessages([])
-    }
-  }, []);
+  const handleThreadSelect = useCallback((threadId: string) => {
+    console.log('Selecting thread:', threadId);
+    // Update URL params - the useEffect will handle loading messages
+    setSearchParams({ thread: threadId });
+  }, [setSearchParams]);
 
   return (
-    <Router>
-      <ThemeProvider defaultTheme="dark" storageKey="yeshuman-v2-theme">
-        <SidebarProvider defaultOpen={false}>
-            <AppSidebar onThreadSelect={handleThreadSelect} />
-            <SidebarInset className="flex flex-col h-screen">
-            {/* Header */}
-            <div className="border-b p-4 flex justify-between items-center flex-shrink-0">
-              <div className="flex items-center space-x-2">
-                <SidebarTrigger />
-                <AnimatedTitle onAnimationTrigger={(triggerFn) => {
-                  animationTriggerRef.current = triggerFn;
-                }} />
-                {currentThreadId && (
-                  <div className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
-                    Thread: {currentThreadId.slice(-8)}
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center space-x-4">
-                <Activity className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
-                <button
-                  onClick={startNewConversation}
-                  className="flex items-center space-x-2 px-3 py-1 bg-muted hover:bg-muted/80 rounded-md text-sm transition-colors"
-                  title="Start new conversation"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  <span>New</span>
-                </button>
-                <ModeToggle />
-              </div>
+    <ThemeProvider defaultTheme="dark" storageKey="yeshuman-v2-theme">
+      <SidebarProvider defaultOpen={false}>
+          <AppSidebar onThreadSelect={handleThreadSelect} />
+          <SidebarInset className="flex flex-col h-screen">
+          {/* Header */}
+          <div className="border-b p-4 flex justify-between items-center flex-shrink-0">
+            <div className="flex items-center space-x-2">
+              <SidebarTrigger />
+              <AnimatedTitle onAnimationTrigger={(triggerFn) => {
+                animationTriggerRef.current = triggerFn;
+              }} />
+              {currentThreadId && (
+                <div className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
+                  Thread: {currentThreadId.slice(-8)}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center space-x-4">
+              <Activity className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
+              <button
+                onClick={() => {
+                  setCurrentThreadId(null);
+                  setSearchParams({});
+                  setMessages([]);
+                }}
+                className="flex items-center space-x-2 px-3 py-1 bg-muted hover:bg-muted/80 rounded-md text-sm transition-colors"
+                title="Start new conversation"
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span>New</span>
+              </button>
+              <ModeToggle />
+            </div>
+          </div>
+
+          {/* Main Layout */}
+          <div className="flex-1 flex min-h-0">
+            {/* Chat: 1/4 width */}
+            <div className="flex-none w-1/4 border-r flex flex-col min-h-0">
+              <ChatMessages messages={messages} />
+              <ChatInput
+                inputText={inputText}
+                setInputText={setInputText}
+                onSubmit={handleSubmit}
+                isLoading={isLoading}
+              />
             </div>
 
-            {/* Main Layout */}
-            <div className="flex-1 flex min-h-0">
-              {/* Chat: 1/4 width */}
-              <div className="flex-none w-1/4 border-r flex flex-col min-h-0">
-                <ChatMessages messages={messages} />
-                <ChatInput
-                  inputText={inputText}
-                  setInputText={setInputText}
-                  onSubmit={handleSubmit}
-                  isLoading={isLoading}
-                />
-              </div>
-
-              {/* Content Area: ~5/8 width (flex-1 makes it take remaining space) */}
-              <div className="flex-1 border-r bg-background">
-                <Routes>
-                  <Route path="/profile" element={<Profile />} />
-                  <Route path="/" element={
-                    <div className="h-full flex items-center justify-center">
-                      <div className="text-center text-muted-foreground">
-                        <div className="text-lg font-medium mb-2">Content Area</div>
-                        <div className="text-sm">Profile, Opportunities, and other pages will appear here</div>
-                      </div>
+            {/* Content Area: ~5/8 width (flex-1 makes it take remaining space) */}
+            <div className="flex-1 border-r bg-background">
+              <Routes>
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/" element={
+                  <div className="h-full flex items-center justify-center">
+                    <div className="text-center text-muted-foreground">
+                      <p className="text-lg font-medium mb-2">Welcome to YesHuman</p>
+                      <p className="text-sm">Start a conversation to begin your AI journey</p>
                     </div>
-                  } />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </div>
-
-              {/* Panels: 1/8 width, single column with equal height distribution */}
-              <div className="flex-none w-1/8 flex flex-col h-full">
-                <ThinkingPanel content={thinkingContent} />
-                <VoicePanel voiceLines={voiceLines} />
-                <ToolsPanel activeTools={activeTools} />
-                <SystemPanel systemLogs={systemLogs} />
-              </div>
+                  </div>
+                } />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
             </div>
-          </SidebarInset>
-        </SidebarProvider>
-      </ThemeProvider>
+
+            {/* Panels: 1/8 width, single column with equal height distribution */}
+            <div className="flex-none w-1/8 flex flex-col h-full">
+              <ThinkingPanel content={thinkingContent} />
+              <VoicePanel voiceLines={voiceLines} />
+              <ToolsPanel activeTools={activeTools} />
+              <SystemPanel systemLogs={systemLogs} />
+            </div>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </ThemeProvider>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppContent />
     </Router>
   );
 }
