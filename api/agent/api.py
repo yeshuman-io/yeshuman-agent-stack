@@ -72,13 +72,14 @@ async def stream(request):
         try:
             data = json.loads(request.body)
             message = data.get("message", "")
+            connect_only = data.get("connect_only", False)
             thread_id = data.get("thread_id")  # Optional thread context
             session_id = data.get("session_id")  # Optional session for anonymous users
 
-            if not message:
+            if not message and not connect_only:
                 # Return error as SSE stream for consistency
                 async def error_stream():
-                    yield f"event: error\ndata: {json.dumps({'type': 'error', 'content': 'Message is required in POST body'})}\n\n"
+                    yield f"event: error\ndata: {json.dumps({'type': 'error', 'content': 'Message required or connect_only=true'})}\n\n"
                 response = SSEHttpResponse(error_stream())
                 response["Access-Control-Allow-Origin"] = "*"
                 return response
@@ -199,6 +200,52 @@ async def stream(request):
             logger.info(f"🎯 Determined user focus: {user_focus}")
         else:
             logger.info(f"🎯 No authenticated user or anonymous user: {user}")
+
+        # Handle connect_only mode for persistent real-time connections
+        if connect_only:
+            logger.info("🔄 Establishing persistent real-time connection (connect_only mode)")
+
+            # Get authenticated user for persistent connection
+            if not user or user.is_anonymous:
+                async def error_stream():
+                    yield f"event: error\ndata: {json.dumps({'type': 'error', 'content': 'Authentication required for persistent connection'})}\n\n"
+                response = SSEHttpResponse(error_stream())
+                response["Access-Control-Allow-Origin"] = "*"
+                return response
+
+            # Create persistent connection for real-time updates
+            async def persistent_stream_generator():
+                import asyncio
+                import time
+
+                # Send connection confirmation
+                yield {
+                    "type": "connected",
+                    "timestamp": int(time.time() * 1000),
+                    "user_id": str(user.id),
+                    "mode": "persistent"
+                }
+
+                # Keep connection alive with heartbeats
+                counter = 0
+                while True:
+                    counter += 1
+
+                    # Send heartbeat every 30 seconds
+                    if counter % 30 == 0:
+                        yield {
+                            "type": "heartbeat",
+                            "timestamp": int(time.time() * 1000)
+                        }
+
+                    await asyncio.sleep(1)
+
+            sse_generator = AnthropicSSEGenerator()
+            response = SSEHttpResponse(sse_generator.generate_sse(persistent_stream_generator()))
+            response["Access-Control-Allow-Origin"] = "*"
+            response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response["Access-Control-Allow-Headers"] = "Content-Type, Accept"
+            return response
 
         # Create streaming generator with conversation context
         async def stream_generator():

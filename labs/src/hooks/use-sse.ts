@@ -3,7 +3,23 @@ import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { SSE_ENDPOINT } from '../constants';
 import type { ChatMessage, SSEEvent, ContentBlock } from '../types';
 
-export const useSSE = (onMessageStart?: () => void, token?: string | null) => {
+/**
+ * useSSE Hook - Handles both chat messages and persistent real-time connections
+ *
+ * @param onMessageStart - Callback when AI starts responding (chat mode only)
+ * @param token - JWT authentication token
+ * @param autoConnect - If true, establishes persistent connection on mount for real-time features
+ *
+ * @returns Object with connection state, chat state, and actions
+ *
+ * Usage:
+ * // Chat only (default)
+ * const sse = useSSE(onMessageStart, token);
+ *
+ * // With persistent connection for real-time features
+ * const sse = useSSE(onMessageStart, token, true);
+ */
+export const useSSE = (onMessageStart?: () => void, token?: string | null, autoConnect: boolean = false) => {
   // Core state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -19,13 +35,13 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null) => {
   useEffect(() => {
     tokenRef.current = token || null;
   }, [token]);
-  
+
   // Content streaming state
   const [thinkingContent, setThinkingContent] = useState('');
   const [voiceLines, setVoiceLines] = useState<string[]>([]);
   const [toolOutput, setToolOutput] = useState(''); // Keep for debugging
   const [activeTools, setActiveTools] = useState<string[]>([]);
-  
+
   // SSE management
   const abortControllerRef = useRef<AbortController | null>(null);
   const contentBlocksRef = useRef<Record<number, ContentBlock>>({});
@@ -34,6 +50,93 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null) => {
   const generateId = (): string => {
     return Date.now().toString(36) + Math.random().toString(36).substring(2);
   };
+
+  // Establish persistent connection for real-time features
+  const establishPersistentConnection = useCallback(async () => {
+    if (!tokenRef.current || isConnected) return;
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    try {
+      console.log('[SSE] Establishing persistent connection...');
+
+      await fetchEventSource(SSE_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+          ...(tokenRef.current && { 'Authorization': `Bearer ${tokenRef.current}` }),
+        },
+        body: JSON.stringify({
+          connect_only: true  // Special flag for persistent connections
+        }),
+        signal: abortController.signal,
+
+        onopen(response) {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          console.log('[SSE] Persistent connection established');
+          setIsConnected(true);
+        },
+
+        onmessage(event) {
+          if (!event.data?.trim()) return;
+
+          try {
+            const data = JSON.parse(event.data);
+            // Handle persistent connection events (heartbeats, etc.)
+            if (data.type === 'heartbeat') {
+              console.log('[SSE] Heartbeat received');
+            } else if (data.type === 'connected') {
+              console.log('[SSE] Persistent connection confirmed:', data);
+            }
+            // Future: handle profile updates, notifications, etc.
+          } catch (error) {
+            console.error('[SSE] Parse error in persistent connection:', error);
+          }
+        },
+
+        onclose() {
+          console.log('[SSE] Persistent connection closed');
+          setIsConnected(false);
+        },
+
+        onerror(error) {
+          console.error('[SSE] Persistent connection error:', error);
+          setIsConnected(false);
+        }
+      });
+
+    } catch (error) {
+      console.error('[SSE] Failed to establish persistent connection:', error);
+      setIsConnected(false);
+    }
+  }, [isConnected]);
+
+  // Disconnect from current connection
+  const disconnect = useCallback(() => {
+    if (abortControllerRef.current) {
+      console.log('[SSE] Disconnecting...');
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsConnected(false);
+    }
+  }, []);
+
+  // Auto-connect on mount if enabled
+  useEffect(() => {
+    if (autoConnect && token && !isConnected) {
+      establishPersistentConnection();
+    }
+
+    return () => {
+      if (autoConnect && isConnected) {
+        disconnect();
+      }
+    };
+  }, [autoConnect, token, establishPersistentConnection, disconnect, isConnected]);
 
   // Core SSE event handler
   const handleSSEEvent = useCallback((event: SSEEvent) => {
@@ -178,7 +281,12 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null) => {
   // Send message function
   const sendMessage = useCallback(async (message: string) => {
     if (!message.trim()) return;
-    
+
+    // If we're in persistent mode, disconnect first
+    if (isConnected && autoConnect) {
+      disconnect();
+    }
+
     // Add user message immediately
     const userMessage: ChatMessage = {
       id: generateId(),
@@ -186,7 +294,7 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null) => {
       isUser: true
     };
     setMessages(prev => [...prev, userMessage]);
-    
+
     // Clean up existing connection
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -266,7 +374,7 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null) => {
       setIsConnected(false);
       setIsLoading(false);
     }
-  }, [handleSSEEvent]);
+  }, [handleSSEEvent, autoConnect, isConnected, disconnect]);
 
   // Function to start a new conversation
   const startNewConversation = useCallback(() => {

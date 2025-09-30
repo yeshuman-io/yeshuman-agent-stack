@@ -6,7 +6,6 @@ import { Label } from './ui/label'
 import { Textarea } from './ui/textarea'
 import { Badge } from './ui/badge'
 import { useProfile, ProfileData } from '../hooks/use-profile'
-import { useAuth } from '../hooks/use-auth'
 import { User, MapPin, Plus, X } from 'lucide-react'
 
 export function Profile() {

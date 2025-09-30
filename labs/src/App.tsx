@@ -41,7 +41,7 @@ function App() {
     if (animationTriggerRef.current) {
       animationTriggerRef.current();
     }
-  }, token);
+  }, token, true); // Auto-connect on load for persistent real-time connection
 
   // Handle input submission
   const handleSubmit = useCallback(() => {
