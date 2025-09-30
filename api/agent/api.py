@@ -96,6 +96,9 @@ async def stream(request):
         # Handle GET request with query parameters
         message = request.GET.get('message')
         user_state = request.GET.get('user_state', 'new_user')
+        thread_id = request.GET.get('thread_id')
+
+        logger.info(f"💬 [MESSAGE LIFECYCLE] Received message via GET: length={len(message or '')}, thread_id={thread_id}, user_id={user.id if user else None}, user_state={user_state}")
 
         if not message:
             # No hardcoded messages - return error if no message provided
@@ -132,6 +135,7 @@ async def stream(request):
 
             # Handle thread/session context
             if thread_id:
+                logger.info(f"📂 [THREAD CONTEXT] Loading existing thread: thread_id={thread_id}")
                 # User is referencing a specific thread
                 try:
                     from apps.threads.services import get_thread, get_thread_messages_as_langchain
@@ -159,6 +163,7 @@ async def stream(request):
                     thread_messages = None
 
             elif session_id or (not user or user.is_anonymous):
+                logger.info(f"📂 [THREAD CONTEXT] Using session-based thread: session_id={session_id}")
                 # Anonymous user - create or get session-based thread
                 try:
                     from apps.threads.services import get_session_threads, get_or_create_session_thread, get_thread_messages_as_langchain
@@ -248,11 +253,13 @@ async def stream(request):
             return response
 
         # Create streaming generator with conversation context
+        logger.info(f"🏁 [STREAM LIFECYCLE] Starting stream: thread_id={current_thread.id if current_thread else None}, user_id={user.id if user else None}")
         async def stream_generator():
             accumulated_response = []
 
             # Emit thread created event if this is a new thread
             if current_thread and hasattr(current_thread, '_was_created') and current_thread._was_created:
+                logger.info(f"🔄 [DJANGO THREAD DELTA] Emitting thread_created: thread_id={current_thread.id}, subject='{current_thread.subject}', user_id={current_thread.user_id}, is_anonymous={current_thread.is_anonymous}")
                 yield {
                     "type": "thread_created",
                     "thread_id": str(current_thread.id),
@@ -269,6 +276,7 @@ async def stream(request):
                     from apps.threads.models import HumanMessage
                     recent_human = await HumanMessage.objects.filter(thread=current_thread).order_by('-created_at').afirst()
                     if recent_human:
+                        logger.info(f"🔄 [DJANGO THREAD DELTA] Emitting message_saved (human): thread_id={current_thread.id}, message_id={recent_human.id}, content_length={len(recent_human.text)}")
                         yield {
                             "type": "message_saved",
                             "thread_id": str(current_thread.id),
@@ -276,6 +284,8 @@ async def stream(request):
                             "message_type": "human",
                             "content": recent_human.text[:200] + "..." if len(recent_human.text) > 200 else recent_human.text
                         }
+                    else:
+                        logger.warning(f"🔄 [DJANGO THREAD DELTA] No recent human message found for thread {current_thread.id}")
                 except Exception as e:
                     logger.warning(f"Failed to emit human message delta: {str(e)}")
 
@@ -300,6 +310,7 @@ async def stream(request):
                     assistant_message = await create_assistant_message(str(current_thread.id), full_response)
 
                     # Emit message saved event
+                    logger.info(f"🔄 [DJANGO THREAD DELTA] Emitting message_saved (assistant): thread_id={current_thread.id}, message_id={assistant_message.id}, content_length={len(full_response)}")
                     yield {
                         "type": "message_saved",
                         "thread_id": str(current_thread.id),
@@ -311,6 +322,7 @@ async def stream(request):
                     # Emit thread updated event
                     from apps.threads.models import Message
                     message_count = await Message.objects.filter(thread=current_thread).acount()
+                    logger.info(f"🔄 [DJANGO THREAD DELTA] Emitting thread_updated: thread_id={current_thread.id}, message_count={message_count}")
                     yield {
                         "type": "thread_updated",
                         "thread_id": str(current_thread.id),

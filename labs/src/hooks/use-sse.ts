@@ -278,26 +278,50 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
         break;
 
       case 'thread_created':
-        console.log('[SSE] Thread created:', data);
+        console.log('🔄 [SSE THREAD] Thread created event received:', {
+          thread_id: data.thread_id,
+          subject: data.subject,
+          user_id: data.user_id,
+          is_anonymous: data.is_anonymous,
+          created_at: data.created_at
+        });
         // Emit thread event for UI updates
         if (threadCallbacks?.onThreadCreated) {
+          console.log('🔄 [SSE THREAD] Calling onThreadCreated callback');
           threadCallbacks.onThreadCreated(data);
+        } else {
+          console.log('🔄 [SSE THREAD] No onThreadCreated callback registered');
         }
         break;
 
       case 'thread_updated':
-        console.log('[SSE] Thread updated:', data);
+        console.log('🔄 [SSE THREAD] Thread updated event received:', {
+          thread_id: data.thread_id,
+          message_count: data.message_count,
+          updated_at: data.updated_at
+        });
         // Emit thread event for UI updates
         if (threadCallbacks?.onThreadUpdated) {
+          console.log('🔄 [SSE THREAD] Calling onThreadUpdated callback');
           threadCallbacks.onThreadUpdated(data);
+        } else {
+          console.log('🔄 [SSE THREAD] No onThreadUpdated callback registered');
         }
         break;
 
       case 'message_saved':
-        console.log('[SSE] Message saved:', data);
+        console.log('🔄 [SSE THREAD] Message saved event received:', {
+          thread_id: data.thread_id,
+          message_id: data.message_id,
+          message_type: data.message_type,
+          content_length: data.content?.length || 0
+        });
         // Emit thread event for UI updates
         if (threadCallbacks?.onMessageSaved) {
+          console.log('🔄 [SSE THREAD] Calling onMessageSaved callback');
           threadCallbacks.onMessageSaved(data);
+        } else {
+          console.log('🔄 [SSE THREAD] No onMessageSaved callback registered');
         }
         break;
 
