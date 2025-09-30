@@ -251,6 +251,34 @@ async def stream(request):
         async def stream_generator():
             accumulated_response = []
 
+            # Emit thread created event if this is a new thread
+            if current_thread and hasattr(current_thread, '_was_created') and current_thread._was_created:
+                yield {
+                    "type": "thread_created",
+                    "thread_id": str(current_thread.id),
+                    "subject": current_thread.subject,
+                    "user_id": current_thread.user_id,
+                    "is_anonymous": current_thread.is_anonymous,
+                    "created_at": current_thread.created_at.isoformat()
+                }
+
+            # Emit human message saved event (message was saved during request processing)
+            if current_thread:
+                # Find the most recent human message for this thread
+                try:
+                    from apps.threads.models import HumanMessage
+                    recent_human = await HumanMessage.objects.filter(thread=current_thread).order_by('-created_at').afirst()
+                    if recent_human:
+                        yield {
+                            "type": "message_saved",
+                            "thread_id": str(current_thread.id),
+                            "message_id": str(recent_human.id),
+                            "message_type": "human",
+                            "content": recent_human.text[:200] + "..." if len(recent_human.text) > 200 else recent_human.text
+                        }
+                except Exception as e:
+                    logger.warning(f"Failed to emit human message delta: {str(e)}")
+
             async for chunk in astream_agent_tokens(message, thread_messages, user=user, focus=user_focus):
                 # Accumulate message content for thread saving
                 if chunk.get("type") == "content_block_delta":
@@ -269,7 +297,27 @@ async def stream(request):
                 try:
                     from apps.threads.services import create_assistant_message
                     full_response = "".join(accumulated_response)
-                    await create_assistant_message(str(current_thread.id), full_response)
+                    assistant_message = await create_assistant_message(str(current_thread.id), full_response)
+
+                    # Emit message saved event
+                    yield {
+                        "type": "message_saved",
+                        "thread_id": str(current_thread.id),
+                        "message_id": str(assistant_message.id),
+                        "message_type": "assistant",
+                        "content": full_response[:200] + "..." if len(full_response) > 200 else full_response
+                    }
+
+                    # Emit thread updated event
+                    from apps.threads.models import Message
+                    message_count = await Message.objects.filter(thread=current_thread).acount()
+                    yield {
+                        "type": "thread_updated",
+                        "thread_id": str(current_thread.id),
+                        "message_count": message_count,
+                        "updated_at": current_thread.updated_at.isoformat()
+                    }
+
                 except Exception as e:
                     logger.warning(f"Failed to save response to thread: {str(e)}")
 

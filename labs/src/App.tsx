@@ -27,6 +27,47 @@ function AppContent() {
     searchParams.get('thread') || null
   );
 
+  // Animation trigger
+  const animationTriggerRef = useRef<(() => void) | null>(null);
+
+  // Thread event callbacks for TanStack Query invalidation
+  const threadCallbacks = {
+    onThreadCreated: (data: any) => {
+      console.log('Thread created via delta, invalidating threads query');
+      queryClient.invalidateQueries(['threads']);
+      // Update URL if it's a new thread and we don't have one
+      if (!currentThreadId) {
+        setSearchParams({ thread: data.thread_id });
+      }
+    },
+    onThreadUpdated: (data: any) => {
+      console.log('Thread updated via delta, invalidating threads query');
+      queryClient.invalidateQueries(['threads']);
+    },
+    onMessageSaved: (data: any) => {
+      console.log('Message saved via delta, invalidating thread messages');
+      queryClient.invalidateQueries(['thread', data.thread_id]);
+    }
+  };
+
+  // Use SSE hook for all streaming functionality
+  const {
+    messages,
+    isConnected,
+    isLoading,
+    thinkingContent,
+    voiceLines,
+    activeTools,
+    sendMessage,
+    startNewConversation,
+    setMessages
+  } = useSSE(() => {
+    // Trigger animation when AI response starts
+    if (animationTriggerRef.current) {
+      animationTriggerRef.current();
+    }
+  }, token, true, threadCallbacks); // Auto-connect with thread event callbacks
+
   // Sync URL params with thread state
   useEffect(() => {
     const urlThreadId = searchParams.get('thread');
@@ -40,7 +81,7 @@ function AppContent() {
         setMessages([]); // Clear messages for new conversation
       }
     }
-  }, [searchParams, loadThreadMessages, setMessages]);
+  }, [searchParams, loadThreadMessages]);
 
   // Load thread messages from API
   const loadThreadMessages = useCallback(async (threadId: string) => {
@@ -76,37 +117,15 @@ function AppContent() {
       console.error('Error loading thread messages:', error);
       setMessages([]);
     }
-  }, [token, setMessages]);
-
-  // Animation trigger
-  const animationTriggerRef = useRef<(() => void) | null>(null);
-
-  // Use SSE hook for all streaming functionality
-  const {
-    messages,
-    isConnected,
-    isLoading,
-    thinkingContent,
-    voiceLines,
-    activeTools,
-    currentThreadId,
-    sendMessage,
-    startNewConversation,
-    setMessages
-  } = useSSE(() => {
-    // Trigger animation when AI response starts
-    if (animationTriggerRef.current) {
-      animationTriggerRef.current();
-    }
-  }, token, true); // Auto-connect on load for persistent real-time connection
+  }, [token]);
 
   // Handle input submission
   const handleSubmit = useCallback(() => {
     if (inputText.trim()) {
-      sendMessage(inputText, currentThreadId);
+      sendMessage(inputText);
       setInputText('');
     }
-  }, [inputText, sendMessage, currentThreadId]);
+  }, [inputText, sendMessage]);
 
   // Handle thread selection from sidebar
   const handleThreadSelect = useCallback((threadId: string) => {
@@ -127,20 +146,11 @@ function AppContent() {
               <AnimatedTitle onAnimationTrigger={(triggerFn) => {
                 animationTriggerRef.current = triggerFn;
               }} />
-              {currentThreadId && (
-                <div className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
-                  Thread: {currentThreadId.slice(-8)}
-                </div>
-              )}
             </div>
             <div className="flex items-center space-x-4">
               <Activity className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
               <button
-                onClick={() => {
-                  setCurrentThreadId(null);
-                  setSearchParams({});
-                  setMessages([]);
-                }}
+                onClick={startNewConversation}
                 className="flex items-center space-x-2 px-3 py-1 bg-muted hover:bg-muted/80 rounded-md text-sm transition-colors"
                 title="Start new conversation"
               >

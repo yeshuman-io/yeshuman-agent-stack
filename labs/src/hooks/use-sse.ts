@@ -272,7 +272,31 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
         console.log('[MESSAGE STOP]');
         setIsLoading(false);
         break;
-        
+
+      case 'thread_created':
+        console.log('[SSE] Thread created:', data);
+        // Emit thread event for UI updates
+        if (threadCallbacks?.onThreadCreated) {
+          threadCallbacks.onThreadCreated(data);
+        }
+        break;
+
+      case 'thread_updated':
+        console.log('[SSE] Thread updated:', data);
+        // Emit thread event for UI updates
+        if (threadCallbacks?.onThreadUpdated) {
+          threadCallbacks.onThreadUpdated(data);
+        }
+        break;
+
+      case 'message_saved':
+        console.log('[SSE] Message saved:', data);
+        // Emit thread event for UI updates
+        if (threadCallbacks?.onMessageSaved) {
+          threadCallbacks.onMessageSaved(data);
+        }
+        break;
+
       default:
         console.log(`[SSE] Unhandled event: ${eventType}`);
     }
