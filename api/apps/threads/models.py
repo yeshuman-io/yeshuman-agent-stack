@@ -19,7 +19,9 @@ class Thread(models.Model):
     )
     session = models.ForeignKey(
         "sessions.Session",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="threads",
     )
     is_anonymous = models.BooleanField(

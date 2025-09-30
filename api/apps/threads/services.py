@@ -53,6 +53,8 @@ async def get_or_create_thread(user_id: Optional[str] = None, subject: Optional[
                 subject=subject,
                 is_anonymous=is_anonymous
             )
+            # Mark as newly created for delta emission
+            thread_obj._was_created = True
             return thread_obj
     else:
         # Create a new thread without specifying an ID
@@ -63,6 +65,8 @@ async def get_or_create_thread(user_id: Optional[str] = None, subject: Optional[
             subject=subject,
             is_anonymous=is_anonymous
         )
+        # Mark as newly created for delta emission
+        thread_obj._was_created = True
         return thread_obj
 
 
