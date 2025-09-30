@@ -1,4 +1,3 @@
-import React from 'react';
 import { useSSE } from '../hooks/use-sse';
 import { useAuth } from '../hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -15,7 +14,6 @@ export function AutoConnectExample() {
   // Enable auto-connect for persistent real-time connection
   const {
     isConnected,
-    sendMessage,
     // Other chat functionality available when needed
   } = useSSE(undefined, token, true); // true = autoConnect
 

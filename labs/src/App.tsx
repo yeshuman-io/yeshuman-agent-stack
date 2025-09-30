@@ -11,12 +11,15 @@ import { AppSidebar } from './components/app-sidebar'
 import { Profile } from './components/profile'
 import { useSSE } from './hooks/use-sse'
 import { useAuth } from './hooks/use-auth'
+import { useQueryClient } from '@tanstack/react-query'
 import './App.css'
 
 function AppContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   // Get auth token
   const { token } = useAuth();
+  // Get query client for invalidation
+  const queryClient = useQueryClient();
 
   // Input state (separate from SSE hook)
   const [inputText, setInputText] = useState('');
@@ -29,59 +32,6 @@ function AppContent() {
 
   // Animation trigger
   const animationTriggerRef = useRef<(() => void) | null>(null);
-
-  // Thread event callbacks for TanStack Query invalidation
-  const threadCallbacks = {
-    onThreadCreated: (data: any) => {
-      console.log('Thread created via delta, invalidating threads query');
-      queryClient.invalidateQueries(['threads']);
-      // Update URL if it's a new thread and we don't have one
-      if (!currentThreadId) {
-        setSearchParams({ thread: data.thread_id });
-      }
-    },
-    onThreadUpdated: (data: any) => {
-      console.log('Thread updated via delta, invalidating threads query');
-      queryClient.invalidateQueries(['threads']);
-    },
-    onMessageSaved: (data: any) => {
-      console.log('Message saved via delta, invalidating thread messages');
-      queryClient.invalidateQueries(['thread', data.thread_id]);
-    }
-  };
-
-  // Use SSE hook for all streaming functionality
-  const {
-    messages,
-    isConnected,
-    isLoading,
-    thinkingContent,
-    voiceLines,
-    activeTools,
-    sendMessage,
-    startNewConversation,
-    setMessages
-  } = useSSE(() => {
-    // Trigger animation when AI response starts
-    if (animationTriggerRef.current) {
-      animationTriggerRef.current();
-    }
-  }, token, true, threadCallbacks); // Auto-connect with thread event callbacks
-
-  // Sync URL params with thread state
-  useEffect(() => {
-    const urlThreadId = searchParams.get('thread');
-    if (urlThreadId !== currentThreadId) {
-      if (urlThreadId) {
-        setCurrentThreadId(urlThreadId);
-        // Load thread messages when URL changes
-        loadThreadMessages(urlThreadId);
-      } else {
-        setCurrentThreadId(null);
-        setMessages([]); // Clear messages for new conversation
-      }
-    }
-  }, [searchParams, loadThreadMessages]);
 
   // Load thread messages from API
   const loadThreadMessages = useCallback(async (threadId: string) => {
@@ -118,6 +68,59 @@ function AppContent() {
       setMessages([]);
     }
   }, [token]);
+
+  // Thread event callbacks for TanStack Query invalidation
+  const threadCallbacks = {
+    onThreadCreated: (data: any) => {
+      console.log('Thread created via delta, invalidating threads query');
+      queryClient.invalidateQueries({ queryKey: ['threads'] });
+      // Update URL if it's a new thread and we don't have one
+      if (!currentThreadId) {
+        setSearchParams({ thread: data.thread_id });
+      }
+    },
+    onThreadUpdated: () => {
+      console.log('Thread updated via delta, invalidating threads query');
+      queryClient.invalidateQueries({ queryKey: ['threads'] });
+    },
+    onMessageSaved: (data: any) => {
+      console.log('Message saved via delta, invalidating thread messages');
+      queryClient.invalidateQueries({ queryKey: ['thread', data.thread_id] });
+    }
+  };
+
+  // Use SSE hook for all streaming functionality
+  const {
+    messages,
+    isConnected,
+    isLoading,
+    thinkingContent,
+    voiceLines,
+    activeTools,
+    sendMessage,
+    startNewConversation,
+    setMessages
+  } = useSSE(() => {
+    // Trigger animation when AI response starts
+    if (animationTriggerRef.current) {
+      animationTriggerRef.current();
+    }
+  }, token, true, threadCallbacks); // Auto-connect with thread event callbacks
+
+  // Sync URL params with thread state
+  useEffect(() => {
+    const urlThreadId = searchParams.get('thread');
+    if (urlThreadId !== currentThreadId) {
+      if (urlThreadId) {
+        setCurrentThreadId(urlThreadId);
+        // Load thread messages when URL changes
+        loadThreadMessages(urlThreadId);
+      } else {
+        setCurrentThreadId(null);
+        setMessages([]); // Clear messages for new conversation
+      }
+    }
+  }, [searchParams, loadThreadMessages]);
 
   // Handle input submission
   const handleSubmit = useCallback(() => {

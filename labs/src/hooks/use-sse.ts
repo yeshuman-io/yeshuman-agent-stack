@@ -9,6 +9,7 @@ import type { ChatMessage, SSEEvent, ContentBlock } from '../types';
  * @param onMessageStart - Callback when AI starts responding (chat mode only)
  * @param token - JWT authentication token
  * @param autoConnect - If true, establishes persistent connection on mount for real-time features
+ * @param threadCallbacks - Optional callbacks for thread-related delta events
  *
  * @returns Object with connection state, chat state, and actions
  *
@@ -18,8 +19,11 @@ import type { ChatMessage, SSEEvent, ContentBlock } from '../types';
  *
  * // With persistent connection for real-time features
  * const sse = useSSE(onMessageStart, token, true);
+ *
+ * // With thread event callbacks
+ * const sse = useSSE(onMessageStart, token, true, { onThreadCreated, onThreadUpdated, onMessageSaved });
  */
-export const useSSE = (onMessageStart?: () => void, token?: string | null, autoConnect: boolean = false) => {
+export const useSSE = (onMessageStart?: () => void, token?: string | null, autoConnect: boolean = false, threadCallbacks?: { onThreadCreated?: (data: any) => void; onThreadUpdated?: (data: any) => void; onMessageSaved?: (data: any) => void }) => {
   // Core state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -73,7 +77,7 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
         }),
         signal: abortController.signal,
 
-        onopen(response) {
+        async onopen(response) {
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
           }
