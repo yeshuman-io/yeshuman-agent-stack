@@ -1,124 +1,56 @@
-import { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Textarea } from './ui/textarea'
 import { Badge } from './ui/badge'
-import { useAuth } from '../hooks/use-auth'
+import { useProfile, ProfileData } from '../hooks/use-profile'
 import { User, MapPin, Plus, X } from 'lucide-react'
 
-interface ProfileData {
-  id?: string
-  full_name?: string
-  email?: string
-  bio?: string
-  city?: string
-  country?: string
-  location?: string
-  skills?: string[]
-  first_name?: string
-  last_name?: string
-}
-
 export function Profile() {
-  const { token } = useAuth()
-  const [profile, setProfile] = useState<ProfileData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const { profile, isLoading, error, updateProfile, isUpdating, updateError } = useProfile()
   const [editing, setEditing] = useState(false)
   const [formData, setFormData] = useState<ProfileData>({})
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchProfile()
-  }, [token])
-
-  const fetchProfile = async () => {
-    if (!token) return
-
-    try {
-      setError(null)
-      const response = await fetch('/api/profiles/my', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setProfile(data)
-        setFormData(data)
-      } else if (response.status === 401) {
-        setError('Authentication required. Please log in again.')
-      } else {
-        setError('Failed to load profile. Please try again.')
-      }
-    } catch (error) {
-      console.error('Failed to fetch profile:', error)
-      setError('Network error. Please check your connection.')
-    } finally {
-      setLoading(false)
+  // Initialize form data when profile loads
+  React.useEffect(() => {
+    if (profile) {
+      setFormData(profile)
     }
-  }
+  }, [profile])
+
+  // Note: Profile updates are handled automatically by the useProfile hook
+  // through TanStack Query invalidation
 
   const validateForm = () => {
     if (!formData.first_name?.trim()) {
-      setError('First name is required')
-      return false
+      return { isValid: false, error: 'First name is required' }
     }
     if (!formData.last_name?.trim()) {
-      setError('Last name is required')
-      return false
+      return { isValid: false, error: 'Last name is required' }
     }
-    return true
+    return { isValid: true, error: null }
   }
 
-  const handleSave = async () => {
-    if (!token) return
-
-    if (!validateForm()) return
-
-    setSaving(true)
-    setError(null)
-    setSuccess(null)
-
-    try {
-      const response = await fetch('/api/profiles/my', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      })
-
-      if (response.ok) {
-        const updatedProfile = await response.json()
-        setProfile(updatedProfile)
-        setEditing(false)
-        setSuccess('Profile updated successfully!')
-        // Clear success message after 3 seconds
-        setTimeout(() => setSuccess(null), 3000)
-      } else if (response.status === 401) {
-        setError('Authentication required. Please log in again.')
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        setError(errorData.error || 'Failed to save profile. Please try again.')
-      }
-    } catch (error) {
-      console.error('Failed to save profile:', error)
-      setError('Network error. Please check your connection and try again.')
-    } finally {
-      setSaving(false)
+  const handleSave = () => {
+    const validation = validateForm()
+    if (!validation.isValid) {
+      // Handle validation error - could show a toast or alert
+      console.error('Validation error:', validation.error)
+      return
     }
+
+    updateProfile(formData, {
+      onSuccess: () => {
+        setEditing(false)
+      },
+    })
   }
 
   const addSkill = (skill: string) => {
     if (skill.trim() && !formData.skills?.includes(skill.trim())) {
-      setFormData(prev => ({
+      setFormData((prev: ProfileData) => ({
         ...prev,
         skills: [...(prev.skills || []), skill.trim()]
       }))
@@ -126,13 +58,13 @@ export function Profile() {
   }
 
   const removeSkill = (skillToRemove: string) => {
-    setFormData(prev => ({
+    setFormData((prev: ProfileData) => ({
       ...prev,
-      skills: prev.skills?.filter(skill => skill !== skillToRemove) || []
+      skills: prev.skills?.filter((skill: string) => skill !== skillToRemove) || []
     }))
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
@@ -155,8 +87,6 @@ export function Profile() {
           <Button
             onClick={() => {
               setEditing(!editing)
-              setError(null)
-              setSuccess(null)
             }}
             variant={editing ? "outline" : "default"}
           >
@@ -165,15 +95,11 @@ export function Profile() {
         </div>
 
         {/* Messages */}
-        {error && (
+        {(error || updateError) && (
           <div className="bg-destructive/15 border border-destructive/20 rounded-lg p-4">
-            <p className="text-sm text-destructive font-medium">{error}</p>
-          </div>
-        )}
-
-        {success && (
-          <div className="bg-green-500/15 border border-green-500/20 rounded-lg p-4">
-            <p className="text-sm text-green-700 dark:text-green-400 font-medium">{success}</p>
+            <p className="text-sm text-destructive font-medium">
+              {error?.message || updateError?.message || 'An error occurred'}
+            </p>
           </div>
         )}
 
@@ -194,7 +120,7 @@ export function Profile() {
                     <Input
                       id="first_name"
                       value={formData.first_name || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
+                      onChange={(e) => setFormData((prev: ProfileData) => ({ ...prev, first_name: e.target.value }))}
                       placeholder="Enter your first name"
                       required
                     />
@@ -204,7 +130,7 @@ export function Profile() {
                     <Input
                       id="last_name"
                       value={formData.last_name || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
+                      onChange={(e) => setFormData((prev: ProfileData) => ({ ...prev, last_name: e.target.value }))}
                       placeholder="Enter your last name"
                       required
                     />
@@ -216,7 +142,7 @@ export function Profile() {
                     <Input
                       id="city"
                       value={formData.city || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
+                      onChange={(e) => setFormData((prev: ProfileData) => ({ ...prev, city: e.target.value }))}
                       placeholder="Enter city"
                     />
                   </div>
@@ -225,7 +151,7 @@ export function Profile() {
                     <Input
                       id="country"
                       value={formData.country || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, country: e.target.value }))}
+                      onChange={(e) => setFormData((prev: ProfileData) => ({ ...prev, country: e.target.value }))}
                       placeholder="Enter country"
                     />
                   </div>
@@ -235,7 +161,7 @@ export function Profile() {
                   <Textarea
                     id="bio"
                     value={formData.bio || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+                    onChange={(e) => setFormData((prev: ProfileData) => ({ ...prev, bio: e.target.value }))}
                     placeholder="Tell us about yourself..."
                     rows={3}
                   />
@@ -315,7 +241,7 @@ export function Profile() {
                   <Label className="text-sm font-medium">Your Skills</Label>
                   <div className="flex flex-wrap gap-2 min-h-[2rem] p-3 border rounded-md bg-muted/20">
                     {formData.skills && formData.skills.length > 0 ? (
-                      formData.skills.map((skill) => (
+                      formData.skills.map((skill: string) => (
                         <Badge key={skill} variant="secondary" className="flex items-center gap-1 px-3 py-1">
                           {skill}
                           <span title={`Remove ${skill}`}>
@@ -371,8 +297,8 @@ export function Profile() {
         {/* Save Button */}
         {editing && (
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Changes'}
+            <Button onClick={handleSave} disabled={isUpdating}>
+              {isUpdating ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
         )}
