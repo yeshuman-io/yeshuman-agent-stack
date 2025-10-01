@@ -262,7 +262,7 @@ The UI will automatically update when this tool completes successfully."""
             from apps.accounts.utils import negotiate_user_focus
 
             # Get current user from focus negotiation (this gets user from JWT context)
-            focus_data = negotiate_user_focus(None)
+            focus_data = await negotiate_user_focus(None)
             user = focus_data.get('user')
 
             if not user:
