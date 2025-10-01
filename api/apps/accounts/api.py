@@ -10,6 +10,7 @@ from django.core.validators import validate_email
 from ninja import Router, Schema
 from typing import Optional
 from pydantic import field_validator
+from asgiref.sync import sync_to_async
 
 # Create router for auth endpoints
 auth_router = Router()
@@ -84,7 +85,7 @@ class SetFocusRequest(Schema):
         return v
 
 
-def create_jwt_token(user):
+async def create_jwt_token(user):
     """Create JWT token for user."""
     payload = {
         'user_id': user.id,
@@ -98,7 +99,7 @@ def create_jwt_token(user):
 
 
 @auth_router.post("/register", response={200: dict, 400: dict})
-def register(request, data: RegisterSchema):
+async def register(request, data: RegisterSchema):
     """Register a new user."""
     try:
         User = get_user_model()
@@ -135,7 +136,7 @@ def register(request, data: RegisterSchema):
 
 
 @auth_router.post("/login", response={200: dict, 401: dict})
-def login(request, data: LoginSchema):
+async def login(request, data: LoginSchema):
     """Login endpoint that returns JWT token."""
     # Try to authenticate with username first, then try with email
     user = authenticate(username=data.username, password=data.password)
@@ -168,7 +169,7 @@ def login(request, data: LoginSchema):
 
 
 @auth_router.get("/me", response={200: UserResponse, 401: dict})
-def get_current_user(request):
+async def get_current_user(request):
     """Get current authenticated user information."""
     auth_header = request.META.get('HTTP_AUTHORIZATION', '')
 
@@ -196,7 +197,7 @@ def get_current_user(request):
 
 
 @auth_router.get("/focus", response={200: FocusResponse, 401: dict})
-def get_user_focus(request):
+async def get_user_focus(request):
     """Get current user focus and available options."""
     from .utils import get_available_foci_for_user, negotiate_user_focus
 
@@ -210,13 +211,13 @@ def get_user_focus(request):
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         User = get_user_model()
-        user = User.objects.get(id=payload['user_id'])
+        user = await User.objects.aget(id=payload['user_id'])
 
         # Set request.user for session functions
         request.user = user
 
-        current_focus, error = negotiate_user_focus(request)
-        available_foci = get_available_foci_for_user(user)
+        current_focus, error = await negotiate_user_focus(request)
+        available_foci = await get_available_foci_for_user(user)
         focus_confirmed = request.session.get('focus_confirmed', False)
 
         return 200, FocusResponse(
@@ -233,7 +234,7 @@ def get_user_focus(request):
 
 
 @auth_router.post("/focus", response={200: dict, 400: dict, 401: dict})
-def set_user_focus(request, data: SetFocusRequest):
+async def set_user_focus(request, data: SetFocusRequest):
     """Set user focus."""
     from .utils import negotiate_user_focus, get_available_foci_for_user
     import logging
@@ -254,19 +255,19 @@ def set_user_focus(request, data: SetFocusRequest):
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         logger.info(f"🔐 Decoded payload: {payload}")
         User = get_user_model()
-        user = User.objects.get(id=payload['user_id'])
+        user = await sync_to_async(User.objects.get)(id=payload['user_id'])
         logger.info(f"🔐 Found user: {user.username} (id: {user.id})")
 
         # Set request.user for session functions
         request.user = user
         logger.info(f"🔐 Set request.user to: {request.user}")
 
-        available_foci = get_available_foci_for_user(user)
+        available_foci = await get_available_foci_for_user(user)
         if data.focus not in available_foci:
             return 400, {"error": f"Focus '{data.focus}' not available for this user"}
 
         # Set the focus
-        current_focus, error = negotiate_user_focus(request, data.focus)
+        current_focus, error = await negotiate_user_focus(request, data.focus)
 
         if error:
             return 400, {"error": error}

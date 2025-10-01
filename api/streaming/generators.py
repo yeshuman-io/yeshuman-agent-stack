@@ -276,8 +276,9 @@ class AnthropicSSEGenerator:
                     # Map chunk types to proper delta types
                     delta_type_mapping = {
                         "message": "message_delta",
-                        "thinking": "thinking_delta", 
+                        "thinking": "thinking_delta",
                         "tool": "tool_delta",
+                        "tool_complete": "tool_complete_delta",
                         "json": "json_delta",
                         "system": "system_delta",
                         "voice": "voice_delta",

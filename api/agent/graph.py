@@ -129,7 +129,7 @@ def should_continue(state: AgentState) -> str:
     return END
 
 
-def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 'graph', user=None, focus=None):
+async def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 'graph', user=None, focus=None):
     """Create and return the simple ReAct agent with context-appropriate tools.
 
     Args:
@@ -139,25 +139,25 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
         user: Django User object (preferred for authenticated sessions)
         focus: Current user focus ('candidate', 'employer', 'admin') - overrides group logic
     """
-    logger.info(f"Creating agent with params: client={client}, role={role}, protocol={protocol}, user={user.username if user else None}, focus={focus}")
+    logger.info(f"🎯 Creating agent with params: client={client}, role={role}, protocol={protocol}, user={user.username if user else None}, focus={focus}")
 
     # Get tools based on focus if provided, otherwise fall back to user groups or legacy logic
     if user and focus:
-        logger.info(f"Getting tools for focus: user={user.username}, focus={focus}, protocol={protocol}")
-        tools = get_tools_for_focus(user, focus, protocol)
-        logger.info(f"Retrieved {len(tools)} tools for focus-based selection")
+        logger.info(f"🎯 Getting tools for focus: user={user.username}, focus={focus}, protocol={protocol}")
+        tools = await get_tools_for_focus(user, focus, protocol)
+        logger.info(f"✅ Retrieved {len(tools)} tools for focus-based selection: {[t.name for t in tools]}")
     elif user:
-        logger.info(f"Getting tools for user groups: user={user.username}, protocol={protocol}")
-        tools = get_tools_for_user(user, protocol)
-        logger.info(f"Retrieved {len(tools)} tools for user-based selection")
+        logger.info(f"👤 Getting tools for user groups: user={user.username}, protocol={protocol}")
+        tools = await get_tools_for_user(user, protocol)
+        logger.info(f"✅ Retrieved {len(tools)} tools for user-based selection: {[t.name for t in tools]}")
     else:
-        logger.info(f"Getting tools for legacy context: client={client}, role={role}, protocol={protocol}")
+        logger.info(f"🏛️ Getting tools for legacy context: client={client}, role={role}, protocol={protocol}")
         tools = get_tools_for_context(client, role, protocol)
-        logger.info(f"Retrieved {len(tools)} tools for legacy context selection")
+        logger.info(f"✅ Retrieved {len(tools)} tools for legacy context selection: {[t.name for t in tools]}")
 
-    # Log all available tools
+    # Final tool summary
     tool_names = [tool.name for tool in tools]
-    logger.info(f"Available tools: {tool_names}")
+    logger.info(f"🎉 Agent ready with {len(tools)} tools: {tool_names}")
 
     if not tools:
         logger.warning("No tools available for this context - agent will not be able to call any tools!")
@@ -176,6 +176,10 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
         try:
             logger.info("Agent node started")
 
+            # Check if agent has tools available
+            if not tools:
+                logger.warning("⚠️ Agent node executing without tools - agent cannot call any functions!")
+
             # -----------------------------------------------
             # Voice generation (enabled): brief background status line per agent_node
             voice_llm = ChatOpenAI(
@@ -188,6 +192,7 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
             user_id = state.get("user_id") or "default"
             vs = _get_voice_state(user_id)
             phase_sig = "agent:final" if state.get("tools_done") else "agent:start"
+            logger.info(f"🎤 Voice check: writer_available={writer is not None}, user_id={user_id}, phase_sig={phase_sig}, last_voice_sig={vs.get('last_voice_sig')}, will_trigger={vs.get('last_voice_sig') != phase_sig}")
             if vs.get("last_voice_sig") != phase_sig:
                 import asyncio as _asyncio
                 async def _voice_task():
@@ -207,47 +212,84 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
                             f"Current user request: {user_msg}\n"
                             "Return ONLY the status line, no quotes."
                         )
+                        logger.info(f"🎤 Voice prompt created: '{prompt[:100]}...'")
+                        logger.debug(f"🎤 Full voice prompt: {prompt}")
                         new_line = ""
                         # Signal start of a new voice segment
                         if writer:
-                            logger.info("Sending voice_start signal")
+                            logger.info("📡 Sending voice_start signal")
                             writer({"type": "voice_start"})
+                        else:
+                            logger.warning("⚠️ No writer available for voice signals")
+
+                        logger.info("🤖 Starting voice LLM stream...")
+                        chunk_count = 0
+                        empty_chunk_count = 0
+                        raw_response = ""
                         async for _chunk in voice_llm.astream([HumanMessage(content=prompt)]):
-                            if _chunk.content:
+                            chunk_count += 1
+                            raw_response += _chunk.content or ""
+                            if _chunk.content and _chunk.content.strip():
                                 new_line += _chunk.content
+                                logger.debug(f"🎤 Voice chunk {chunk_count}: '{_chunk.content}' (len={len(_chunk.content)})")
                                 if writer:
-                                    logger.info(f"Sending voice chunk: {_chunk.content}")
-                                    writer({"type": "voice", "text": _chunk.content})
+                                    writer({"type": "voice", "content": _chunk.content})
+                            else:
+                                empty_chunk_count += 1
+                                logger.debug(f"🎤 Empty voice chunk {chunk_count}: '{_chunk.content}' (len={len(_chunk.content or '')})")
+                        logger.info(f"✅ Voice LLM stream completed: {chunk_count} total chunks, {empty_chunk_count} empty")
+                        logger.info(f"🔍 Raw LLM response: '{raw_response}' (len={len(raw_response)})")
+                        logger.info(f"📝 Processed text: '{new_line}' (len={len(new_line)})")
+
                         # Persist
                         new_line_clean = (new_line or "").strip()
                         last_line = (vs.get("voice_messages", []) or [])[-1] if vs.get("voice_messages") else ""
                         if new_line_clean and new_line_clean.lower() != (last_line or "").strip().lower():
                             vs.setdefault("voice_messages", []).append(new_line_clean)
+                            logger.info(f"💾 Voice message persisted: '{new_line_clean}'")
                         vs["last_voice_sig"] = phase_sig
                         # Signal voice segment completion
                         if writer:
-                            logger.info("Sending voice_stop signal")
+                            logger.info("📡 Sending voice_stop signal")
                             writer({"type": "voice_stop"})
-                        logger.info(f"Voice task completed: {new_line_clean}")
+                        logger.info(f"🎤 Voice task completed successfully: '{new_line_clean}'")
                     except Exception as _e:
-                        logger.error(f"Voice generation error: {_e}")
+                        logger.error(f"❌ Voice generation error: {_e}")
+                        import traceback
+                        logger.error(f"❌ Voice traceback: {traceback.format_exc()}")
                 _asyncio.create_task(_voice_task())
             # -----------------------------------------------
 
             # Single LLM call with tools bound - can call tools OR generate response
-            logger.info(f"Creating LLM with {len(tools)} tools bound")
-            llm = ChatOpenAI(
-                model="gpt-4o",
-                temperature=0.7,  # Balanced for tool use and creativity
-                api_key=api_key,
-                streaming=True,
-            ).bind_tools(tools)
+            logger.info(f"🧠 Creating LLM with {len(tools)} tools bound")
+            # Manually create OpenAI tool format - cleaner schema extraction
+            openai_tools = []
+            for tool in tools:
+                if hasattr(tool, 'args_schema') and tool.args_schema:
+                    # Get the clean JSON schema without Pydantic extras
+                    full_schema = tool.args_schema.model_json_schema()
+
+                    # Extract just the essential OpenAI function parameters
+                    parameters = {
+                        "type": full_schema.get("type", "object"),
+                        "properties": full_schema.get("properties", {}),
+                        "required": full_schema.get("required", [])
+                    }
+
+                    tool_dict = {
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": parameters
+                        }
+                    }
+                    openai_tools.append(tool_dict)
+
 
             # Log context
             logger.debug(f"Messages being sent to LLM: {len(state.get('messages', []))} messages")
 
-            logger.info("Invoking LLM for tool calls or response")
-            response_chunks = []
 
             # Check for tool call loops to prevent infinite recursion
             tool_call_count = state.get("tool_call_count", 0)
@@ -264,54 +306,70 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
                     "tool_call_count": tool_call_count
                 }
 
-            # Stream the response - it may contain tool calls or text
-            async for chunk in llm.astream(state["messages"]):
-                response_chunks.append(chunk)
+            # PIPELINE ARCHITECTURE: Industry Standard Approach
+            # Phase 1: Tool Detection (Non-streaming, reliable)
+            logger.info("🔍 Phase 1: Tool Detection Agent")
+            tool_detector = ChatOpenAI(
+                model="gpt-4o",
+                temperature=0.1,  # Low temperature for consistent tool detection
+                api_key=api_key,
+                streaming=False,  # Non-streaming for reliability
+            ).bind_tools(openai_tools)
 
-                # Check for tool calls in this chunk
-                if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
-                    logger.info(f"Tool calls detected in streaming response: {len(chunk.tool_calls)} calls")
-                    for i, tc in enumerate(chunk.tool_calls):
-                        tool_name = tc.get("name", "unknown")
-                        tool_args = tc.get("args", {})
-                        logger.info(f"Tool call {i+1}: {tool_name} with args: {tool_args}")
+            tool_response = await tool_detector.ainvoke(state["messages"])
 
-                    # Reconstruct the AIMessage with tool calls
-                    full_response = AIMessage(
-                        content="".join([c.content for c in response_chunks if c.content]),
-                        tool_calls=chunk.tool_calls  # Use the tool calls from the last chunk
-                    )
+            # Phase 2: Tool Execution (if needed)
+            if hasattr(tool_response, 'tool_calls') and tool_response.tool_calls:
+                logger.info(f"🔧 Phase 2: Tool Execution - {len(tool_response.tool_calls)} tools detected")
 
-                    tool_names = [tc.get("name", "unknown") for tc in chunk.tool_calls]
-                    logger.info(f"Tool calls requested: {tool_names}")
-                    if writer:
-                        writer({"type": "tool", "text": f"🔧 Calling tools: {', '.join(tool_names)}"})
+                # Log tool calls
+                for i, tc in enumerate(tool_response.tool_calls):
+                    tool_name = tc.get("name", "unknown")
+                    tool_args = tc.get("args", tc.get("arguments", {}))
+                    logger.info(f"Tool call {i+1}: {tool_name} with args: {tool_args}")
 
-                    return {
-                        "messages": [full_response],
-                        "writer": writer,
-                        "tools_done": False,  # Allow tool execution
-                        "tool_call_count": tool_call_count + 1  # Increment count
-                    }
+                # Voice message for tool execution
+                tool_names = [tc.get("name", "unknown") for tc in tool_response.tool_calls]
+                if writer:
+                    writer({"type": "tool", "content": f"🔧 Calling tools: {', '.join(tool_names)}"})
 
-                # If it's just content, stream it
-                elif chunk.content and writer:
-                    writer({"type": "message", "content": chunk.content})
+                return {
+                    "messages": [tool_response],
+                    "writer": writer,
+                    "tools_done": False,  # Allow tool execution
+                    "tool_call_count": tool_call_count + 1
+                }
 
-            # No tool calls were made - this is the final response
-            # The LLM has seen all tool results in message history and decided to respond
-            logger.info("No tool calls made - streaming complete response")
-            final_response = AIMessage(
-                content="".join([c.content for c in response_chunks if c.content])
+            # Phase 3: Response Generation (streaming)
+            logger.info("💬 Phase 3: Response Generation Agent (streaming)")
+
+            response_generator = ChatOpenAI(
+                model="gpt-4o",
+                temperature=0.7,  # Normal temperature for creative responses
+                api_key=api_key,
+                streaming=True,  # Streaming for UX
             )
 
-            logger.info("Agent response completed")
+            # Stream the response
+            response_chunks = []
+            async for chunk in response_generator.astream(state["messages"]):
+                response_chunks.append(chunk)
+
+                # Stream content to UI
+                if chunk.content and writer:
+                    writer({"type": "message", "content": chunk.content})
+
+            # Create final response
+            final_content = "".join([c.content for c in response_chunks if c.content])
+            final_response = AIMessage(content=final_content)
+
+            logger.info("✅ Pipeline completed successfully")
             return {
                 "messages": [final_response],
                 "writer": writer,
                 "voice_messages": state.get("voice_messages", []),
                 "last_voice_sig": state.get("last_voice_sig"),
-                "tool_call_count": tool_call_count  # Preserve count
+                "tool_call_count": tool_call_count
             }
 
         except Exception as e:
@@ -327,7 +385,7 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
     # Create tool node with logging wrapper
     base_tool_node = ToolNode(tools)
     
-    def tools_node_with_logging(state: AgentState):
+    async def tools_node_with_logging(state: AgentState):
         logger.info("🛠️ Tools node called")
         writer = state.get("writer")
 
@@ -339,15 +397,25 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
                 for i, tc in enumerate(tool_calls):
                     tool_name = tc.get("name", "unknown")
                     tool_id = tc.get("id", "no_id")
-                    tool_args = tc.get("args", {})
+                    tool_args = tc.get("args", tc.get("arguments", {}))
                     logger.info(f"🔧 Tool call {i+1}: {tool_name} (id: {tool_id})")
-                    logger.debug(f"🔧 Tool args for {tool_name}: {tool_args}")
+                    if tool_args == {} or not tool_args:
+                        logger.warning(f"⚠️ Tool call {i+1} has empty arguments: {tool_args} (type: {type(tool_args)})")
+                    else:
+                        logger.info(f"🔧 Tool args for {tool_name}: {tool_args} (type: {type(tool_args)})")
+                    if isinstance(tool_args, str) and tool_args:
+                        import json
+                        try:
+                            parsed_args = json.loads(tool_args)
+                            logger.info(f"🔧 Parsed JSON args for {tool_name}: {parsed_args}")
+                        except json.JSONDecodeError as e:
+                            logger.error(f"🔧 Failed to parse tool args JSON for {tool_name}: {e}")
 
                 # Voice status for tools phase (single line, rate-limited by phase signature)
                 tool_names = [tc.get("name", "unknown") for tc in tool_calls]
                 sig = f"tools:{','.join(sorted(tool_names))}"
                 if writer and state.get("last_voice_sig") != sig:
-                    writer({"type": "voice", "text": f"Calling {', '.join(tool_names)}..."})
+                    writer({"type": "voice", "content": f"Calling {', '.join(tool_names)}..."})
                     state["last_voice_sig"] = sig
             else:
                 logger.warning("⚠️ Tools node called but no tool calls found in last message")
@@ -356,7 +424,7 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
 
         logger.info("⚙️ Invoking ToolNode...")
         try:
-            result = base_tool_node.invoke(state)
+            result = await base_tool_node.ainvoke(state)
             logger.info("✅ ToolNode invocation completed")
 
             # Check the result messages for tool responses
@@ -366,7 +434,11 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
                 for i, response in enumerate(tool_responses):
                     tool_call_id = getattr(response, 'tool_call_id', 'no_id')
                     content_preview = str(response.content)[:100] if response.content else "No content"
-                    logger.info(f"📨 Tool response {i+1}: id={tool_call_id}, content_preview='{content_preview}...'")
+                    # Check if this is an error response
+                    if str(response.content).startswith("Error:"):
+                        logger.error(f"❌ Tool response {i+1}: id={tool_call_id}, content_preview='{content_preview}...'")
+                    else:
+                        logger.info(f"📨 Tool response {i+1}: id={tool_call_id}, content_preview='{content_preview}...'")
             else:
                 logger.warning("⚠️ ToolNode returned no messages")
 
@@ -381,7 +453,7 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
             tool_calls = getattr(last_message, 'tool_calls', None) or []
             if tool_calls:
                 completed_tool_names = [tc.get("name", "unknown") for tc in tool_calls]
-                writer({"type": "tool_complete", "text": f"✅ Completed tools: {', '.join(completed_tool_names)}"})
+                writer({"type": "tool_complete", "content": f"✅ Completed tools: {', '.join(completed_tool_names)}"})
 
         # Allow iterative tool usage - don't set tools_done
         # Carry voice state forward
@@ -390,7 +462,18 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
         if state.get("voice_messages"):
             result["voice_messages"] = state.get("voice_messages")
 
-        logger.info("🎯 Tools node completed successfully")
+        # Check if any tool responses were errors
+        has_errors = False
+        if result.get('messages'):
+            for msg in result['messages']:
+                if hasattr(msg, 'content') and str(msg.content).startswith("Error:"):
+                    has_errors = True
+                    break
+
+        if has_errors:
+            logger.warning("⚠️ Tools node completed with errors - some tools failed")
+        else:
+            logger.info("🎯 Tools node completed successfully")
         return result
     
     # Add nodes
@@ -410,7 +493,7 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
         }
     )
     workflow.add_edge("tools", "agent")  # After tools, back to agent
-    
+
     return workflow.compile()
 
 
@@ -418,7 +501,7 @@ def create_agent(client: str = 'talentco', role: str = 'admin', protocol: str = 
 async def ainvoke_agent(message: str, messages: Optional[List[BaseMessage]] = None, agent=None, user=None, focus=None):
     """Async invoke the agent with a message."""
     if agent is None:
-        agent = create_agent(user=user, focus=focus)
+        agent = await create_agent(user=user, focus=focus)
 
     # Use provided messages or create new message list
     if messages:
@@ -476,7 +559,7 @@ async def ainvoke_agent_sync(message: str, messages: Optional[List[BaseMessage]]
 async def astream_agent(message: str, agent=None, user=None, focus=None):
     """Async stream the agent response."""
     if agent is None:
-        agent = create_agent(user=user, focus=focus)
+        agent = await create_agent(user=user, focus=focus)
     
     state = {
         "messages": [HumanMessage(content=message)],
@@ -489,14 +572,26 @@ async def astream_agent(message: str, agent=None, user=None, focus=None):
 
 async def astream_agent_tokens(message: str, messages: Optional[List[BaseMessage]] = None, agent=None, user=None, focus=None):
     """Stream agent tokens - unified writer() approach."""
+    logger.info(f"🚀 astream_agent_tokens called with: message='{message[:50]}...', messages_count={len(messages) if messages else 0}, agent_provided={agent is not None}, user={user.username if user else None}, focus={focus}")
+
     if agent is None:
-        agent = create_agent(user=user, focus=focus)
+        logger.info("🏗️ Creating new agent...")
+        agent = await create_agent(user=user, focus=focus)
+        logger.info(f"✅ Agent created with {len(getattr(agent, 'tools', []))} tools")
+    else:
+        logger.info("♻️ Using provided agent")
 
     # Use provided messages or create new message list
     if messages:
+        logger.info(f"📚 Using {len(messages)} existing messages + new message")
+        for i, msg in enumerate(messages[-3:]):  # Log last 3 messages
+            logger.info(f"  Message {len(messages)-3+i}: {type(msg).__name__} - '{str(msg.content)[:100]}...'")
         state_messages = messages + [HumanMessage(content=message)]
     else:
+        logger.info("📝 Starting fresh conversation (no existing messages)")
         state_messages = [HumanMessage(content=message)]
+
+    logger.info(f"📤 Final state has {len(state_messages)} messages")
 
     state = {
         "messages": state_messages,

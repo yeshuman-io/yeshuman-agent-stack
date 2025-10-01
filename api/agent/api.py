@@ -120,7 +120,8 @@ async def stream(request):
             try:
                 from yeshuman.api import get_user_from_token
                 auth_header = request.headers.get('authorization', '')
-                logger.info(f"🔐 Agent auth header: '{auth_header}'")
+                masked_header = f"{auth_header[:50]}..." if len(auth_header) > 50 else auth_header
+                logger.info(f"🔐 Agent auth header: '{masked_header}'")
                 user = await get_user_from_token(request)
                 logger.info(f"🔐 Agent user extracted: {user}, type: {type(user)}, is_anon: {user.is_anonymous if user else 'N/A'}")
                 if user and not user.is_anonymous:
@@ -143,7 +144,7 @@ async def stream(request):
 
                     # Check ownership
                     if current_thread and user and not user.is_anonymous:
-                        if current_thread.user_id != str(user.id):
+                        if str(current_thread.user_id) != str(user.id):
                             # User doesn't own this thread - create error
                             async def error_stream():
                                 yield f"event: error\ndata: {json.dumps({'type': 'error', 'content': 'Access denied to this thread'})}\n\n"
@@ -155,8 +156,10 @@ async def stream(request):
                     if current_thread:
                         thread_messages = await get_thread_messages_as_langchain(thread_id)
                         # Add the new message to the thread
+                        logger.info(f"💾 [MESSAGE SAVE] Saving human message to existing thread {thread_id}")
                         from apps.threads.services import create_human_message
-                        await create_human_message(thread_id, message)
+                        human_message = await create_human_message(thread_id, message)
+                        logger.info(f"💾 [MESSAGE SAVE] Successfully saved human message {human_message.id}")
 
                 except Exception as e:
                     logger.warning(f"Failed to load thread context: {str(e)}")
@@ -180,14 +183,18 @@ async def stream(request):
                         await create_human_message(str(current_thread.id), message)
                     else:
                         # Create new session thread
+                        logger.info(f"🆕 [THREAD CREATION] Creating new session thread for message: '{message[:50]}...'")
                         current_thread = await get_or_create_session_thread(
                             session_id=session_id or "anonymous",
                             subject=f"Anonymous conversation - {message[:50]}..."
                         )
+                        logger.info(f"🆕 [THREAD CREATION] Created session thread {current_thread.id}")
                         thread_messages = None  # No previous messages for new thread
                         # Add the initial message
+                        logger.info(f"💾 [MESSAGE SAVE] Saving initial human message to new thread {current_thread.id}")
                         from apps.threads.services import create_human_message
-                        await create_human_message(str(current_thread.id), message)
+                        human_message = await create_human_message(str(current_thread.id), message)
+                        logger.info(f"💾 [MESSAGE SAVE] Successfully saved initial human message {human_message.id}")
 
                 except Exception as e:
                     logger.warning(f"Failed to create session thread: {str(e)}")
@@ -198,7 +205,7 @@ async def stream(request):
         if user and not user.is_anonymous:
             logger.info(f"🎯 User authenticated: {user}, username: '{user.username}', id: {user.id}")
             from apps.accounts.utils import negotiate_user_focus
-            user_focus, focus_error = negotiate_user_focus(request)
+            user_focus, focus_error = await negotiate_user_focus(request)
             if focus_error:
                 logger.warning(f"Focus negotiation error for user {user.username}: {focus_error}")
                 user_focus = 'candidate'  # Default fallback
@@ -254,6 +261,8 @@ async def stream(request):
 
         # Create streaming generator with conversation context
         logger.info(f"🏁 [STREAM LIFECYCLE] Starting stream: thread_id={current_thread.id if current_thread else None}, user_id={user.id if user else None}")
+        logger.info(f"📨 [STREAM PARAMS] message='{message[:50]}...', thread_messages_count={len(thread_messages) if thread_messages else 0}, user={user.username if user else None}, focus={user_focus}")
+
         async def stream_generator():
             accumulated_response = []
 
@@ -289,6 +298,7 @@ async def stream(request):
                 except Exception as e:
                     logger.warning(f"Failed to emit human message delta: {str(e)}")
 
+            logger.info("🎬 [STREAM LIFECYCLE] Calling astream_agent_tokens...")
             async for chunk in astream_agent_tokens(message, thread_messages, user=user, focus=user_focus):
                 # Accumulate message content for thread saving
                 if chunk.get("type") == "content_block_delta":
@@ -304,10 +314,12 @@ async def stream(request):
 
             # Save response to thread if we have one
             if current_thread and accumulated_response:
+                logger.info(f"💾 [MESSAGE SAVE] Saving assistant response to thread {current_thread.id}, response length: {len(''.join(accumulated_response))}")
                 try:
                     from apps.threads.services import create_assistant_message
                     full_response = "".join(accumulated_response)
                     assistant_message = await create_assistant_message(str(current_thread.id), full_response)
+                    logger.info(f"💾 [MESSAGE SAVE] Successfully saved assistant message {assistant_message.id}")
 
                     # Emit message saved event
                     logger.info(f"🔄 [DJANGO THREAD DELTA] Emitting message_saved (assistant): thread_id={current_thread.id}, message_id={assistant_message.id}, content_length={len(full_response)}")

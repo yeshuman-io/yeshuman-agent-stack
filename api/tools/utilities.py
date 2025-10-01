@@ -19,7 +19,7 @@ class CalculatorTool(BaseTool):
     description: str = "Perform basic mathematical calculations. Input should be a valid mathematical expression."
     args_schema: type[BaseModel] = CalculatorInput
     
-    def _run(self, expression: str, run_manager: Optional = None) -> str:
+    def _run(self, **kwargs) -> str:
         """Execute the calculator tool synchronously (wrapper for async version)."""
         import asyncio
         try:
@@ -29,16 +29,23 @@ class CalculatorTool(BaseTool):
             return "Error: Synchronous tool execution not supported in async context"
         except RuntimeError:
             # No event loop running, safe to create one
-            return asyncio.run(self._arun(expression, run_manager))
+            return asyncio.run(self._arun(**kwargs))
     
-    async def _arun(self, expression: str, run_manager: Optional = None) -> str:
+    async def _arun(self, **kwargs) -> str:
         """Execute the calculator tool asynchronously."""
+        # Extract and validate expression parameter
+        expression = kwargs.get('expression')
+        if not expression:
+            # Try to validate using args_schema for proper error message
+            CalculatorInput(**kwargs)  # This will raise validation error
+            return "Error: Expression parameter required"
+
         try:
             # Basic safety check - only allow basic math operations
             allowed_chars = set('0123456789+-*/.() ')
             if not all(c in allowed_chars for c in expression):
                 return "Error: Only basic mathematical operations are allowed"
-            
+
             # Use asyncio.sleep(0) to yield control in case of complex calculations
             await asyncio.sleep(0)
             result = eval(expression)
@@ -59,7 +66,7 @@ class EchoTool(BaseTool):
     description: str = "Echo back any message. Useful for testing and simple responses."
     args_schema: type[BaseModel] = EchoInput
     
-    def _run(self, message: str, run_manager: Optional = None) -> str:
+    def _run(self, **kwargs) -> str:
         """Execute the echo tool synchronously (wrapper for async version)."""
         import asyncio
         try:
@@ -69,10 +76,17 @@ class EchoTool(BaseTool):
             return "Error: Synchronous tool execution not supported in async context"
         except RuntimeError:
             # No event loop running, safe to create one
-            return asyncio.run(self._arun(message, run_manager))
-    
-    async def _arun(self, message: str, run_manager: Optional = None) -> str:
+            return asyncio.run(self._arun(**kwargs))
+
+    async def _arun(self, **kwargs) -> str:
         """Execute the echo tool asynchronously."""
+        # Extract and validate message parameter
+        message = kwargs.get('message')
+        if not message:
+            # Try to validate using args_schema for proper error message
+            EchoInput(**kwargs)  # This will raise validation error
+            return "Error: Message parameter required"
+
         await asyncio.sleep(0)  # Yield control
         return f"Echo: {message}"
 
@@ -89,7 +103,7 @@ class WeatherTool(BaseTool):
     description: str = "Get current weather information for a location. Returns mock weather data for demonstration."
     args_schema: type[BaseModel] = WeatherInput
     
-    def _run(self, location: str, run_manager: Optional = None) -> str:
+    def _run(self, **kwargs) -> str:
         """Execute the weather tool synchronously (wrapper for async version)."""
         import asyncio
         try:
@@ -99,20 +113,27 @@ class WeatherTool(BaseTool):
             return "Error: Synchronous tool execution not supported in async context"
         except RuntimeError:
             # No event loop running, safe to create one
-            return asyncio.run(self._arun(location, run_manager))
+            return asyncio.run(self._arun(**kwargs))
     
-    async def _arun(self, location: str, run_manager: Optional = None) -> str:
+    async def _arun(self, **kwargs) -> str:
         """Execute the weather tool asynchronously."""
+        # Extract and validate location parameter
+        location = kwargs.get('location')
+        if not location:
+            # Try to validate using args_schema for proper error message
+            WeatherInput(**kwargs)  # This will raise validation error
+            return "Error: Location parameter required"
+
         # Mock weather data for demonstration
         import random
-        
+
         # Simulate API call delay
         await asyncio.sleep(0.1)
-        
+
         weather_conditions = ["sunny", "cloudy", "rainy", "partly cloudy", "windy"]
         condition = random.choice(weather_conditions)
         temperature = random.randint(15, 35)  # Celsius
-        
+
         return f"Weather in {location}: {condition}, {temperature}°C"
 
 
@@ -129,7 +150,7 @@ class TextAnalysisTool(BaseTool):
     description: str = "Analyze text for various metrics like word count, sentiment, or generate summaries."
     args_schema: type[BaseModel] = TextAnalysisInput
     
-    def _run(self, text: str, analysis_type: str = "summary", run_manager: Optional = None) -> str:
+    def _run(self, **kwargs) -> str:
         """Execute the text analysis tool synchronously (wrapper for async version)."""
         import asyncio
         try:
@@ -139,10 +160,19 @@ class TextAnalysisTool(BaseTool):
             return "Error: Synchronous tool execution not supported in async context"
         except RuntimeError:
             # No event loop running, safe to create one
-            return asyncio.run(self._arun(text, analysis_type, run_manager))
-    
-    async def _arun(self, text: str, analysis_type: str = "summary", run_manager: Optional = None) -> str:
+            return asyncio.run(self._arun(**kwargs))
+
+    async def _arun(self, **kwargs) -> str:
         """Execute the text analysis tool asynchronously."""
+        # Extract and validate parameters
+        text = kwargs.get('text')
+        analysis_type = kwargs.get('analysis_type', 'summary')
+
+        if not text:
+            # Try to validate using args_schema for proper error message
+            TextAnalysisInput(**kwargs)  # This will raise validation error
+            return "Error: Text parameter required"
+
         # Simulate processing time for analysis
         await asyncio.sleep(0.05)
         
