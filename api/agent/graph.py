@@ -9,6 +9,7 @@ Clean design following LangGraph patterns:
 """
 import os
 import logging
+import time
 from typing import TypedDict, List, Optional, Annotated, Dict, Any
 from dotenv import load_dotenv
 
@@ -20,6 +21,10 @@ from langgraph.config import get_stream_writer
 from langgraph.prebuilt import ToolNode
 
 from tools.compositions import get_tools_for_context, get_tools_for_user, get_tools_for_focus
+
+# Semantic voice enhancement
+from sentence_transformers import SentenceTransformer
+import numpy as np
 
 # Load environment variables
 load_dotenv()
@@ -37,6 +42,156 @@ def _get_voice_state(user_id: str) -> Dict[str, Any]:
             "last_voice_sig": None,
         }
     return VOICE_STATE[user_id]
+
+
+# Semantic Voice Manager for intelligent voice triggering
+class SemanticVoiceManager:
+    """Manages semantic analysis for intelligent voice triggering"""
+
+    _instance = None
+    _model = None
+
+    def __init__(self):
+        self.previous_embedding = None
+        self.similarity_threshold = 0.75
+        self.cooldown_seconds = 3.0
+        self.last_trigger_time = 0
+
+    @classmethod
+    def get_instance(cls):
+        """Singleton pattern for model sharing"""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    @classmethod
+    def get_model(cls):
+        """Lazy load the sentence transformer model"""
+        if cls._model is None:
+            logger.info("Loading sentence transformer model for semantic voice...")
+            try:
+                cls._model = SentenceTransformer('all-MiniLM-L6-v2')
+                logger.info("✅ Sentence transformer model loaded")
+            except Exception as e:
+                logger.error(f"❌ Failed to load sentence transformer: {e}")
+                cls._model = None
+        return cls._model
+
+    def extract_semantic_context(self, state: 'AgentState') -> str:
+        """Extract current semantic state for comparison"""
+        messages = state.get("messages", [])
+        if not messages:
+            return "initial_state"
+
+        # Get recent messages for semantic context
+        recent_messages = messages[-5:]  # Last 5 messages for context window
+        context_parts = []
+
+        # Current phase
+        if state.get("tools_done") is False:
+            context_parts.append("tool_execution_phase")
+        elif any(hasattr(msg, 'tool_call_id') for msg in recent_messages):
+            context_parts.append("result_processing_phase")
+        else:
+            context_parts.append("response_generation_phase")
+
+        # Active operations from recent tool calls
+        operations = self._extract_operations(state)
+        if operations:
+            context_parts.append(f"operations: {', '.join(operations)}")
+
+        # Current user intent from most recent human message
+        for msg in reversed(messages):
+            if isinstance(msg, HumanMessage):
+                user_intent = msg.content[:200]  # First 200 chars for semantic comparison
+                context_parts.append(f"user_request: {user_intent}")
+                break
+
+        # Tool usage patterns
+        tool_calls = [msg for msg in recent_messages if hasattr(msg, 'tool_calls') and msg.tool_calls]
+        if tool_calls:
+            context_parts.append(f"tool_activity: {len(tool_calls)} recent tool calls")
+
+        return " | ".join(context_parts)
+
+
+    def _extract_operations(self, state: 'AgentState') -> List[str]:
+        """Extract current active operations"""
+        operations = []
+
+        # Check for tool calls in recent messages
+        messages = state.get("messages", [])
+        recent_messages = messages[-3:]  # Last 3 messages
+
+        for msg in recent_messages:
+            if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                tool_names = [tc.get('name', 'unknown') for tc in msg.tool_calls]
+                operations.extend(tool_names)
+
+        # Add phase-based operations
+        if state.get("tools_done") is False:
+            operations.append("tool_execution")
+        elif len(operations) > 0:
+            operations.append("result_processing")
+
+        return operations[:5]  # Limit to prevent context bloat
+
+    def _detect_reasoning_phase(self, state: 'AgentState') -> str:
+        """Detect the current reasoning phase"""
+        if state.get("tools_done") is False:
+            return "tool_execution"
+        elif any(hasattr(msg, 'tool_call_id') for msg in state.get("messages", [])):
+            return "result_synthesis"
+        elif len(state.get("messages", [])) <= 2:
+            return "initial_analysis"
+        else:
+            return "response_generation"
+
+
+
+    def should_trigger_voice(self, state: 'AgentState', current_time: float) -> bool:
+        """Determine if voice should be triggered based on semantic analysis"""
+
+        # Rate limiting check
+        if current_time - self.last_trigger_time < self.cooldown_seconds:
+            return False
+
+        # Extract semantic context
+        context_text = self.extract_semantic_context(state)
+
+        # Get model and create embedding
+        model = self.get_model()
+        if model is None:
+            return False  # Model failed to load
+
+        try:
+            current_embedding = model.encode(context_text, normalize_embeddings=True)
+
+            # First run always triggers
+            if self.previous_embedding is None:
+                self.previous_embedding = current_embedding
+                self.last_trigger_time = current_time
+                return True
+
+            # Calculate cosine similarity
+            similarity = np.dot(current_embedding, self.previous_embedding)
+
+            # Trigger if similarity is below threshold (significant semantic shift)
+            if similarity < self.similarity_threshold:
+                self.previous_embedding = current_embedding
+                self.last_trigger_time = current_time
+                logger.info(f"🎤 Semantic voice trigger: similarity {similarity:.3f} < {self.similarity_threshold}")
+                return True
+
+        except Exception as e:
+            logger.warning(f"Semantic analysis failed: {e}")
+            return False
+
+        return False
+
+
+# Global semantic voice manager instance
+semantic_voice_manager = SemanticVoiceManager.get_instance()
 
 
 # Dynamic system prompt based on client configuration
@@ -176,85 +331,94 @@ async def create_agent(client: str = 'talentco', role: str = 'admin', protocol: 
         try:
             logger.info("Agent node started")
 
+            # Initialize voice LLM for semantic voice generation
+            voice_llm = ChatOpenAI(
+                model="gpt-4o",
+                temperature=0.3,  # Slightly creative for voice messages
+                api_key=api_key,
+                streaming=True,
+            )
+
             # Check if agent has tools available
             if not tools:
                 logger.warning("⚠️ Agent node executing without tools - agent cannot call any functions!")
 
             # -----------------------------------------------
-            # Voice generation (enabled): brief background status line per agent_node
-            voice_llm = ChatOpenAI(
-                model="gpt-4o",
-                temperature=0.2,
-                api_key=api_key,
-                streaming=True,
-            )
-            # Rate-limit by phase signature using process-local VOICE_STATE
+            # Semantic Voice Generation: Pure semantic difference detection
             user_id = state.get("user_id") or "default"
-            vs = _get_voice_state(user_id)
-            phase_sig = "agent:final" if state.get("tools_done") else "agent:start"
-            logger.info(f"🎤 Voice check: writer_available={writer is not None}, user_id={user_id}, phase_sig={phase_sig}, last_voice_sig={vs.get('last_voice_sig')}, will_trigger={vs.get('last_voice_sig') != phase_sig}")
-            if vs.get("last_voice_sig") != phase_sig:
+            current_time = time.time()
+
+            # Check if agent state has semantically shifted enough to warrant voice
+            if semantic_voice_manager.should_trigger_voice(state, current_time):
                 import asyncio as _asyncio
                 async def _voice_task():
                     try:
-                        logger.info(f"Voice task started for phase: {phase_sig}")
-                        # Context for a brief progress prompt
+                        logger.info("🎤 Semantic voice task started")
+
+                        # Extract semantic context for intelligent voice generation
+                        semantic_context = semantic_voice_manager.extract_semantic_context(state)
+
+                        # Get recent user message for context
                         user_msg = ""
                         for _m in reversed(state.get("messages", [])):
                             if isinstance(_m, HumanMessage):
                                 user_msg = _m.content
                                 break
+
+                        # Get voice history for continuity
+                        vs = _get_voice_state(user_id)
                         prior_voice = "\n".join(vs.get("voice_messages", []) or [])
-                        prompt = (
-                            "You are generating a single brief status line (2-10 words) that updates the user "
-                            "on agent progress. Consider previous voice lines and avoid repeating similar lines.\n\n"
-                            f"Previous lines (most recent last):\n{prior_voice if prior_voice else '(none)'}\n\n"
-                            f"Current user request: {user_msg}\n"
-                            "Return ONLY the status line, no quotes."
-                        )
-                        logger.info(f"🎤 Voice prompt created: '{prompt[:100]}...'")
-                        logger.debug(f"🎤 Full voice prompt: {prompt}")
+
+                        # Create intelligent voice prompt based on semantic context
+                        prompt = f"""You are generating a brief status update (2-8 words) about an AI agent's current activity.
+
+Semantic Context: {semantic_context}
+
+Previous voice updates (most recent last):
+{prior_voice if prior_voice else '(none)'}
+
+User's current request: {user_msg[:100]}
+
+Generate a concise, contextual status update that reflects what the agent is currently doing. The agent may be using various tools, processing information, or generating responses.
+
+Return ONLY the status line, no quotes or explanation."""
+
+                        logger.info("🎤 Semantic voice prompt created")
+                        logger.debug(f"🎤 Context: {semantic_context[:200]}...")
+
                         new_line = ""
-                        # Signal start of a new voice segment
                         if writer:
                             logger.info("📡 Sending voice_start signal")
                             writer({"type": "voice_start"})
-                        else:
-                            logger.warning("⚠️ No writer available for voice signals")
 
-                        logger.info("🤖 Starting voice LLM stream...")
+                        # Generate voice with semantic awareness
                         chunk_count = 0
                         empty_chunk_count = 0
-                        raw_response = ""
-                        async for _chunk in voice_llm.astream([HumanMessage(content=prompt)]):
+                        async for _chunk in voice_llm.astream([SystemMessage(content=prompt)]):
                             chunk_count += 1
-                            raw_response += _chunk.content or ""
                             if _chunk.content and _chunk.content.strip():
                                 new_line += _chunk.content
-                                logger.debug(f"🎤 Voice chunk {chunk_count}: '{_chunk.content}' (len={len(_chunk.content)})")
                                 if writer:
                                     writer({"type": "voice", "content": _chunk.content})
                             else:
                                 empty_chunk_count += 1
-                                logger.debug(f"🎤 Empty voice chunk {chunk_count}: '{_chunk.content}' (len={len(_chunk.content or '')})")
-                        logger.info(f"✅ Voice LLM stream completed: {chunk_count} total chunks, {empty_chunk_count} empty")
-                        logger.info(f"🔍 Raw LLM response: '{raw_response}' (len={len(raw_response)})")
-                        logger.info(f"📝 Processed text: '{new_line}' (len={len(new_line)})")
 
-                        # Persist
+                        logger.info(f"✅ Semantic voice completed: {chunk_count} chunks, {empty_chunk_count} empty")
+
+                        # Persist voice message
                         new_line_clean = (new_line or "").strip()
-                        last_line = (vs.get("voice_messages", []) or [])[-1] if vs.get("voice_messages") else ""
-                        if new_line_clean and new_line_clean.lower() != (last_line or "").strip().lower():
+                        if new_line_clean:
                             vs.setdefault("voice_messages", []).append(new_line_clean)
-                            logger.info(f"💾 Voice message persisted: '{new_line_clean}'")
-                        vs["last_voice_sig"] = phase_sig
-                        # Signal voice segment completion
+                            logger.info(f"💾 Semantic voice persisted: '{new_line_clean}'")
+
                         if writer:
                             logger.info("📡 Sending voice_stop signal")
                             writer({"type": "voice_stop"})
-                        logger.info(f"🎤 Voice task completed successfully: '{new_line_clean}'")
+
+                        logger.info(f"🎤 Semantic voice task completed: '{new_line_clean}'")
+
                     except Exception as _e:
-                        logger.error(f"❌ Voice generation error: {_e}")
+                        logger.error(f"❌ Semantic voice generation error: {_e}")
                         import traceback
                         logger.error(f"❌ Voice traceback: {traceback.format_exc()}")
                 _asyncio.create_task(_voice_task())
