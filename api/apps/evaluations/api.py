@@ -32,9 +32,11 @@ class EvaluationSetSchema(Schema):
 
 
 @evaluations_router.get("/", response=List[EvaluationSetSchema], tags=["Evaluations"])
-def list_evaluation_sets(request):
+async def list_evaluation_sets(request):
     """List all evaluation sets."""
-    evaluation_sets = EvaluationSet.objects.all().prefetch_related('evaluations')
+    from asgiref.sync import sync_to_async
+
+    evaluation_sets = await sync_to_async(list)(EvaluationSet.objects.all().prefetch_related('evaluations'))
     return [
         EvaluationSetSchema(
             id=str(eval_set.id),
@@ -60,9 +62,11 @@ def list_evaluation_sets(request):
 
 
 @evaluations_router.get("/{evaluation_set_id}", response=EvaluationSetSchema, tags=["Evaluations"])
-def get_evaluation_set(request, evaluation_set_id: str):
+async def get_evaluation_set(request, evaluation_set_id: str):
     """Get a specific evaluation set by ID."""
-    evaluation_set = EvaluationSet.objects.prefetch_related('evaluations').get(id=evaluation_set_id)
+    from asgiref.sync import sync_to_async
+
+    evaluation_set = await sync_to_async(EvaluationSet.objects.prefetch_related('evaluations').get)(id=evaluation_set_id)
     return EvaluationSetSchema(
         id=str(evaluation_set.id),
         evaluator_perspective=evaluation_set.evaluator_perspective,

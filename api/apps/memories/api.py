@@ -34,11 +34,17 @@ class MemoryCreateSchema(Schema):
 
 
 @memories_router.get("/", response=List[MemorySchema], tags=["Memories"])
-def list_memories(request, user_id: Optional[str] = None):
+async def list_memories(request, user_id: Optional[str] = None):
     """List memories, optionally filtered by user_id."""
-    memories = Memory.objects.all()
-    if user_id:
-        memories = memories.filter(user_id=user_id)
+    from asgiref.sync import sync_to_async
+
+    def get_memories():
+        queryset = Memory.objects.all()
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+        return list(queryset)
+
+    memories = await sync_to_async(get_memories)()
 
     return [
         MemorySchema(
@@ -57,9 +63,11 @@ def list_memories(request, user_id: Optional[str] = None):
 
 
 @memories_router.post("/", response=MemorySchema, tags=["Memories"])
-def create_memory(request, payload: MemoryCreateSchema):
+async def create_memory(request, payload: MemoryCreateSchema):
     """Create a new memory."""
-    memory = Memory.objects.create(
+    from asgiref.sync import sync_to_async
+
+    memory = await sync_to_async(Memory.objects.create)(
         user_id=payload.user_id,
         content=payload.content,
         memory_type=payload.memory_type,
@@ -70,7 +78,7 @@ def create_memory(request, payload: MemoryCreateSchema):
 
     # Generate embedding if possible
     try:
-        memory.ensure_embedding()
+        await sync_to_async(memory.ensure_embedding)()
     except Exception:
         # Continue without embedding if it fails
         pass
@@ -89,10 +97,12 @@ def create_memory(request, payload: MemoryCreateSchema):
 
 
 @memories_router.get("/{memory_id}", response={200: MemorySchema, 404: dict}, tags=["Memories"])
-def get_memory(request, memory_id: str):
+async def get_memory(request, memory_id: str):
     """Get a specific memory by ID."""
+    from asgiref.sync import sync_to_async
+
     try:
-        memory = Memory.objects.get(id=memory_id)
+        memory = await sync_to_async(Memory.objects.get)(id=memory_id)
         return 200, MemorySchema(
             id=str(memory.id),
             user_id=memory.user_id,

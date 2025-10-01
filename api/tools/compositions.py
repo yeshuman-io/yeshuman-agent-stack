@@ -154,7 +154,7 @@ class TalentCoAdminComposition(BaseToolComposition):
 # USER GROUP MAPPING
 # ==========================================
 
-def get_tools_for_user(user, protocol: str = 'graph') -> List[BaseTool]:
+async def get_tools_for_user(user, protocol: str = 'graph') -> List[BaseTool]:
     """
     Get tools for authenticated user based on their Django Groups.
     Uses lowercase_underscore group naming convention.
@@ -164,7 +164,10 @@ def get_tools_for_user(user, protocol: str = 'graph') -> List[BaseTool]:
 
     logger.info(f"👤 get_tools_for_user called: user={user.username}, protocol='{protocol}'")
 
-    user_groups = list(user.groups.all())
+    # Get user groups - wrap ORM call in sync_to_async for async context
+    from asgiref.sync import sync_to_async
+    user_groups = await sync_to_async(lambda: list(user.groups.all()))()
+
     logger.info(f"👥 User groups: {[g.name for g in user_groups]}")
 
     tools = []
@@ -207,7 +210,7 @@ def _deduplicate_tools(tools: List[BaseTool]) -> List[BaseTool]:
     return unique_tools
 
 
-def get_tools_for_focus(user, focus: str, protocol: str = 'graph') -> List[BaseTool]:
+async def get_tools_for_focus(user, focus: str, protocol: str = 'graph') -> List[BaseTool]:
     """
     Get tools for a user based on their current focus.
     Focus overrides group-based logic for session-specific behavior.
@@ -236,7 +239,10 @@ def get_tools_for_focus(user, focus: str, protocol: str = 'graph') -> List[BaseT
     elif focus == 'employer':
         logger.info(f"🏢 Employer focus requested")
         # Check permission
-        if user.groups.filter(name='hiring').exists():
+        from asgiref.sync import sync_to_async
+        has_permission = await sync_to_async(lambda: user.groups.filter(name='hiring').exists())()
+
+        if has_permission:
             logger.info(f"✅ User has hiring permission - returning employer tools")
             tools = TalentCoEmployerComposition(protocol).get_tools()
             logger.info(f"✅ Employer tools: {len(tools)} tools - {[t.name for t in tools]}")

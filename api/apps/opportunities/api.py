@@ -41,9 +41,11 @@ class OpportunityCreateSchema(Schema):
 
 
 @opportunities_router.get("/", response=List[OpportunitySchema], tags=["Opportunities"])
-def list_opportunities(request):
+async def list_opportunities(request):
     """List all opportunities."""
-    opportunities = Opportunity.objects.all().prefetch_related('organisation', 'opportunity_skills__skill', 'opportunity_experiences')
+    from asgiref.sync import sync_to_async
+
+    opportunities = await sync_to_async(list)(Opportunity.objects.all().prefetch_related('organisation', 'opportunity_skills__skill', 'opportunity_experiences'))
     return [
         OpportunitySchema(
             id=str(opp.id),
@@ -71,12 +73,14 @@ def list_opportunities(request):
 
 
 @opportunities_router.post("/", response=OpportunitySchema, tags=["Opportunities"])
-def create_opportunity(request, payload: OpportunityCreateSchema):
+async def create_opportunity(request, payload: OpportunityCreateSchema):
     """Create a new opportunity."""
+    from asgiref.sync import sync_to_async
     from apps.organisations.models import Organisation
-    organisation = Organisation.objects.get(id=payload.organisation_id)
 
-    opportunity = Opportunity.objects.create(
+    organisation = await sync_to_async(Organisation.objects.get)(id=payload.organisation_id)
+
+    opportunity = await sync_to_async(Opportunity.objects.create)(
         title=payload.title,
         description=payload.description,
         organisation=organisation
@@ -92,9 +96,11 @@ def create_opportunity(request, payload: OpportunityCreateSchema):
 
 
 @opportunities_router.get("/{opportunity_id}", response=OpportunitySchema, tags=["Opportunities"])
-def get_opportunity(request, opportunity_id: str):
+async def get_opportunity(request, opportunity_id: str):
     """Get a specific opportunity by ID."""
-    opportunity = Opportunity.objects.prefetch_related('organisation', 'opportunity_skills__skill', 'opportunity_experiences').get(id=opportunity_id)
+    from asgiref.sync import sync_to_async
+
+    opportunity = await sync_to_async(Opportunity.objects.prefetch_related('organisation', 'opportunity_skills__skill', 'opportunity_experiences').get)(id=opportunity_id)
     return OpportunitySchema(
         id=str(opportunity.id),
         title=opportunity.title,

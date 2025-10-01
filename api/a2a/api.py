@@ -288,7 +288,7 @@ class TaskResponse(Schema):
 # Agent Management Endpoints
 
 @a2a_api.post("/agents/register", response=AgentResponse)
-def register_agent(request, payload: AgentRegisterRequest):
+async def register_agent(request, payload: AgentRegisterRequest):
     """Register a new agent or update existing one."""
     # Check authentication
     from apps.accounts.backends import APIKeyUser
@@ -301,25 +301,31 @@ def register_agent(request, payload: AgentRegisterRequest):
             'message': 'Valid X-API-Key header required'
         }, status=401)
     
+    from asgiref.sync import sync_to_async
+
     try:
-        agent, created = Agent.objects.get_or_create(
-            name=payload.name,
-            defaults={
-                'endpoint_url': payload.endpoint_url,
-                'capabilities': payload.capabilities,
-                'metadata': payload.metadata,
-                'status': 'online'
-            }
-        )
-        
-        if not created:
-            # Update existing agent
-            agent.endpoint_url = payload.endpoint_url
-            agent.capabilities = payload.capabilities
-            agent.metadata = payload.metadata
-            agent.status = 'online'
-            agent.update_heartbeat()
-            agent.save()
+        def create_or_update_agent():
+            agent, created = Agent.objects.get_or_create(
+                name=payload.name,
+                defaults={
+                    'endpoint_url': payload.endpoint_url,
+                    'capabilities': payload.capabilities,
+                    'metadata': payload.metadata,
+                    'status': 'online'
+                }
+            )
+
+            if not created:
+                # Update existing agent
+                agent.endpoint_url = payload.endpoint_url
+                agent.capabilities = payload.capabilities
+                agent.metadata = payload.metadata
+                agent.status = 'online'
+                agent.update_heartbeat()
+                agent.save()
+            return agent
+
+        agent = await sync_to_async(create_or_update_agent)()
         
         return AgentResponse(
             id=str(agent.id),
@@ -335,12 +341,19 @@ def register_agent(request, payload: AgentRegisterRequest):
 
 
 @a2a_api.delete("/agents/{agent_name}")
-def unregister_agent(request, agent_name: str):
+async def unregister_agent(request, agent_name: str):
     """Unregister an agent."""
+    from asgiref.sync import sync_to_async
+    from django.shortcuts import get_object_or_404
+
     try:
-        agent = get_object_or_404(Agent, name=agent_name)
-        agent.status = 'offline'
-        agent.save()
+        def update_agent_status():
+            agent = get_object_or_404(Agent, name=agent_name)
+            agent.status = 'offline'
+            agent.save()
+            return agent
+
+        agent = await sync_to_async(update_agent_status)()
         return {"success": True, "message": f"Agent {agent_name} unregistered"}
     except Exception as e:
         return {"error": str(e)}
@@ -379,11 +392,18 @@ def discover_agents(request, capabilities: str = Query(None), status: str = Quer
 
 
 @a2a_api.post("/agents/{agent_name}/heartbeat")
-def agent_heartbeat(request, agent_name: str):
+async def agent_heartbeat(request, agent_name: str):
     """Update agent heartbeat."""
+    from asgiref.sync import sync_to_async
+    from django.shortcuts import get_object_or_404
+
     try:
-        agent = get_object_or_404(Agent, name=agent_name)
-        agent.update_heartbeat()
+        def update_heartbeat():
+            agent = get_object_or_404(Agent, name=agent_name)
+            agent.update_heartbeat()
+            return agent
+
+        agent = await sync_to_async(update_heartbeat)()
         return {"success": True, "last_seen": agent.last_seen.isoformat()}
     except Exception as e:
         return {"error": str(e)}
@@ -392,40 +412,48 @@ def agent_heartbeat(request, agent_name: str):
 # Message Endpoints
 
 @a2a_api.post("/messages/send", response=MessageResponse)
-def send_message(request, payload: MessageRequest):
+async def send_message(request, payload: MessageRequest):
     """Send a message to another agent."""
+    from asgiref.sync import sync_to_async
+    from django.shortcuts import get_object_or_404
+
     try:
-        # Get the sending agent from request headers or authentication
-        from_agent_name = request.headers.get('X-Agent-Name', 'unknown')
-        from_agent = get_object_or_404(Agent, name=from_agent_name)
-        
-        # Get target agent
-        to_agent = None
-        if payload.to_agent:
-            to_agent = get_object_or_404(Agent, name=payload.to_agent)
-        
-        # Get conversation if provided
-        conversation = None
-        if payload.conversation_id:
-            conversation = get_object_or_404(Conversation, id=payload.conversation_id)
-        
-        # Create message
-        message = A2AMessage.objects.create(
-            from_agent=from_agent,
-            to_agent=to_agent,
-            conversation=conversation,
-            message_type=payload.message_type,
-            subject=payload.subject,
-            payload=payload.payload,
-            priority=payload.priority,
-            response_required=payload.response_required,
-            callback_url=payload.callback_url
-        )
-        
-        # Trigger callback (sent) in background if provided
-        if message.callback_url:
-            import threading
-            threading.Thread(target=_send_message_callback_safe, args=(str(message.id), 'sent')).start()
+        def create_message():
+            # Get the sending agent from request headers or authentication
+            from_agent_name = request.headers.get('X-Agent-Name', 'unknown')
+            from_agent = get_object_or_404(Agent, name=from_agent_name)
+
+            # Get target agent
+            to_agent = None
+            if payload.to_agent:
+                to_agent = get_object_or_404(Agent, name=payload.to_agent)
+
+            # Get conversation if provided
+            conversation = None
+            if payload.conversation_id:
+                conversation = get_object_or_404(Conversation, id=payload.conversation_id)
+
+            # Create message
+            message = A2AMessage.objects.create(
+                from_agent=from_agent,
+                to_agent=to_agent,
+                conversation=conversation,
+                message_type=payload.message_type,
+                subject=payload.subject,
+                payload=payload.payload,
+                priority=payload.priority,
+                response_required=payload.response_required,
+                callback_url=payload.callback_url
+            )
+
+            # Trigger callback (sent) in background if provided
+            if message.callback_url:
+                import threading
+                threading.Thread(target=_send_message_callback_safe, args=(str(message.id), 'sent')).start()
+
+            return message
+
+        message = await sync_to_async(create_message)()
 
         return MessageResponse(
             id=str(message.id),

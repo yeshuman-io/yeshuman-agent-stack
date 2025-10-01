@@ -2,10 +2,11 @@
 Main API routes using Django Ninja.
 """
 import os
+import logging
 from ninja import NinjaAPI, Schema
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-from agent.graph import ainvoke_agent, ainvoke_agent_sync, astream_agent_tokens
+from agent.graph import ainvoke_agent, ainvoke_agent_sync, astream_agent_tokens, create_agent
 from apps.accounts.api import auth_router
 from apps.profiles.api import profiles_router
 from apps.organisations.api import organisations_router
@@ -17,7 +18,10 @@ from apps.memories.api import memories_router
 from utils.sse import SSEHttpResponse
 from streaming.generators import AnthropicSSEGenerator
 from django.http import Http404
-from django.core.exceptions import PermissionDenied
+from ninja.errors import HttpError
+
+logger = logging.getLogger(__name__)
+
 from apps.threads.services import (
     get_user_threads,
     get_thread,
@@ -50,7 +54,9 @@ async def get_user_from_token(request):
         user_id = payload.get('user_id')
         if user_id:
             try:
-                return await sync_to_async(User.objects.get)(id=user_id)
+                user = await sync_to_async(User.objects.get)(id=user_id)
+                # Django User objects are considered authenticated by default
+                return user
             except User.DoesNotExist:
                 pass
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError, KeyError):
@@ -161,15 +167,15 @@ class A2AResponse(Schema):
 
 # Health check endpoint
 @api.get("/health", response=HealthResponse)
-def health_check(request):
+async def health_check(request):
     """Health check endpoint."""
     agent_ready = True
     try:
         # Test if we can create the agent
-        create_agent()
+        await create_agent()
     except Exception:
         agent_ready = False
-    
+
     return {
         "status": "healthy",
         "version": "1.0.0",
@@ -266,8 +272,8 @@ async def get_thread_detail(request, thread_id: str):
         raise Http404("Thread not found")
 
     # Check if user owns this thread (if authenticated)
-    if user and not user.is_anonymous and thread.user_id and thread.user_id != str(user.id):
-        raise PermissionDenied("Access denied")
+    if user and not user.is_anonymous and thread.user_id and str(thread.user_id) != str(user.id):
+        raise HttpError(403, "Access denied")
 
     messages = await get_all_thread_messages(thread_id)
     message_responses = []
@@ -343,8 +349,8 @@ async def send_message(request, thread_id: str, payload: SendMessageRequest):
         raise Http404("Thread not found")
 
     # Check if user owns this thread (if authenticated)
-    if user and not user.is_anonymous and thread.user_id and thread.user_id != str(user.id):
-        raise PermissionDenied("Access denied")
+    if user and not user.is_anonymous and thread.user_id and str(thread.user_id) != str(user.id):
+        raise HttpError(403, "Access denied")
 
     # Create human message
     await create_human_message(thread_id, payload.message)
@@ -424,11 +430,13 @@ async def get_thread_messages(request, thread_id: str):
         raise Http404("Thread not found")
 
     # Check if user owns this thread (if authenticated)
-    if user and not user.is_anonymous and thread.user_id and thread.user_id != str(user.id):
-        raise PermissionDenied("Access denied")
+    if user and not user.is_anonymous and thread.user_id and str(thread.user_id) != str(user.id):
+        logger.warning(f"🚫 [ACCESS DENIED] Thread {thread_id}: thread.user_id={thread.user_id} (type: {type(thread.user_id)}), user.id={user.id} (type: {type(user.id)}), user.username={user.username if user else None}")
+        raise HttpError(403, "Access denied")
 
     # Get all messages for the thread
     messages = await get_all_thread_messages(thread_id)
+    logger.info(f"📝 [THREAD MESSAGES] Thread {thread_id}: found {len(messages)} messages")
 
     # Convert to response format
     message_list = []
@@ -453,6 +461,7 @@ async def get_thread_messages(request, thread_id: str):
             "thread_id": str(msg.thread_id)
         })
 
+    logger.info(f"📝 [THREAD MESSAGES] Thread {thread_id}: returning {len(message_list)} formatted messages")
     return message_list
 
 
@@ -466,8 +475,8 @@ async def delete_thread(request, thread_id: str):
         raise Http404("Thread not found")
 
     # Check if user owns this thread (if authenticated)
-    if user and not user.is_anonymous and thread.user_id and thread.user_id != str(user.id):
-        raise PermissionDenied("Access denied")
+    if user and not user.is_anonymous and thread.user_id and str(thread.user_id) != str(user.id):
+        raise HttpError(403, "Access denied")
 
     # Django CASCADE is already configured in the models:
     # Message.thread = models.ForeignKey(Thread, on_delete=models.CASCADE)
