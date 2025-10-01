@@ -399,14 +399,22 @@ Return ONLY the status line, no quotes or explanation."""
                             if _chunk.content and _chunk.content.strip():
                                 new_line += _chunk.content
                                 if writer:
-                                    writer({"type": "voice", "content": _chunk.content})
+                                    # Quick spacing fix for streaming chunks
+                                    import re
+                                    clean_chunk = re.sub(r'(\d+)([a-zA-Z])', r'\1 \2', _chunk.content)
+                                    clean_chunk = re.sub(r'([a-zA-Z])(\d+)', r'\1 \2', clean_chunk)
+                                    writer({"type": "voice", "content": clean_chunk})
                             else:
                                 empty_chunk_count += 1
 
                         logger.info(f"✅ Semantic voice completed: {chunk_count} chunks, {empty_chunk_count} empty")
 
-                        # Persist voice message
+                        # Post-process the complete voice message for spacing
                         new_line_clean = (new_line or "").strip()
+                        import re
+                        new_line_clean = re.sub(r'(\d+)([a-zA-Z])', r'\1 \2', new_line_clean)  # "by81" → "by 81"
+                        new_line_clean = re.sub(r'([a-zA-Z])(\d+)', r'\1 \2', new_line_clean)  # "temp23" → "temp 23"
+
                         if new_line_clean:
                             vs.setdefault("voice_messages", []).append(new_line_clean)
                             logger.info(f"💾 Semantic voice persisted: '{new_line_clean}'")
