@@ -11,6 +11,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
+        ('embeddings', '0001_enable_pgvector_extension'),
         ('organisations', '0001_initial'),
         ('skills', '0001_initial'),
     ]

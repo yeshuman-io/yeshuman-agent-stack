@@ -12,6 +12,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
+        ('embeddings', '0001_enable_pgvector_extension'),
     ]
 
     operations = [
