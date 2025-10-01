@@ -192,10 +192,20 @@ function AppContent() {
     setSearchParams({ thread: threadId });
   }, [setSearchParams, currentThreadId]);
 
+  const handleClearCurrentThread = useCallback(() => {
+    console.log('🗑️ [THREAD CLEAR] Clearing current thread view');
+    setCurrentThreadId(null);
+    setSearchParams({});
+  }, [setSearchParams]);
+
   return (
     <ThemeProvider defaultTheme="dark" storageKey="yeshuman-v2-theme">
       <SidebarProvider defaultOpen={false}>
-          <AppSidebar onThreadSelect={handleThreadSelect} />
+          <AppSidebar
+            onThreadSelect={handleThreadSelect}
+            currentThreadId={currentThreadId}
+            onClearCurrentThread={handleClearCurrentThread}
+          />
           <SidebarInset className="flex flex-col h-screen">
           {/* Header */}
           <div className="border-b p-4 flex justify-between items-center flex-shrink-0">

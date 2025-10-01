@@ -47,6 +47,8 @@ interface Thread {
 interface AppSidebarProps {
   onThreadSelect?: (threadId: string) => void
   onRefreshThreads?: () => void
+  currentThreadId?: string | null
+  onClearCurrentThread?: () => void
 }
 
 // Focus interface
@@ -56,7 +58,7 @@ interface UserFocus {
   focus_confirmed: boolean
 }
 
-export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps = {}) {
+export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, onClearCurrentThread }: AppSidebarProps = {}) {
   const navigate = useNavigate()
   const { user, token, isAuthenticated, logout } = useAuth()
   const { state } = useSidebar()
@@ -209,6 +211,11 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads }: AppSidebarProps
 
       if (response.ok) {
         console.log('Thread deleted successfully')
+        // If the deleted thread is currently selected, clear it
+        if (currentThreadId === threadId && onClearCurrentThread) {
+          console.log('Clearing current thread view')
+          onClearCurrentThread()
+        }
         // Refresh threads list
         fetchThreads()
         // Notify parent component
