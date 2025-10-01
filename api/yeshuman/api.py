@@ -16,6 +16,8 @@ from apps.applications.api import applications_router
 from apps.memories.api import memories_router
 from utils.sse import SSEHttpResponse
 from streaming.generators import AnthropicSSEGenerator
+from django.http import Http404
+from django.core.exceptions import PermissionDenied
 from apps.threads.services import (
     get_user_threads,
     get_thread,
@@ -245,7 +247,7 @@ async def list_threads(request):
         ThreadResponse(
             id=str(thread.id),
             subject=thread.subject,
-            user_id=thread.user_id,
+            user_id=str(thread.user_id) if thread.user_id else None,
             created_at=thread.created_at,
             updated_at=thread.updated_at,
             message_count=await get_all_thread_messages(thread.id, count_only=True)
@@ -261,13 +263,11 @@ async def get_thread_detail(request, thread_id: str):
     thread = await get_thread(thread_id)
 
     if not thread:
-        from ninja import HttpError
-        raise HttpError(404, "Thread not found")
+        raise Http404("Thread not found")
 
     # Check if user owns this thread (if authenticated)
     if user and not user.is_anonymous and thread.user_id and thread.user_id != str(user.id):
-        from ninja import HttpError
-        raise HttpError(403, "Access denied")
+        raise PermissionDenied("Access denied")
 
     messages = await get_all_thread_messages(thread_id)
     message_responses = []
@@ -326,7 +326,7 @@ async def create_thread(request, payload: CreateThreadRequest):
     return ThreadResponse(
         id=str(thread.id),
         subject=thread.subject,
-        user_id=thread.user_id,
+        user_id=str(thread.user_id) if thread.user_id else None,
         created_at=thread.created_at,
         updated_at=thread.updated_at,
         message_count=await get_all_thread_messages(thread.id, count_only=True)
@@ -340,13 +340,11 @@ async def send_message(request, thread_id: str, payload: SendMessageRequest):
     thread = await get_thread(thread_id)
 
     if not thread:
-        from ninja import HttpError
-        raise HttpError(404, "Thread not found")
+        raise Http404("Thread not found")
 
     # Check if user owns this thread (if authenticated)
     if user and not user.is_anonymous and thread.user_id and thread.user_id != str(user.id):
-        from ninja import HttpError
-        raise HttpError(403, "Access denied")
+        raise PermissionDenied("Access denied")
 
     # Create human message
     await create_human_message(thread_id, payload.message)
@@ -423,13 +421,11 @@ async def get_thread_messages(request, thread_id: str):
     thread = await get_thread(thread_id)
 
     if not thread:
-        from ninja import HttpError
-        raise HttpError(404, "Thread not found")
+        raise Http404("Thread not found")
 
     # Check if user owns this thread (if authenticated)
     if user and not user.is_anonymous and thread.user_id and thread.user_id != str(user.id):
-        from ninja import HttpError
-        raise HttpError(403, "Access denied")
+        raise PermissionDenied("Access denied")
 
     # Get all messages for the thread
     messages = await get_all_thread_messages(thread_id)
@@ -467,13 +463,11 @@ async def delete_thread(request, thread_id: str):
     thread = await get_thread(thread_id)
 
     if not thread:
-        from ninja import HttpError
-        raise HttpError(404, "Thread not found")
+        raise Http404("Thread not found")
 
     # Check if user owns this thread (if authenticated)
     if user and not user.is_anonymous and thread.user_id and thread.user_id != str(user.id):
-        from ninja import HttpError
-        raise HttpError(403, "Access denied")
+        raise PermissionDenied("Access denied")
 
     # Django CASCADE is already configured in the models:
     # Message.thread = models.ForeignKey(Thread, on_delete=models.CASCADE)
