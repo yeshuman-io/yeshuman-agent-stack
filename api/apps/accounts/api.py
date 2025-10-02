@@ -139,15 +139,15 @@ async def register(request, data: RegisterSchema):
 async def login(request, data: LoginSchema):
     """Login endpoint that returns JWT token."""
     # Try to authenticate with username first, then try with email
-    user = authenticate(username=data.username, password=data.password)
+    user = await sync_to_async(authenticate)(username=data.username, password=data.password)
 
     # If username authentication fails, try email authentication
     if user is None:
         try:
             from django.contrib.auth import get_user_model
             User = get_user_model()
-            user_obj = User.objects.get(email=data.username)
-            user = authenticate(username=user_obj.username, password=data.password)
+            user_obj = await sync_to_async(User.objects.get)(email=data.username)
+            user = await sync_to_async(authenticate)(username=user_obj.username, password=data.password)
         except User.DoesNotExist:
             pass
 
@@ -155,7 +155,7 @@ async def login(request, data: LoginSchema):
         return 401, {"error": "Invalid credentials"}
 
     # Create JWT token
-    token = create_jwt_token(user)
+    token = await create_jwt_token(user)
 
     return 200, {
         "success": True,
@@ -181,7 +181,7 @@ async def get_current_user(request):
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         User = get_user_model()
-        user = User.objects.get(id=payload['user_id'])
+        user = await sync_to_async(User.objects.get)(id=payload['user_id'])
 
         return 200, UserResponse(
             id=user.id,

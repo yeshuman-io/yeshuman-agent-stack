@@ -506,7 +506,7 @@ Return ONLY the status line, no quotes or explanation."""
                     writer({"type": "tool", "content": f"🔧 Calling tools: {', '.join(tool_names)}"})
 
                 return {
-                    "messages": [tool_response],
+                    "messages": state["messages"] + [tool_response],  # Preserve full conversation history
                     "writer": writer,
                     "tools_done": False,  # Allow tool execution
                     "tool_call_count": tool_call_count + 1
@@ -537,7 +537,7 @@ Return ONLY the status line, no quotes or explanation."""
 
             logger.info("✅ Pipeline completed successfully")
             return {
-                "messages": [final_response],
+                "messages": state["messages"] + [final_response],  # Preserve full conversation history
                 "writer": writer,
                 "voice_messages": state.get("voice_messages", []),
                 "last_voice_sig": state.get("last_voice_sig"),
