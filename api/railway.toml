@@ -9,7 +9,6 @@ healthcheckPath = "/ping"
 healthcheckTimeout = 600
 healthcheckInterval = 30
 restartPolicyType = "ON_FAILURE"
-preDeployCommand = "python manage.py migrate && python manage.py create_deployment_user"
 startCommand = "daphne -b 0.0.0.0 -p $PORT yeshuman.asgi:application"
 
 [deploy.env]
