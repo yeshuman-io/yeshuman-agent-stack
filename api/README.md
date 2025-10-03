@@ -4,12 +4,57 @@ Django + LangGraph API backend for the Yes Human Agent Stack.
 
 ## Quick Start
 
+### Prerequisites
+
+**PostgreSQL with pgvector extension** is required for this project.
+
+#### Local PostgreSQL Setup
+
+```bash
+# Install PostgreSQL (Ubuntu/Debian)
+sudo apt update
+sudo apt install postgresql postgresql-contrib
+
+# Install pgvector extension
+git clone https://github.com/pgvector/pgvector.git
+cd pgvector
+make
+sudo make install
+sudo -u postgres psql -c "CREATE EXTENSION vector;"
+
+# Or using Docker
+docker run --name postgres-pgvector -e POSTGRES_PASSWORD=password -e POSTGRES_DB=yeshuman -p 5432:5432 -d ankane/pgvector
+
+# Create database and user
+sudo -u postgres psql
+CREATE DATABASE yeshuman;
+CREATE USER yeshuman WITH PASSWORD 'password';
+GRANT ALL PRIVILEGES ON DATABASE yeshuman TO yeshuman;
+\q
+```
+
+#### Environment Variables
+
+```bash
+# Database connection (add to .env)
+POSTGRES_DB=yeshuman
+POSTGRES_USER=yeshuman
+POSTGRES_PASSWORD=password
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+```
+
+### Development Setup
+
 ```bash
 # Install dependencies
 uv sync
 
-# Activate virtual environment  
+# Activate virtual environment
 source .venv/bin/activate
+
+# Run database migrations
+./manage.py migrate
 
 # Run development server
 ./manage.py runserver
@@ -137,6 +182,13 @@ vim .env
 ### Key Environment Variables
 
 ```bash
+# Database (PostgreSQL with pgvector)
+POSTGRES_DB=yeshuman
+POSTGRES_USER=yeshuman
+POSTGRES_PASSWORD=password
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+
 # Authentication
 A2A_API_KEYS=client1:key1,client2:key2
 MCP_API_KEY=mcp-secret-key
@@ -193,6 +245,7 @@ api/
 
 ## ✨ Features
 
+- ✅ **PostgreSQL + pgvector** - Vector embeddings for semantic search and AI features
 - ✅ **Simple Authentication** - Environment variable-based API keys
 - ✅ **Multi-Protocol** - A2A, MCP, and custom streaming endpoints
 - ✅ **Real-time Streaming** - Server-Sent Events with Anthropic Delta format
