@@ -26,8 +26,9 @@ class Command(BaseCommand):
                     )
                     continue
 
-                # Create the user
+                # Create the user (pass email as username since USERNAME_FIELD = 'email')
                 user = User.objects.create_user(
+                    username=email,  # USERNAME_FIELD is 'email'
                     email=email,
                     password=password,
                     is_staff=True,
