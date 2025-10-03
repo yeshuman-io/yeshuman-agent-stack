@@ -186,6 +186,7 @@ class UpdateProfileInput(BaseModel):
 
 class UpdateUserProfileInput(BaseModel):
     """Input for updating the current user's profile."""
+    user_id: Optional[int] = Field(default=None, description="User ID (automatically provided by agent)")
     first_name: Optional[str] = Field(default=None, description="Update the user's first name")
     last_name: Optional[str] = Field(default=None, description="Update the user's last name")
     bio: Optional[str] = Field(default=None, description="Update the user's bio/description")
@@ -223,7 +224,12 @@ The UI will automatically update when this tool completes successfully."""
 
     args_schema: type[BaseModel] = UpdateUserProfileInput
 
-    def _run(self, first_name: Optional[str] = None, last_name: Optional[str] = None,
+    def __init__(self, user=None):
+        """Initialize with optional user context for agent usage."""
+        super().__init__()
+        self._user = user
+
+    def _run(self, user_id: Optional[int] = None, first_name: Optional[str] = None, last_name: Optional[str] = None,
              bio: Optional[str] = None, city: Optional[str] = None, country: Optional[str] = None,
              add_skills: Optional[List[str]] = None, remove_skills: Optional[List[str]] = None,
              run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
@@ -234,7 +240,7 @@ The UI will automatically update when this tool completes successfully."""
             @async_to_sync
             async def run_service():
                 return await self._update_user_profile_async(
-                    first_name, last_name, bio, city, country, add_skills, remove_skills
+                    user_id, first_name, last_name, bio, city, country, add_skills, remove_skills
                 )
 
             return run_service()
@@ -242,28 +248,33 @@ The UI will automatically update when this tool completes successfully."""
         except Exception as e:
             return f"❌ Failed to update profile: {str(e)}"
 
-    async def _arun(self, first_name: Optional[str] = None, last_name: Optional[str] = None,
+    async def _arun(self, user_id: Optional[int] = None, first_name: Optional[str] = None, last_name: Optional[str] = None,
                    bio: Optional[str] = None, city: Optional[str] = None, country: Optional[str] = None,
                    add_skills: Optional[List[str]] = None, remove_skills: Optional[List[str]] = None,
                    run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
         """Execute the update user profile tool asynchronously."""
         return await self._update_user_profile_async(
-            first_name, last_name, bio, city, country, add_skills, remove_skills
+            user_id, first_name, last_name, bio, city, country, add_skills, remove_skills
         )
 
-    async def _update_user_profile_async(self, first_name: Optional[str] = None,
+    async def _update_user_profile_async(self, user_id: Optional[int] = None, first_name: Optional[str] = None,
                                        last_name: Optional[str] = None, bio: Optional[str] = None,
                                        city: Optional[str] = None, country: Optional[str] = None,
                                        add_skills: Optional[List[str]] = None,
                                        remove_skills: Optional[List[str]] = None) -> str:
         """Internal method to update user profile."""
         try:
-            # Import here to avoid circular imports
-            from apps.accounts.utils import negotiate_user_focus
-
-            # Get current user from focus negotiation (this gets user from JWT context)
-            focus_data = await negotiate_user_focus(None)
-            user = focus_data.get('user')
+            # Get user - either from parameter (agent context) or from request (API context)
+            if user_id:
+                # Agent context: get user by ID
+                from django.contrib.auth import get_user_model
+                User = get_user_model()
+                user = await sync_to_async(User.objects.get)(id=user_id)
+            else:
+                # API context: get user from request
+                from apps.accounts.utils import negotiate_user_focus
+                focus_data = await negotiate_user_focus(None)
+                user = focus_data.get('user')
 
             if not user:
                 return "❌ Error: No authenticated user found"

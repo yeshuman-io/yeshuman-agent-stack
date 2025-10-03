@@ -23,7 +23,7 @@ import type { ChatMessage, SSEEvent, ContentBlock } from '../types';
  * // With thread event callbacks
  * const sse = useSSE(onMessageStart, token, true, { onThreadCreated, onThreadUpdated, onMessageSaved });
  */
-export const useSSE = (onMessageStart?: () => void, token?: string | null, autoConnect: boolean = false, threadCallbacks?: { onThreadCreated?: (data: any) => void; onThreadUpdated?: (data: any) => void; onMessageSaved?: (data: any) => void }) => {
+export const useSSE = (onMessageStart?: () => void, token?: string | null, autoConnect: boolean = false, threadCallbacks?: { onThreadCreated?: (data: any) => void; onThreadUpdated?: (data: any) => void; onMessageSaved?: (data: any) => void; onUIEvent?: (data: any) => void }) => {
   // Core state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -239,7 +239,24 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
                 setActiveTools(prev => prev.filter(tool => !completedToolNames.includes(tool)));
               }
               break;
-              
+
+            case 'ui_delta':
+              // Handle UI update events (e.g., profile changes, application updates)
+              console.log('[SSE] 📡 RECEIVED ui_delta event:', delta);
+              if (delta.ui_event) {
+                console.log('[UI EVENT] 🎯 Processing UI event:', delta.ui_event);
+                // Emit event for components to handle
+                if (threadCallbacks?.onUIEvent) {
+                  console.log('[UI EVENT] 🔄 Calling onUIEvent callback');
+                  threadCallbacks.onUIEvent(delta.ui_event);
+                } else {
+                  console.warn('[UI EVENT] ⚠️ No onUIEvent callback registered');
+                }
+              } else {
+                console.warn('[UI EVENT] ⚠️ ui_delta received but no ui_event data:', delta);
+              }
+              break;
+
             default:
               console.log(`[DELTA] Unknown type: ${delta.type}`);
           }
@@ -398,10 +415,12 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
         },
         
         onmessage(event) {
+          console.log('[SSE] 🔄 RECEIVED RAW EVENT:', event.event, event.data?.substring(0, 200));
           if (!event.data?.trim()) return;
-          
+
           try {
             const data = JSON.parse(event.data);
+            console.log('[SSE] 📦 PARSED EVENT:', data);
             handleSSEEvent({ event: event.event, data });
           } catch (error) {
             console.error('[SSE] Parse error:', error);

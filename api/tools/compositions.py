@@ -91,20 +91,30 @@ class TalentCoCandidateComposition(BaseToolComposition):
     """Candidate role for TalentCo client."""
 
     def _compose_tools(self):
-        from apps.profiles.tools import PROFILE_MANAGEMENT_TOOLS, PROFILE_DISCOVERY_TOOLS
-        from apps.evaluations.tools import CANDIDATE_EVALUATION_TOOLS
-        from apps.applications.tools import APPLICATION_DISCOVERY_TOOLS
-        from apps.opportunities.tools import OPPORTUNITY_DISCOVERY_TOOLS
-        from tools.utilities import BASIC_TOOLS
+        # FOCUSED TESTING: Only UpdateUserProfileTool active
+        from apps.profiles.tools import PROFILE_MANAGEMENT_TOOLS
+        # from apps.profiles.tools import PROFILE_MANAGEMENT_TOOLS, PROFILE_DISCOVERY_TOOLS
+        # from apps.evaluations.tools import CANDIDATE_EVALUATION_TOOLS
+        # from apps.applications.tools import APPLICATION_DISCOVERY_TOOLS
+        # from apps.opportunities.tools import OPPORTUNITY_DISCOVERY_TOOLS
+        # from tools.utilities import BASIC_TOOLS
 
-        self._tools = (
-            PROFILE_MANAGEMENT_TOOLS +
-            PROFILE_DISCOVERY_TOOLS +
-            CANDIDATE_EVALUATION_TOOLS +
-            APPLICATION_DISCOVERY_TOOLS +
-            OPPORTUNITY_DISCOVERY_TOOLS +
-            BASIC_TOOLS
-        )
+        # Extract only the UpdateUserProfileTool from PROFILE_MANAGEMENT_TOOLS
+        update_user_profile_tool = None
+        for tool in PROFILE_MANAGEMENT_TOOLS:
+            if tool.name == "update_user_profile":
+                update_user_profile_tool = tool
+                break
+
+        self._tools = [
+            update_user_profile_tool,  # Only tool active for focused testing
+            # PROFILE_MANAGEMENT_TOOLS +
+            # PROFILE_DISCOVERY_TOOLS +
+            # CANDIDATE_EVALUATION_TOOLS +
+            # APPLICATION_DISCOVERY_TOOLS +
+            # OPPORTUNITY_DISCOVERY_TOOLS +
+            # BASIC_TOOLS
+        ] if update_user_profile_tool else []
 
         self._metadata.update({
             'client': 'talentco',

@@ -183,6 +183,10 @@ class AnthropicSSEGenerator:
                     chunk_type = chunk.get("type", "message")
                     content = chunk.get("content", "")
 
+                    # Log UI chunks for monitoring
+                    if chunk_type == "ui":
+                        logger.info(f"📦 SSE received UI chunk: keys={list(chunk.keys())}")
+
                     # Voice segment start: allocate fresh content block
                     if chunk_type == "voice_start":
                         idx = len(self.content_blocks) + self.voice_counter
@@ -233,17 +237,17 @@ class AnthropicSSEGenerator:
                         continue
 
                     # Skip empty chunks
-                    if not content and chunk_type not in ["done", "stop"]:
+                    if not content and chunk_type not in ["done", "stop", "ui"]:
                         continue
                     
                     # Handle special "done" or "stop" chunk types
                     if chunk_type in ["done", "stop"]:
                         # Close all active blocks and end the message
                         break
-                    
+
                     # Get the block index for this chunk type
                     block_index = self.get_block_index_for_type(chunk_type)
-                    
+
                     # Initialize accumulated content for this type if needed
                     if chunk_type not in accumulated_content:
                         accumulated_content[chunk_type] = ""
@@ -282,18 +286,25 @@ class AnthropicSSEGenerator:
                         "json": "json_delta",
                         "system": "system_delta",
                         "voice": "voice_delta",
+                        "ui": "ui_delta",  # NEW: UI events for real-time interface updates
                         "error": "error"
                     }
                     delta_type = delta_type_mapping.get(chunk_type, "message_delta")
-                    
-                    # Handle special metadata for voice events
-                    delta_data = {"type": delta_type, "text": content}
-                    if chunk_type == "voice":
+
+                    # Handle special metadata for voice and UI events
+                    if chunk_type == "ui":
+                        # UI events contain structured data, not text
+                        delta_data = {"type": delta_type, "ui_event": chunk}
+                        logger.info(f"🎯 SSE mapped UI event → ui_delta")
+                    elif chunk_type == "voice":
+                        delta_data = {"type": delta_type, "text": content}
                         style = chunk.get("style", "encouraging")
                         progress = chunk.get("progress", "")
                         delta_data.update({"style": style, "progress": progress})
                     elif chunk_type == "voice_complete":
                         delta_data = {"type": delta_type, "message": chunk.get("message", "")}
+                    else:
+                        delta_data = {"type": delta_type, "text": content}
                     
                     yield (await self.format_sse_event("content_block_delta", {
                         "type": "content_block_delta",

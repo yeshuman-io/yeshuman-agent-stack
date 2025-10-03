@@ -93,11 +93,11 @@ async def negotiate_user_focus(request, requested_focus=None):
     if session_focus and session_focus in available_foci:
         return session_focus, None
 
-    # Default based on permissions (prefer employer for premium users)
+    # Default based on permissions (prefer candidate for focused testing)
     if 'admin' in available_foci:
         default_focus = 'admin'
-    elif 'employer' in available_foci:
-        default_focus = 'employer'
+    # COMMENTED OUT: elif 'employer' in available_foci:
+    #     default_focus = 'employer'
     else:
         default_focus = 'candidate'
 

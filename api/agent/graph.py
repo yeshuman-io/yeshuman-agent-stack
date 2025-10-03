@@ -21,6 +21,7 @@ from langgraph.config import get_stream_writer
 from langgraph.prebuilt import ToolNode
 
 from tools.compositions import get_tools_for_context, get_tools_for_user, get_tools_for_focus
+from .mapper import should_emit_event_for_tool, create_ui_event
 
 # Semantic voice enhancement
 from sentence_transformers import SentenceTransformer
@@ -194,6 +195,9 @@ class SemanticVoiceManager:
 semantic_voice_manager = SemanticVoiceManager.get_instance()
 
 
+# UI events are emitted directly in agent_node
+
+
 # Dynamic system prompt based on client configuration
 def get_system_prompt():
     """Get the system prompt for the current client configuration."""
@@ -329,7 +333,46 @@ async def create_agent(client: str = 'talentco', role: str = 'admin', protocol: 
             return state
 
         try:
-            logger.info("Agent node started")
+            logger.info(f"Agent node started - user_id: {state.get('user_id', 'none')}")
+
+            # Check for tool results and emit UI events
+            if state.get("messages"):
+                # If there are tool results, emit UI events for successful operations
+                tool_results = [msg for msg in state["messages"] if hasattr(msg, 'tool_call_id')]
+                if tool_results:
+                    # Find the tool calls that led to these results
+                    tool_calls = []
+                    for msg in reversed(state["messages"]):
+                        if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                            tool_calls = msg.tool_calls
+                            break
+
+                    if tool_calls and writer:
+                        user_id = state.get("user_id", "unknown")
+                        # Emit UI events directly for each successful tool result
+                        for result_msg in tool_results:
+                            if not hasattr(result_msg, 'tool_call_id'):
+                                continue
+
+                            tool_call_id = result_msg.tool_call_id
+                            tool_call = next((tc for tc in tool_calls if tc.get("id") == tool_call_id), None)
+
+                            if not tool_call:
+                                continue
+
+                            tool_name = tool_call.get("name", "unknown")
+                            result_content = getattr(result_msg, 'content', '')
+
+                            # Check if this tool execution should emit a UI event
+                            should_emit = should_emit_event_for_tool(tool_name, result_content)
+                            if should_emit:
+                                try:
+                                    # Create and emit the UI event
+                                    ui_event = create_ui_event(tool_name, tool_call, result_content, user_id)
+                                    writer(ui_event)
+                                    logger.info(f"📡 Emitted UI event for {tool_name}")
+                                except Exception as e:
+                                    logger.error(f"❌ Failed to emit UI event for {tool_name}: {e}")
 
             # Initialize voice LLM for semantic voice generation
             voice_llm = ChatOpenAI(
@@ -399,21 +442,14 @@ Return ONLY the status line, no quotes or explanation."""
                             if _chunk.content and _chunk.content.strip():
                                 new_line += _chunk.content
                                 if writer:
-                                    # Quick spacing fix for streaming chunks
-                                    import re
-                                    clean_chunk = re.sub(r'(\d+)([a-zA-Z])', r'\1 \2', _chunk.content)
-                                    clean_chunk = re.sub(r'([a-zA-Z])(\d+)', r'\1 \2', clean_chunk)
-                                    writer({"type": "voice", "content": clean_chunk})
+                                    writer({"type": "voice", "content": _chunk.content})
                             else:
                                 empty_chunk_count += 1
 
                         logger.info(f"✅ Semantic voice completed: {chunk_count} chunks, {empty_chunk_count} empty")
 
-                        # Post-process the complete voice message for spacing
+                        # Clean up the complete voice message
                         new_line_clean = (new_line or "").strip()
-                        import re
-                        new_line_clean = re.sub(r'(\d+)([a-zA-Z])', r'\1 \2', new_line_clean)  # "by81" → "by 81"
-                        new_line_clean = re.sub(r'([a-zA-Z])(\d+)', r'\1 \2', new_line_clean)  # "temp23" → "temp 23"
 
                         if new_line_clean:
                             vs.setdefault("voice_messages", []).append(new_line_clean)
@@ -434,29 +470,6 @@ Return ONLY the status line, no quotes or explanation."""
 
             # Single LLM call with tools bound - can call tools OR generate response
             logger.info(f"🧠 Creating LLM with {len(tools)} tools bound")
-            # Manually create OpenAI tool format - cleaner schema extraction
-            openai_tools = []
-            for tool in tools:
-                if hasattr(tool, 'args_schema') and tool.args_schema:
-                    # Get the clean JSON schema without Pydantic extras
-                    full_schema = tool.args_schema.model_json_schema()
-
-                    # Extract just the essential OpenAI function parameters
-                    parameters = {
-                        "type": full_schema.get("type", "object"),
-                        "properties": full_schema.get("properties", {}),
-                        "required": full_schema.get("required", [])
-                    }
-
-                    tool_dict = {
-                        "type": "function",
-                        "function": {
-                            "name": tool.name,
-                            "description": tool.description,
-                            "parameters": parameters
-                        }
-                    }
-                    openai_tools.append(tool_dict)
 
 
             # Log context
@@ -486,13 +499,26 @@ Return ONLY the status line, no quotes or explanation."""
                 temperature=0.1,  # Low temperature for consistent tool detection
                 api_key=api_key,
                 streaming=False,  # Non-streaming for reliability
-            ).bind_tools(openai_tools)
+            ).bind_tools(tools)
 
             tool_response = await tool_detector.ainvoke(state["messages"])
 
             # Phase 2: Tool Execution (if needed)
             if hasattr(tool_response, 'tool_calls') and tool_response.tool_calls:
                 logger.info(f"🔧 Phase 2: Tool Execution - {len(tool_response.tool_calls)} tools detected")
+
+                # Inject user context into tool calls
+                user_id = state.get("user_id")
+                if user_id:
+                    for tc in tool_response.tool_calls:
+                        tool_name = tc.get("name", "unknown")
+                        if tool_name == "update_user_profile":
+                            # Inject user_id into tool arguments
+                            args = tc.get("args", tc.get("arguments", {}))
+                            if not args.get("user_id"):
+                                args["user_id"] = int(user_id) if isinstance(user_id, str) else user_id
+                                tc["args"] = args
+                                logger.info(f"🔧 Injected user_id {user_id} into {tool_name} call")
 
                 # Log tool calls
                 for i, tc in enumerate(tool_response.tool_calls):
@@ -507,7 +533,7 @@ Return ONLY the status line, no quotes or explanation."""
 
                 return {
                     "messages": state["messages"] + [tool_response],  # Preserve full conversation history
-                    "writer": writer,
+                    "writer": writer,  # Pass writer to tools node
                     "tools_done": False,  # Allow tool execution
                     "tool_call_count": tool_call_count + 1
                 }
@@ -618,6 +644,8 @@ Return ONLY the status line, no quotes or explanation."""
             logger.error(f"❌ ToolNode invocation failed: {str(e)}")
             logger.error(f"❌ Exception type: {type(e).__name__}")
             raise
+
+        # UI events are now emitted in the agent node after tools complete
 
         # Emit tool completion event
         if writer and state.get('messages'):
@@ -749,7 +777,7 @@ async def astream_agent_tokens(message: str, messages: Optional[List[BaseMessage
     if agent is None:
         logger.info("🏗️ Creating new agent...")
         agent = await create_agent(user=user, focus=focus)
-        logger.info(f"✅ Agent created with {len(getattr(agent, 'tools', []))} tools")
+        logger.info(f"✅ Agent created (tools verified during creation)")
     else:
         logger.info("♻️ Using provided agent")
 
@@ -767,7 +795,7 @@ async def astream_agent_tokens(message: str, messages: Optional[List[BaseMessage
 
     state = {
         "messages": state_messages,
-        "user_id": None,
+        "user_id": user.id if user else None,
         "tool_call_count": 0  # Initialize tool call counter
     }
 

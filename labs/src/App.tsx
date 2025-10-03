@@ -119,6 +119,15 @@ function AppContent() {
       });
       console.log('🔄 [THREAD DELTA] Invalidating thread messages cache');
       queryClient.invalidateQueries({ queryKey: ['thread', data.thread_id] });
+    },
+    onUIEvent: (data: any) => {
+      console.log('🔄 [UI EVENT] Received UI update event:', data);
+      if (data.entity === 'profile') {
+        console.log('🔄 [UI EVENT] Invalidating profile cache for real-time updates');
+        queryClient.invalidateQueries({ queryKey: ['profile'] });
+      } else {
+        console.log(`🔄 [UI EVENT] Unknown entity type: ${data.entity}`);
+      }
     }
   };
 
