@@ -17,6 +17,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { LoginDialog } from "@/components/login-dialog"
+import { GroupCheckboxes } from "@/components/group-checkboxes"
 import { useAuth } from "@/hooks/use-auth"
 import { CURRENT_CLIENT } from "@/constants"
 
@@ -108,6 +109,7 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
       setUserFocus(null)
     }
   }, [isAuthenticated, user, token])
+
 
   const fetchThreads = async () => {
     console.log('fetchThreads called, token:', token ? token.substring(0, 20) + '...' : 'null')
@@ -326,16 +328,39 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
   }
 
   const getFocusLabel = (focus: string) => {
-    switch (focus) {
-      case 'candidate':
-        return 'Job Seeker'
-      case 'employer':
-        return 'Employer'
-      case 'admin':
-        return 'Admin'
-      default:
-        return focus
+    // Use client-specific naming to match group selection
+    const clientName = CURRENT_CLIENT.name.toLowerCase()
+
+    // Map focus names to group names for consistent naming
+    const focusToGroupMapping: Record<string, string> = {
+      'candidate': 'candidate',
+      'employer': 'employer',
+      'recruiter': 'recruiter',
+      'admin': 'administrator'  // focus uses 'admin', groups use 'administrator'
     }
+
+    const groupName = focusToGroupMapping[focus] || focus
+
+    // Check for client-specific naming
+    if (clientName === 'talentco') {
+      const talentCoNames: Record<string, string> = {
+        'candidate': 'Job Seeker',
+        'employer': 'Employer',
+        'recruiter': 'Talent Partner',
+        'administrator': 'System Admin'
+      }
+      return talentCoNames[groupName] || focus
+    }
+
+    // Default naming
+    const defaultNames: Record<string, string> = {
+      'candidate': 'Job Seeker',
+      'employer': 'Employer',
+      'recruiter': 'Recruiter',
+      'administrator': 'Administrator'
+    }
+
+    return defaultNames[groupName] || focus
   }
 
   return (
@@ -369,7 +394,7 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
                     key={focus}
                     onClick={() => handleSetUserFocus(focus)}
                     className={`
-                      flex items-center justify-center p-2 rounded-md transition-all duration-200
+                      flex items-center justify-start p-2 rounded-md transition-all duration-200
                       ${isCollapsed ? 'w-8 h-8' : 'w-full space-x-2 cursor-pointer hover:bg-muted/50 px-1 py-0.5'}
                       ${isSelected
                         ? 'bg-primary/10 text-primary border border-primary/20'
@@ -495,7 +520,18 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
       </SidebarContent>
+
+      {/* Group Selection - Bottom aligned */}
+      {isAuthenticated && (
+        <div className={`${isCollapsed ? 'px-2 py-3' : 'px-2 pb-2'}`}>
+          <GroupCheckboxes
+            onGroupsUpdated={fetchUserFocus}
+            isCollapsed={isCollapsed}
+          />
+        </div>
+      )}
       
       <SidebarFooter>
         <SidebarMenu>
