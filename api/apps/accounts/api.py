@@ -79,10 +79,28 @@ class SetFocusRequest(Schema):
     @field_validator('focus')
     @classmethod
     def validate_focus(cls, v):
-        valid_foci = ['candidate', 'employer', 'admin']
+        valid_foci = ['candidate', 'employer', 'recruiter', 'admin']
         if v not in valid_foci:
             raise ValueError(f'Focus must be one of: {", ".join(valid_foci)}')
         return v
+
+
+class GroupInfo(Schema):
+    """Schema for group information."""
+    name: str
+    display_name: str
+    is_assigned: bool
+    can_focus: bool
+
+
+class UserGroupsResponse(Schema):
+    """Response schema for user groups."""
+    groups: list[GroupInfo]
+
+
+class UpdateGroupsRequest(Schema):
+    """Schema for updating user groups."""
+    group_updates: dict[str, bool]  # group_name -> assign/remove
 
 
 async def create_jwt_token(user):
@@ -116,6 +134,17 @@ async def register(request, data: RegisterSchema):
             email=data.email,
             password=data.password
         )
+
+        # Assign candidate group to all new users (required)
+        from django.contrib.auth.models import Group
+        try:
+            candidate_group = Group.objects.get(name='candidate')
+            user.groups.add(candidate_group)
+        except Group.DoesNotExist:
+            # Log warning but don't fail registration
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("Candidate group not found during user registration")
 
         # Create JWT token
         token = create_jwt_token(user)
@@ -284,3 +313,74 @@ async def set_user_focus(request, data: SetFocusRequest):
         return 401, {"error": "Invalid token"}
     except User.DoesNotExist:
         return 401, {"error": "User not found"}
+
+
+@auth_router.get("/groups", response={200: UserGroupsResponse, 401: dict})
+async def get_user_groups(request):
+    """Get user's current groups and available selectable groups."""
+    from .utils import get_selectable_groups_for_user
+    from django.conf import settings
+
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+
+    if not auth_header.startswith('Bearer '):
+        return 401, {"error": "No token provided"}
+
+    token = auth_header.split(' ')[1]
+
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        User = get_user_model()
+        user = await sync_to_async(User.objects.get)(id=payload['user_id'])
+
+        # Get selectable groups with assignment status
+        groups_data = await get_selectable_groups_for_user(user)
+
+        return 200, UserGroupsResponse(groups=groups_data)
+    except jwt.ExpiredSignatureError:
+        return 401, {"error": "Token expired"}
+    except jwt.InvalidTokenError:
+        return 401, {"error": "Invalid token"}
+    except User.DoesNotExist:
+        return 401, {"error": "User not found"}
+
+
+@auth_router.post("/groups", response={200: dict, 400: dict, 401: dict})
+async def update_user_groups(request, data: UpdateGroupsRequest):
+    """Update user's group memberships."""
+    from .utils import update_user_groups
+    import logging
+    logger = logging.getLogger(__name__)
+
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+
+    if not auth_header.startswith('Bearer '):
+        return 401, {"error": "No token provided"}
+
+    token = auth_header.split(' ')[1]
+
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        User = get_user_model()
+        user = await sync_to_async(User.objects.get)(id=payload['user_id'])
+
+        # Update user's groups
+        result = await update_user_groups(user, data.group_updates)
+
+        if not result['success']:
+            return 400, {"error": result['error']}
+
+        return 200, {
+            "success": True,
+            "message": result['message'],
+            "groups_updated": result['groups_updated']
+        }
+    except jwt.ExpiredSignatureError:
+        return 401, {"error": "Token expired"}
+    except jwt.InvalidTokenError:
+        return 401, {"error": "Invalid token"}
+    except User.DoesNotExist:
+        return 401, {"error": "User not found"}
+    except Exception as e:
+        logger.error(f"Error updating user groups: {e}")
+        return 400, {"error": "Failed to update groups"}

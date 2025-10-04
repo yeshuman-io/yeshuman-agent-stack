@@ -22,9 +22,9 @@ class UserFocusIntegrationTest(TestCase):
     def setUp(self):
         """Set up test data."""
         # Create groups
-        self.job_seeking_group, _ = Group.objects.get_or_create(name='job_seeking')
-        self.hiring_group, _ = Group.objects.get_or_create(name='hiring')
-        self.admin_group, _ = Group.objects.get_or_create(name='system_administration')
+        self.candidate_group, _ = Group.objects.get_or_create(name='candidate')
+        self.employer_group, _ = Group.objects.get_or_create(name='employer')
+        self.admin_group, _ = Group.objects.get_or_create(name='administrator')
 
         # Create test user
         self.user = User.objects.create_user(
@@ -36,7 +36,7 @@ class UserFocusIntegrationTest(TestCase):
         )
 
         # Assign employer permissions by default
-        self.user.groups.add(self.hiring_group)
+        self.user.groups.add(self.employer_group)
         self.user.save()
 
         # Create test client
@@ -49,17 +49,17 @@ class UserFocusIntegrationTest(TestCase):
         self.assertEqual(user.username, 'daryl')
         self.assertTrue(user.check_password('abc'))
 
-        # Verify user has hiring group
-        self.assertIn(self.hiring_group, user.groups.all())
+        # Verify user has employer group
+        self.assertIn(self.employer_group, user.groups.all())
         self.assertEqual(user.groups.count(), 1)
 
     def test_focus_negotiation_default_behavior(self):
-        """Test focus negotiation for user with hiring permissions."""
+        """Test focus negotiation for user with employer permissions."""
         # Simulate request
         request = self.client.get('/').wsgi_request
         request.user = self.user
 
-        # Should default to 'employer' since user has hiring group
+        # Should default to 'employer' since user has employer group
         focus, error = negotiate_user_focus(request)
         self.assertEqual(focus, 'employer')
         self.assertIsNone(error)
@@ -82,9 +82,9 @@ class UserFocusIntegrationTest(TestCase):
 
     def test_focus_restriction_without_permissions(self):
         """Test that user cannot set focus without proper permissions."""
-        # Remove hiring group
+        # Remove employer group
         self.user.groups.clear()
-        self.user.groups.add(self.job_seeking_group)
+        self.user.groups.add(self.candidate_group)
         self.user.save()
 
         request = self.client.get('/').wsgi_request
@@ -107,7 +107,7 @@ class UserFocusIntegrationTest(TestCase):
         tool_names = [tool.name for tool in employer_tools]
         self.assertIn('create_opportunity', tool_names)  # Employer tool
 
-        # Test candidate focus (even without job_seeking group, should work)
+        # Test candidate focus (even without candidate group, should work)
         candidate_tools = get_tools_for_focus(self.user, 'candidate')
         self.assertIsNotNone(candidate_tools)
         self.assertGreater(len(candidate_tools), 0)

@@ -18,15 +18,19 @@ async def get_available_foci_for_user(user):
 
     foci = []
 
-    # Everyone can be a candidate (default)
+    # Everyone can be a candidate (default - cannot be removed for UX reasons)
     foci.append('candidate')
 
     # Check for employer access
-    if await sync_to_async(lambda: user.groups.filter(name='hiring').exists())():
+    if await sync_to_async(lambda: user.groups.filter(name='employer').exists())():
         foci.append('employer')
 
+    # Check for recruiter access
+    if await sync_to_async(lambda: user.groups.filter(name='recruiter').exists())():
+        foci.append('recruiter')
+
     # Check for admin access
-    if await sync_to_async(lambda: user.groups.filter(name='system_administration').exists())():
+    if await sync_to_async(lambda: user.groups.filter(name='administrator').exists())():
         foci.append('admin')
 
     return foci
@@ -106,6 +110,155 @@ async def negotiate_user_focus(request, requested_focus=None):
         await sync_to_async(lambda: request.session.__setitem__('focus_confirmed', False))()  # Default, not user-chosen
 
     return default_focus, None
+
+
+async def get_selectable_groups_for_user(user):
+    """
+    Get all selectable groups for a user with their current assignment status.
+
+    For testing purposes, all groups are selectable.
+    Later this can be restricted based on subscriptions, verification, etc.
+
+    Returns:
+        List of dicts with group info: [
+            {
+                'name': 'candidate',
+                'display_name': 'Job Seeker',
+                'is_assigned': True,
+                'can_focus': True
+            },
+            ...
+        ]
+    """
+    from django.contrib.auth.models import Group
+    from django.conf import settings
+    from asgiref.sync import sync_to_async
+
+    # Get all available groups
+    all_groups = await sync_to_async(lambda: list(Group.objects.all()))()
+
+    # Get user's current groups
+    user_groups = set(await sync_to_async(lambda: list(user.groups.values_list('name', flat=True)))())
+
+    # Get client-specific group names
+    client_config = getattr(settings, 'CLIENT_GROUP_NAMES', {}).get(settings.CLIENT_CONFIG, {})
+    default_names = getattr(settings, 'GROUP_PUBLIC_NAMES', {})
+
+    result = []
+    for group in all_groups:
+        # Get display name (client-specific or default)
+        display_name = client_config.get(group.name, default_names.get(group.name, group.name))
+
+        # For testing: all groups are selectable
+        # Everyone can be candidate (default group behavior)
+        is_assigned = group.name in user_groups
+
+        # Determine if this group can be used as focus
+        # Map group names to focus names
+        focus_mapping = {
+            'candidate': 'candidate',
+            'employer': 'employer',
+            'recruiter': 'recruiter',
+            'administrator': 'admin'
+        }
+        can_focus = group.name in focus_mapping
+
+        result.append({
+            'name': group.name,
+            'display_name': display_name,
+            'is_assigned': is_assigned,
+            'can_focus': can_focus
+        })
+
+    # Sort to match focus menu order: candidate, employer, recruiter, administrator
+    focus_order = ['candidate', 'employer', 'recruiter', 'administrator']
+    def sort_key(group):
+        try:
+            return focus_order.index(group['name'])
+        except ValueError:
+            return len(focus_order)  # Put unknown groups at the end
+
+    result.sort(key=sort_key)
+    return result
+
+
+async def update_user_groups(user, group_updates):
+    """
+    Update user's group memberships.
+
+    Args:
+        user: User instance
+        group_updates: Dict of {group_name: should_assign}
+
+    Returns:
+        Dict with success status and details
+    """
+    from django.contrib.auth.models import Group
+    from asgiref.sync import sync_to_async
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Get all groups for validation
+        all_groups = {g.name: g for g in await sync_to_async(lambda: list(Group.objects.all()))()}
+
+        # Track changes
+        groups_added = []
+        groups_removed = []
+
+        # Process each update
+        for group_name, should_assign in group_updates.items():
+            if group_name not in all_groups:
+                return {
+                    'success': False,
+                    'error': f'Group "{group_name}" does not exist'
+                }
+
+            group = all_groups[group_name]
+
+            # Prevent removing the candidate group (required for all users)
+            if group_name == 'candidate' and not should_assign:
+                logger.info(f"Prevented removal of required candidate group for user {user.username}")
+                continue
+
+            if should_assign:
+                # Add user to group
+                await sync_to_async(user.groups.add)(group)
+                groups_added.append(group_name)
+                logger.info(f"Added user {user.username} to group {group_name}")
+            else:
+                # Remove user from group
+                await sync_to_async(user.groups.remove)(group)
+                groups_removed.append(group_name)
+                logger.info(f"Removed user {user.username} from group {group_name}")
+
+        # Clear focus-related session data since groups changed
+        # This will force re-negotiation of focus on next request
+        # We can't directly access request.session here, but the frontend
+        # should invalidate focus queries after group updates
+
+        message_parts = []
+        if groups_added:
+            message_parts.append(f"Added to: {', '.join(groups_added)}")
+        if groups_removed:
+            message_parts.append(f"Removed from: {', '.join(groups_removed)}")
+
+        return {
+            'success': True,
+            'message': '; '.join(message_parts) if message_parts else 'No changes made',
+            'groups_updated': {
+                'added': groups_added,
+                'removed': groups_removed
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error updating groups for user {user.username}: {e}")
+        return {
+            'success': False,
+            'error': f'Failed to update groups: {str(e)}'
+        }
 
 
 async def get_user_focus_context(request):

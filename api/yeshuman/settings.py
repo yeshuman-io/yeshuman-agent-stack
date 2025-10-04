@@ -117,7 +117,6 @@ INSTALLED_APPS = [
     'apps.opportunities',  # Opportunities
     'apps.organisations',  # Organizations
     'apps.profiles',  # User profiles
-    'apps.seed',  # Data seeding utilities
     'apps.skills',  # Skills
     'apps.threads',  # Conversation threads
     'a2a',
@@ -383,4 +382,28 @@ LOGGING = {
         'handlers': ['console'],
         'level': 'INFO',
     },
+}
+
+# Group display names for different clients
+GROUP_PUBLIC_NAMES = {
+    'candidate': 'Job Seeker',
+    'employer': 'Employer',
+    'recruiter': 'Recruiter',
+    'administrator': 'Administrator',
+}
+
+# Client-specific group display names (TalentCo branding)
+CLIENT_GROUP_NAMES = {
+    'talentco': {
+        'candidate': 'Job Seeker',
+        'employer': 'Employer',
+        'recruiter': 'Talent Partner',
+        'administrator': 'System Admin',
+    },
+    'yeshuman': {
+        'candidate': 'Candidate',
+        'employer': 'Employer',
+        'recruiter': 'Recruiter',
+        'administrator': 'Administrator',
+    }
 }

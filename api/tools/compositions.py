@@ -186,13 +186,16 @@ async def get_tools_for_user(user, protocol: str = 'graph') -> List[BaseTool]:
         logger.debug(f"🔍 Processing group: {group.name}")
 
         # Direct Group name → Composition class mapping
-        if group.name == 'hiring':
+        if group.name == 'employer':
             logger.info(f"🏢 Adding employer tools for group '{group.name}'")
             composition = TalentCoEmployerComposition(protocol)
-        elif group.name == 'job_seeking':
+        elif group.name == 'recruiter':
+            logger.info(f"🎯 Adding recruiter tools for group '{group.name}'")
+            composition = TalentCoEmployerComposition(protocol)  # Recruiters get employer tools
+        elif group.name == 'candidate':
             logger.info(f"👤 Adding candidate tools for group '{group.name}'")
             composition = TalentCoCandidateComposition(protocol)
-        elif group.name == 'system_administration':
+        elif group.name == 'administrator':
             logger.info(f"👑 Adding admin tools for group '{group.name}'")
             composition = TalentCoAdminComposition(protocol)
         else:
@@ -250,15 +253,15 @@ async def get_tools_for_focus(user, focus: str, protocol: str = 'graph') -> List
         logger.info(f"🏢 Employer focus requested")
         # Check permission
         from asgiref.sync import sync_to_async
-        has_permission = await sync_to_async(lambda: user.groups.filter(name='hiring').exists())()
+        has_permission = await sync_to_async(lambda: user.groups.filter(name='employer').exists())()
 
         if has_permission:
-            logger.info(f"✅ User has hiring permission - returning employer tools")
+            logger.info(f"✅ User has employer permission - returning employer tools")
             tools = TalentCoEmployerComposition(protocol).get_tools()
             logger.info(f"✅ Employer tools: {len(tools)} tools - {[t.name for t in tools]}")
             return tools
         else:
-            logger.warning(f"🚫 User lacks hiring permission - falling back to candidate tools")
+            logger.warning(f"🚫 User lacks employer permission - falling back to candidate tools")
             tools = TalentCoCandidateComposition(protocol).get_tools()
             logger.info(f"✅ Fallback candidate tools: {len(tools)} tools - {[t.name for t in tools]}")
             return tools

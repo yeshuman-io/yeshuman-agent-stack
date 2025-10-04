@@ -32,11 +32,11 @@ class AgentSystemIntegrationTest(TestCase):
         )
 
         # Create groups
-        self.job_seeking_group, _ = Group.objects.get_or_create(name='job_seeking')
-        self.hiring_group, _ = Group.objects.get_or_create(name='hiring')
+        self.candidate_group, _ = Group.objects.get_or_create(name='candidate')
+        self.employer_group, _ = Group.objects.get_or_create(name='employer')
 
-        # Add user to hiring group (employer focus)
-        self.user.groups.add(self.hiring_group)
+        # Add user to employer group (employer focus)
+        self.user.groups.add(self.employer_group)
 
     def tearDown(self):
         """Clean up test data."""
@@ -71,8 +71,8 @@ class AgentSystemIntegrationTest(TestCase):
     async def test_user_groups_setup(self):
         """Verify user has correct groups for focus testing."""
         user_groups = await sync_to_async(lambda: list(self.user.groups.all()))()
-        self.assertIn(self.hiring_group, user_groups)
-        self.assertNotIn(self.job_seeking_group, user_groups)
+        self.assertIn(self.employer_group, user_groups)
+        self.assertNotIn(self.candidate_group, user_groups)
 
     # ==========================================
     # TOOL ASSIGNMENT TESTS
@@ -82,7 +82,7 @@ class AgentSystemIntegrationTest(TestCase):
         """Test that employer focus gets correct tools."""
         from tools.compositions import get_tools_for_focus
 
-        # Test employer focus (user has hiring group)
+        # Test employer focus (user has employer group)
         tools = await sync_to_async(get_tools_for_focus)(self.user, 'employer', 'graph')
         tool_names = [t.name for t in tools]
 
@@ -107,8 +107,8 @@ class AgentSystemIntegrationTest(TestCase):
         """Test that candidate focus gets correct tools."""
         from tools.compositions import get_tools_for_focus
 
-        # Add user to job_seeking group for candidate access
-        await sync_to_async(self.user.groups.add)(self.job_seeking_group)
+        # Add user to candidate group for candidate access
+        await sync_to_async(self.user.groups.add)(self.candidate_group)
 
         # Test candidate focus
         tools = await sync_to_async(get_tools_for_focus)(self.user, 'candidate', 'graph')
@@ -200,7 +200,7 @@ class AgentSystemIntegrationTest(TestCase):
         from tools.compositions import get_tools_for_focus
 
         # Add candidate group for testing
-        await sync_to_async(self.user.groups.add)(self.job_seeking_group)
+        await sync_to_async(self.user.groups.add)(self.candidate_group)
 
         # Test employer focus
         employer_tools = await sync_to_async(get_tools_for_focus)(self.user, 'employer', 'graph')
@@ -232,7 +232,7 @@ class AgentSystemIntegrationTest(TestCase):
         employer_tool_names = {t.name for t in employer_composition}
 
         # Add candidate group
-        await sync_to_async(self.user.groups.add)(self.job_seeking_group)
+        await sync_to_async(self.user.groups.add)(self.candidate_group)
 
         # Test candidate focus
         candidate_agent = await sync_to_async(create_agent)(user=self.user, focus='candidate')

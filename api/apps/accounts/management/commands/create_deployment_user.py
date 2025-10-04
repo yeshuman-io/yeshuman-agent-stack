@@ -18,10 +18,10 @@ class Command(BaseCommand):
 
         self.stdout.write('Creating deployment users...')
 
-        # Create hiring group if it doesn't exist
+        # Create employer group if it doesn't exist
         from django.contrib.auth.models import Group
-        hiring_group, created = Group.objects.get_or_create(name='hiring')
-        self.stdout.write(f'Group "hiring" {"created" if created else "already exists"}')
+        employer_group, created = Group.objects.get_or_create(name='employer')
+        self.stdout.write(f'Group "employer" {"created" if created else "already exists"}')
 
         for email, password in users:
             # Check if user already exists
@@ -39,7 +39,7 @@ class Command(BaseCommand):
             )
 
             # Add user to group
-            user.groups.add(hiring_group)
+            user.groups.add(employer_group)
 
             created_count += 1
             self.stdout.write(f'Created deployment user: {email}')
