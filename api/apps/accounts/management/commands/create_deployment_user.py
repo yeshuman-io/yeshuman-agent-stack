@@ -49,6 +49,4 @@ class Command(BaseCommand):
                 self.style.SUCCESS(f'Successfully created {created_count} deployment user(s)')
             )
         else:
-            self.stdout.write(
-                self.style.INFO('All deployment users already exist')
-            )
+            self.stdout.write('All deployment users already exist')
