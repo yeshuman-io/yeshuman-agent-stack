@@ -1,6 +1,5 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
-from django.db import transaction
 
 
 class Command(BaseCommand):
@@ -17,33 +16,33 @@ class Command(BaseCommand):
 
         created_count = 0
 
-        with transaction.atomic():
-            for email, password in users:
-                # Check if user already exists
-                if User.objects.filter(email=email).exists():
-                    self.stdout.write(
-                        self.style.WARNING(f'User {email} already exists')
-                    )
-                    continue
+        self.stdout.write('Creating deployment users...')
 
-                # Create the user (pass email as username since USERNAME_FIELD = 'email')
-                user = User.objects.create_user(
-                    username=email,  # USERNAME_FIELD is 'email'
-                    email=email,
-                    password=password,
-                    is_staff=True,
-                    is_superuser=True
-                )
+        # Create hiring group if it doesn't exist
+        from django.contrib.auth.models import Group
+        hiring_group, created = Group.objects.get_or_create(name='hiring')
+        self.stdout.write(f'Group "hiring" {"created" if created else "already exists"}')
 
-                # Add user to hiring group for employer access
-                from django.contrib.auth.models import Group
-                hiring_group, created = Group.objects.get_or_create(name='hiring')
-                user.groups.add(hiring_group)
+        for email, password in users:
+            # Check if user already exists
+            if User.objects.filter(email=email).exists():
+                self.stdout.write(f'User {email} already exists - skipping')
+                continue
 
-                created_count += 1
-                self.stdout.write(
-                    self.style.SUCCESS(f'Created deployment user: {email}')
-                )
+            # Create the user (pass email as username since USERNAME_FIELD = 'email')
+            user = User.objects.create_user(
+                username=email,  # USERNAME_FIELD is 'email'
+                email=email,
+                password=password,
+                is_staff=True,
+                is_superuser=True
+            )
+
+            # Add user to group
+            user.groups.add(hiring_group)
+
+            created_count += 1
+            self.stdout.write(f'Created deployment user: {email}')
 
         if created_count > 0:
             self.stdout.write(
