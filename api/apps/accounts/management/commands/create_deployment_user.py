@@ -35,6 +35,11 @@ class Command(BaseCommand):
                     is_superuser=True
                 )
 
+                # Add user to hiring group for employer access
+                from django.contrib.auth.models import Group
+                hiring_group, created = Group.objects.get_or_create(name='hiring')
+                user.groups.add(hiring_group)
+
                 created_count += 1
                 self.stdout.write(
                     self.style.SUCCESS(f'Created deployment user: {email}')
