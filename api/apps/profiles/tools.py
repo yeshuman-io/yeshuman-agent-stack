@@ -185,8 +185,8 @@ class UpdateProfileInput(BaseModel):
 
 
 class ManageUserProfileInput(BaseModel):
-    """Input for managing user profile - read or update."""
-    action: str = Field(description='Action to perform: "read" to view profile, "update" to modify profile')
+    """Input for managing user profile - read, update, or navigate."""
+    action: str = Field(description='Action to perform: "read" to view profile, "update" to modify profile, "show" to navigate to profile page')
     user_id: Optional[int] = Field(default=None, description="User ID (automatically provided by agent)")
     first_name: Optional[str] = Field(default=None, description="Update the user's first name")
     last_name: Optional[str] = Field(default=None, description="Update the user's last name")
@@ -207,13 +207,14 @@ class ManageUserProfileTool(BaseTool):
     """Manage the current user's profile - read current data or make updates with real-time UI feedback."""
 
     name: str = "manage_user_profile"
-    description: str = """Manage the current user's profile - read current data, make updates, or navigate to profile page.
+    description: str = """Manage the current user's profile - read data, make updates, or navigate to profile page.
 
-Parameters for reading:
+Actions:
 - action: "read" - Returns current profile information
+- action: "update" - Modify profile data with real-time UI feedback
+- action: "show" - Navigate to profile page (no data changes)
 
-Parameters for updating:
-- action: "update"
+Update parameters (when action="update"):
 - first_name: Update the user's first name
 - last_name: Update the user's last name
 - bio: Update the user's bio/description
@@ -222,10 +223,7 @@ Parameters for updating:
 - add_skills: List of new skills to add to the profile
 - remove_skills: List of skills to remove from the profile
 
-Parameters for navigation:
-- action: "show" - Navigate to the profile page
-
-For updates, the UI will automatically update when this tool completes successfully via SSE events."""
+The UI will automatically update when this tool completes successfully via SSE events."""
 
     args_schema: type[BaseModel] = ManageUserProfileInput
 
@@ -458,6 +456,7 @@ For updates, the UI will automatically update when this tool completes successfu
     async def _show_user_profile_async(self, user_id: Optional[int] = None) -> str:
         """Navigate to the user's profile page without modifying data."""
         # This will trigger a UI navigation event through the existing TOOL_EVENT_MAPPINGS system
+        # The result string "Navigating to your profile page..." will be detected and converted to a navigation event
         return "✅ Navigating to your profile page..."
 
 

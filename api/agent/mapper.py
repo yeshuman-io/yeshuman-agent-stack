@@ -18,18 +18,15 @@ TOOL_EVENT_MAPPINGS: Dict[str, Dict[str, Any]] = {
     "manage_user_profile": {
         "entity": "profile",
         "action": "updated",
-        "success_check": lambda result: isinstance(result, str) and "successfully" in result.lower(),
         "entity_id_extractor": lambda tool_call, result, user_id: f"user_{user_id}",
-        "description": "User profile updated by agent",
-        "always_navigate": lambda tool_call: tool_call.get("args", {}).get("action") == "show",
-        "navigation_target": "/profile"
+        "description": "User profile managed by agent",
+        "always_navigate": "/profile"  # Always navigate to profile page for profile tools
     },
 
-    # Legacy mapping for backward compatibility
+    # Legacy mapping (deprecated - replaced by manage_user_profile)
     "update_user_profile": {
         "entity": "profile",
         "action": "updated",
-        "success_check": lambda result: isinstance(result, str) and "successfully" in result.lower(),
         "entity_id_extractor": lambda tool_call, result, user_id: f"user_{user_id}",
         "description": "User profile updated by agent"
     },
@@ -143,36 +140,6 @@ def get_tool_event_config(tool_name: str) -> Optional[Dict[str, Any]]:
     return TOOL_EVENT_MAPPINGS.get(tool_name)
 
 
-def should_emit_event_for_tool(tool_name: str, result: Any, tool_call: Optional[Dict] = None) -> bool:
-    """
-    Check if a tool execution should emit a UI event.
-
-    Args:
-        tool_name: Name of the tool that was executed
-        result: Result returned by the tool
-        tool_call: The tool call that was made (optional, for navigation checks)
-
-    Returns:
-        True if event should be emitted
-    """
-    config = get_tool_event_config(tool_name)
-    if not config:
-        return False
-
-    # Check if this tool should always navigate (e.g., show actions)
-    always_navigate = config.get("always_navigate")
-    if always_navigate and callable(always_navigate) and tool_call:
-        if always_navigate(tool_call):
-            return True
-
-    # Check success condition for regular updates
-    success_check = config.get("success_check")
-    if success_check and callable(success_check):
-        return success_check(result)
-
-    return False
-
-
 def create_ui_event(tool_name: str, tool_call: Dict[str, Any], result: Any, user_id: str) -> Dict[str, Any]:
     """
     Create a UI event for a successful tool execution.
@@ -190,19 +157,6 @@ def create_ui_event(tool_name: str, tool_call: Dict[str, Any], result: Any, user
     if not config:
         raise ValueError(f"No event config for tool: {tool_name}")
 
-    # Check if this is a navigation event
-    always_navigate = config.get("always_navigate")
-    if always_navigate and callable(always_navigate) and always_navigate(tool_call):
-        # This is a navigation event
-        return {
-            "type": "ui",
-            "action": "navigate",
-            "target": config.get("navigation_target", "/"),
-            "tool": tool_name,
-            "description": config.get("description", f"{tool_name} navigation")
-        }
-
-    # Regular entity update event
     # Extract entity ID
     entity_id_extractor = config.get("entity_id_extractor")
     entity_id = "unknown"
@@ -213,11 +167,29 @@ def create_ui_event(tool_name: str, tool_call: Dict[str, Any], result: Any, user
             logger.warning(f"Failed to extract entity ID for {tool_name}: {e}")
             entity_id = "unknown"
 
-    return {
+    # Determine action based on tool configuration
+    action = config["action"]
+    target = None
+
+    # Check if this tool should always navigate to a specific page
+    always_navigate = config.get("always_navigate")
+    if always_navigate:
+        action = "navigate"
+        target = always_navigate
+
+    event_data = {
         "type": "ui",
         "entity": config["entity"],
         "entity_id": entity_id,
-        "action": config["action"],
+        "action": action,
         "tool": tool_name,
         "description": config.get("description", f"{tool_name} executed")
     }
+
+    # Add target for navigation events
+    if target:
+        event_data["target"] = target
+
+    # No need to parse changed fields - TanStack handles comparison
+
+    return event_data

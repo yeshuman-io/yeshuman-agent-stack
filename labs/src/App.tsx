@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useNavigate } from 'react-router-dom'
 import { ThemeProvider } from './components/theme-provider'
 import { Activity, RotateCcw } from 'lucide-react'
 import { AnimatedTitle } from './components/animated-title'
@@ -26,6 +26,7 @@ interface UserFocus {
 
 function AppContent() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   // Get auth token
   const { token } = useAuth();
   // Get query client for invalidation
@@ -135,11 +136,19 @@ function AppContent() {
     },
     onUIEvent: (data: any) => {
       console.log('🔄 [UI EVENT] Received UI update event:', data);
-      if (data.entity === 'profile') {
+      if (data.action === 'navigate' && data.target) {
+        console.log(`🔄 [UI EVENT] Navigating to: ${data.target}`);
+        navigate(data.target);
+        // Also invalidate cache when navigating to profile - field highlighting handled by TanStack comparison
+        if (data.target === '/profile') {
+          console.log('🔄 [UI EVENT] Invalidating profile cache after navigation');
+          queryClient.invalidateQueries({ queryKey: ['profile'] });
+        }
+      } else if (data.entity === 'profile' && data.action === 'updated') {
         console.log('🔄 [UI EVENT] Invalidating profile cache for real-time updates');
         queryClient.invalidateQueries({ queryKey: ['profile'] });
       } else {
-        console.log(`🔄 [UI EVENT] Unknown entity type: ${data.entity}`);
+        console.log(`🔄 [UI EVENT] Unhandled event: ${data.entity}.${data.action}`);
       }
     }
   };

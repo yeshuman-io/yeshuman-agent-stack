@@ -15,32 +15,31 @@ export function Profile() {
   const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set())
   const [previousProfile, setPreviousProfile] = useState<ProfileData | null>(null)
 
-  // Initialize form data when profile loads
-  React.useEffect(() => {
-    if (profile) {
-      setFormData(profile)
-    }
-  }, [profile])
-
-  // Track profile changes and highlight card when fields change
+  // Track profile changes and highlight differences
   React.useEffect(() => {
     if (profile && previousProfile) {
       const changedFields = new Set<string>()
 
-      // Compare each field in the Personal Information card
-      const personalInfoFields = ['first_name', 'last_name', 'bio', 'city', 'country']
-      for (const field of personalInfoFields) {
+      // Compare each field
+      const fieldsToCompare = ['first_name', 'last_name', 'bio', 'city', 'country', 'skills']
+      for (const field of fieldsToCompare) {
         const oldValue = previousProfile[field as keyof ProfileData]
         const newValue = profile[field as keyof ProfileData]
-        if (oldValue !== newValue) {
+
+        // Handle array comparison for skills
+        if (field === 'skills') {
+          const oldSkills = Array.isArray(oldValue) ? oldValue : []
+          const newSkills = Array.isArray(newValue) ? newValue : []
+          if (JSON.stringify(oldSkills.sort()) !== JSON.stringify(newSkills.sort())) {
+            changedFields.add('skills')
+          }
+        } else if (oldValue !== newValue) {
           changedFields.add(field)
         }
       }
 
-      // Highlight card if any personal info fields changed
+      // Highlight changed fields
       if (changedFields.size > 0) {
-        // Add all personal info fields to highlight set to trigger card highlighting
-        personalInfoFields.forEach(field => changedFields.add(field))
         setHighlightedFields(changedFields)
         // Fade out highlights after 3 seconds
         setTimeout(() => {
@@ -54,6 +53,13 @@ export function Profile() {
       setPreviousProfile(profile)
     }
   }, [profile, previousProfile])
+
+  // Initialize form data when profile loads
+  React.useEffect(() => {
+    if (profile) {
+      setFormData(profile)
+    }
+  }, [profile])
 
   // Note: Profile updates are handled automatically by the useProfile hook
   // through TanStack Query invalidation
@@ -232,7 +238,7 @@ export function Profile() {
         </Card>
 
         {/* Skills */}
-        <Card>
+        <Card className={`transition-all duration-300 ${highlightedFields.has('skills') ? 'ring-2 ring-green-500/50 bg-green-50/10' : ''}`}>
           <CardHeader>
             <CardTitle>Skills & Expertise</CardTitle>
             <CardDescription>Showcase your professional skills and technical expertise</CardDescription>

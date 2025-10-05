@@ -21,7 +21,7 @@ from langgraph.config import get_stream_writer
 from langgraph.prebuilt import ToolNode
 
 from tools.compositions import get_tools_for_context, get_tools_for_user, get_tools_for_focus
-from .mapper import should_emit_event_for_tool, create_ui_event
+from .mapper import get_tool_event_config, create_ui_event
 
 # Semantic voice enhancement
 from sentence_transformers import SentenceTransformer
@@ -363,9 +363,9 @@ async def create_agent(client: str = 'talentco', role: str = 'admin', protocol: 
                             tool_name = tool_call.get("name", "unknown")
                             result_content = getattr(result_msg, 'content', '')
 
-                            # Check if this tool execution should emit a UI event
-                            should_emit = should_emit_event_for_tool(tool_name, result_content, tool_call)
-                            if should_emit:
+                            # Emit UI events for tools that have event configuration
+                            config = get_tool_event_config(tool_name)
+                            if config:
                                 try:
                                     # Create and emit the UI event
                                     ui_event = create_ui_event(tool_name, tool_call, result_content, user_id)
