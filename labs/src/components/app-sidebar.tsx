@@ -50,6 +50,7 @@ interface AppSidebarProps {
   onRefreshThreads?: () => void
   currentThreadId?: string | null
   onClearCurrentThread?: () => void
+  onFocusChange?: (focusData: UserFocus | null) => void
 }
 
 // Focus interface
@@ -59,7 +60,7 @@ interface UserFocus {
   focus_confirmed: boolean
 }
 
-export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, onClearCurrentThread }: AppSidebarProps = {}) {
+export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, onClearCurrentThread, onFocusChange }: AppSidebarProps = {}) {
   const navigate = useNavigate()
   const { user, token, isAuthenticated, logout } = useAuth()
   const { state } = useSidebar()
@@ -79,12 +80,7 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
     }
   }, [isAuthenticated, user, token])
 
-  // Navigate to profile when seeker focus is selected
-  useEffect(() => {
-    if (userFocus?.current_focus === 'candidate') {
-      navigate('/profile')
-    }
-  }, [userFocus?.current_focus, navigate])
+  // Focus navigation is now handled in handleSetUserFocus to go to dashboard
 
   // Also fetch threads and focus on component mount if already authenticated
   useEffect(() => {
@@ -258,6 +254,8 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
         const focusData = await response.json()
         console.log('Fetched user focus:', focusData)
         setUserFocus(focusData)
+        // Notify parent component of initial focus load
+        onFocusChange?.(focusData)
       } else {
         const errorText = await response.text()
         console.error('Failed to fetch focus:', response.status, response.statusText, errorText)
@@ -299,6 +297,10 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
         const result = await response.json()
         console.log('Focus set successfully:', result)
         setUserFocus(result) // Update with server response
+        // Notify parent component of focus change
+        onFocusChange?.(result)
+        // Navigate to home page to show the updated focus dashboard
+        navigate('/')
       } else {
         const errorText = await response.text()
         console.error('Failed to set focus:', response.status, response.statusText, errorText)

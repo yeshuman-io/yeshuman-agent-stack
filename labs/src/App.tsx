@@ -9,10 +9,17 @@ import { ThinkingPanel, VoicePanel, ToolsPanel, SystemPanel } from './components
 import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { AppSidebar } from './components/app-sidebar'
 import { Profile } from './components/profile'
+import { FocusDashboard } from './components/focus-dashboard'
 import { useSSE } from './hooks/use-sse'
 import { useAuth } from './hooks/use-auth'
 import { useQueryClient } from '@tanstack/react-query'
 import './App.css'
+
+interface UserFocus {
+  current_focus: string
+  available_foci: string[]
+  focus_confirmed: boolean
+}
 
 function AppContent() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -29,6 +36,9 @@ function AppContent() {
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(
     searchParams.get('thread') || null
   );
+
+  // Focus state
+  const [userFocus, setUserFocus] = useState<UserFocus | null>(null);
 
   // Animation trigger
   const animationTriggerRef = useRef<(() => void) | null>(null);
@@ -177,6 +187,12 @@ function AppContent() {
     }
   }, [searchParams, loadThreadMessages]);
 
+  // Handle focus changes from sidebar
+  const handleFocusChange = useCallback((focusData: UserFocus | null) => {
+    console.log('🎯 [FOCUS CHANGE] Focus updated from sidebar:', focusData);
+    setUserFocus(focusData);
+  }, []);
+
   // Handle input submission
   const handleSubmit = useCallback(() => {
     if (inputText.trim()) {
@@ -189,6 +205,20 @@ function AppContent() {
       setInputText('');
     }
   }, [inputText, sendMessage, currentThreadId]);
+
+  // Handle starting conversation from dashboard
+  const handleStartConversation = useCallback((message: string) => {
+    console.log('🎯 [DASHBOARD CONVERSATION] Starting conversation from dashboard:', {
+      message: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+      currentThreadId
+    });
+    setInputText(message);
+    // Small delay to ensure input is set before submitting
+    setTimeout(() => {
+      sendMessage(message);
+      setInputText('');
+    }, 100);
+  }, [sendMessage]);
 
   // Handle thread selection from sidebar
   const handleThreadSelect = useCallback((threadId: string) => {
@@ -214,6 +244,7 @@ function AppContent() {
             onThreadSelect={handleThreadSelect}
             currentThreadId={currentThreadId}
             onClearCurrentThread={handleClearCurrentThread}
+            onFocusChange={handleFocusChange}
           />
           <SidebarInset className="flex flex-col h-screen">
           {/* Header */}
@@ -256,12 +287,19 @@ function AppContent() {
               <Routes>
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/" element={
-                  <div className="h-full flex items-center justify-center">
-                    <div className="text-center text-muted-foreground">
-                      <p className="text-lg font-medium mb-2">Welcome to YesHuman</p>
-                      <p className="text-sm">Start a conversation to begin your AI journey</p>
+                  userFocus ? (
+                    <FocusDashboard
+                      focus={userFocus.current_focus}
+                      onStartConversation={handleStartConversation}
+                    />
+                  ) : (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center text-muted-foreground">
+                        <p className="text-lg font-medium mb-2">Welcome to YesHuman</p>
+                        <p className="text-sm">Loading your personalized dashboard...</p>
+                      </div>
                     </div>
-                  </div>
+                  )
                 } />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
