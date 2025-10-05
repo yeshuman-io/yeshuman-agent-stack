@@ -99,22 +99,22 @@ class TalentCoCandidateComposition(BaseToolComposition):
         # from apps.opportunities.tools import OPPORTUNITY_DISCOVERY_TOOLS
         # from tools.utilities import BASIC_TOOLS
 
-        # Extract only the UpdateUserProfileTool from PROFILE_MANAGEMENT_TOOLS
-        update_user_profile_tool = None
+        # Extract only the ManageUserProfileTool from PROFILE_MANAGEMENT_TOOLS
+        manage_user_profile_tool = None
         for tool in PROFILE_MANAGEMENT_TOOLS:
-            if tool.name == "update_user_profile":
-                update_user_profile_tool = tool
+            if tool.name == "manage_user_profile":
+                manage_user_profile_tool = tool
                 break
 
         self._tools = [
-            update_user_profile_tool,  # Only tool active for focused testing
+            manage_user_profile_tool,  # Only tool active for focused testing
             # PROFILE_MANAGEMENT_TOOLS +
             # PROFILE_DISCOVERY_TOOLS +
             # CANDIDATE_EVALUATION_TOOLS +
             # APPLICATION_DISCOVERY_TOOLS +
             # OPPORTUNITY_DISCOVERY_TOOLS +
             # BASIC_TOOLS
-        ] if update_user_profile_tool else []
+        ] if manage_user_profile_tool else []
 
         self._metadata.update({
             'client': 'talentco',

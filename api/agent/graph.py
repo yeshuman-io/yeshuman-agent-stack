@@ -512,7 +512,7 @@ Return ONLY the status line, no quotes or explanation."""
                 if user_id:
                     for tc in tool_response.tool_calls:
                         tool_name = tc.get("name", "unknown")
-                        if tool_name == "update_user_profile":
+                        if tool_name in ["update_user_profile", "manage_user_profile"]:
                             # Inject user_id into tool arguments
                             args = tc.get("args", tc.get("arguments", {}))
                             if not args.get("user_id"):

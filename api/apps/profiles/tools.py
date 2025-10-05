@@ -184,8 +184,9 @@ class UpdateProfileInput(BaseModel):
     )
 
 
-class UpdateUserProfileInput(BaseModel):
-    """Input for updating the current user's profile."""
+class ManageUserProfileInput(BaseModel):
+    """Input for managing user profile - read or update."""
+    action: str = Field(description='Action to perform: "read" to view profile, "update" to modify profile')
     user_id: Optional[int] = Field(default=None, description="User ID (automatically provided by agent)")
     first_name: Optional[str] = Field(default=None, description="Update the user's first name")
     last_name: Optional[str] = Field(default=None, description="Update the user's last name")
@@ -202,16 +203,17 @@ class UpdateUserProfileInput(BaseModel):
     )
 
 
-class UpdateUserProfileTool(BaseTool):
-    """Update the current user's profile with real-time UI feedback."""
+class ManageUserProfileTool(BaseTool):
+    """Manage the current user's profile - read current data or make updates with real-time UI feedback."""
 
-    name: str = "update_user_profile"
-    description: str = """Update the current user's profile with new information.
+    name: str = "manage_user_profile"
+    description: str = """Manage the current user's profile - read current data or make updates.
 
-This tool updates the authenticated user's profile and provides real-time feedback
-to the UI via SSE events. Use this when the user asks you to modify their profile.
+Parameters for reading:
+- action: "read" - Returns current profile information
 
-Parameters:
+Parameters for updating:
+- action: "update"
 - first_name: Update the user's first name
 - last_name: Update the user's last name
 - bio: Update the user's bio/description
@@ -220,42 +222,132 @@ Parameters:
 - add_skills: List of new skills to add to the profile
 - remove_skills: List of skills to remove from the profile
 
-The UI will automatically update when this tool completes successfully."""
+For updates, the UI will automatically update when this tool completes successfully via SSE events."""
 
-    args_schema: type[BaseModel] = UpdateUserProfileInput
+    args_schema: type[BaseModel] = ManageUserProfileInput
 
     def __init__(self, user=None):
         """Initialize with optional user context for agent usage."""
         super().__init__()
         self._user = user
 
-    def _run(self, user_id: Optional[int] = None, first_name: Optional[str] = None, last_name: Optional[str] = None,
+    def _run(self, action: str, user_id: Optional[int] = None, first_name: Optional[str] = None, last_name: Optional[str] = None,
              bio: Optional[str] = None, city: Optional[str] = None, country: Optional[str] = None,
              add_skills: Optional[List[str]] = None, remove_skills: Optional[List[str]] = None,
              run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        """Execute the update user profile tool synchronously."""
+        """Execute the manage user profile tool synchronously."""
         try:
             from asgiref.sync import async_to_sync
 
             @async_to_sync
             async def run_service():
-                return await self._update_user_profile_async(
-                    user_id, first_name, last_name, bio, city, country, add_skills, remove_skills
-                )
+                if action == "read":
+                    return await self._read_user_profile_async(user_id)
+                elif action == "update":
+                    return await self._update_user_profile_async(
+                        user_id, first_name, last_name, bio, city, country, add_skills, remove_skills
+                    )
+                else:
+                    return f"❌ Invalid action: {action}. Use 'read' or 'update'."
 
             return run_service()
 
         except Exception as e:
-            return f"❌ Failed to update profile: {str(e)}"
+            return f"❌ Failed to manage profile: {str(e)}"
 
-    async def _arun(self, user_id: Optional[int] = None, first_name: Optional[str] = None, last_name: Optional[str] = None,
+    async def _arun(self, action: str, user_id: Optional[int] = None, first_name: Optional[str] = None, last_name: Optional[str] = None,
                    bio: Optional[str] = None, city: Optional[str] = None, country: Optional[str] = None,
                    add_skills: Optional[List[str]] = None, remove_skills: Optional[List[str]] = None,
                    run_manager: Optional[AsyncCallbackManagerForToolRun] = None) -> str:
-        """Execute the update user profile tool asynchronously."""
-        return await self._update_user_profile_async(
-            user_id, first_name, last_name, bio, city, country, add_skills, remove_skills
-        )
+        """Execute the manage user profile tool asynchronously."""
+        if action == "read":
+            return await self._read_user_profile_async(user_id)
+        elif action == "update":
+            return await self._update_user_profile_async(
+                user_id, first_name, last_name, bio, city, country, add_skills, remove_skills
+            )
+        else:
+            return f"❌ Invalid action: {action}. Use 'read' or 'update'."
+
+    async def _read_user_profile_async(self, user_id: Optional[int] = None) -> str:
+        """Read the current user's profile information."""
+        try:
+            # Get user - either from parameter (agent context) or from request (API context)
+            if user_id:
+                # Agent context: get user by ID
+                from django.contrib.auth import get_user_model
+                User = get_user_model()
+                user = await sync_to_async(User.objects.get)(id=user_id)
+            else:
+                # API context: get user from request
+                from apps.accounts.utils import negotiate_user_focus
+                focus_data = await negotiate_user_focus(None)
+                user = focus_data.get('user')
+
+            if not user:
+                return "❌ Error: No authenticated user found"
+
+            # Get or create profile
+            profile, created = await sync_to_async(Profile.objects.get_or_create)(
+                email=user.email,
+                defaults={
+                    'first_name': user.first_name or '',
+                    'last_name': user.last_name or '',
+                }
+            )
+
+            # Get skills and experiences in a single sync_to_async call to avoid any lazy loading issues
+            def get_profile_data():
+                # Get skills
+                profile_skill_objects = list(profile.profile_skills.select_related('skill').all())
+                skill_names = [ps.skill.name for ps in profile_skill_objects]
+
+                # Get experiences
+                profile_experiences = list(profile.profile_experiences.select_related('organisation').all().order_by('-start_date'))
+                experience_lines = []
+                for exp in profile_experiences:
+                    start_date = exp.start_date.strftime('%Y-%m') if exp.start_date else 'Unknown'
+                    end_date = exp.end_date.strftime('%Y-%m') if exp.end_date else 'Present' if exp.start_date else 'Unknown'
+                    experience_lines.append(f"• {exp.title} at {exp.organisation.name} ({start_date} - {end_date})")
+
+                return skill_names, experience_lines
+
+            skill_names, experience_lines = await sync_to_async(get_profile_data)()
+
+            # Format the response
+            response_parts = []
+            response_parts.append(f"📋 **Profile Information for {profile.first_name} {profile.last_name}**")
+            response_parts.append(f"**Email:** {profile.email}")
+
+            if profile.bio:
+                response_parts.append(f"**Bio:** {profile.bio}")
+
+            if profile.city or profile.country:
+                location = []
+                if profile.city:
+                    location.append(profile.city)
+                if profile.country:
+                    location.append(profile.country)
+                response_parts.append(f"**Location:** {', '.join(location)}")
+
+            if skill_names:
+                response_parts.append(f"**Skills:** {', '.join(skill_names)}")
+            else:
+                response_parts.append("**Skills:** None listed")
+
+            if experience_lines:
+                response_parts.append("**Work Experience:**")
+                response_parts.extend(experience_lines)
+            else:
+                response_parts.append("**Work Experience:** None listed")
+
+            if created:
+                response_parts.append("\n*This is a new profile - add information to complete it!*")
+
+            return '\n'.join(response_parts)
+
+        except Exception as e:
+            return f"❌ Failed to read profile: {str(e)}"
 
     async def _update_user_profile_async(self, user_id: Optional[int] = None, first_name: Optional[str] = None,
                                        last_name: Optional[str] = None, bio: Optional[str] = None,
@@ -601,7 +693,7 @@ class ListProfilesTool(BaseTool):
 PROFILE_MANAGEMENT_TOOLS = [
     CreateProfileTool(),
     UpdateProfileTool(),
-    UpdateUserProfileTool(),  # Profile-specific tool for current user with SSE updates
+    ManageUserProfileTool(),  # Profile-specific tool for current user with SSE updates and read capability
 ]
 
 # Profile Discovery Tools (searching and listing)
@@ -618,6 +710,6 @@ __all__ = [
     'PROFILE_DISCOVERY_TOOLS',
     'CreateProfileTool',
     'UpdateProfileTool',
-    'UpdateUserProfileTool',
+    'ManageUserProfileTool',
     'ListProfilesTool',
 ]

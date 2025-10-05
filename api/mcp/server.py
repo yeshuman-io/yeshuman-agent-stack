@@ -184,27 +184,42 @@ class MCPServer:
             )
 
 
-# Global MCP server instance
+# Global MCP server instance - lazily initialized
 import logging
 import sys
 logger = logging.getLogger(__name__)
 
-try:
-    print("🔧 Initializing MCP server...", file=sys.stderr)
-    logger.info("Creating global MCP server instance with tools:")
-    for tool in MCP_TOOLS:
-        logger.info(f"  - {tool.name}: {tool.description}")
-        print(f"📋 Tool loaded: {tool.name}", file=sys.stderr)
+_mcp_server = None
 
-    mcp_server = MCPServer(MCP_TOOLS)
-    logger.info("✅ MCP server instance created successfully")
-    print("✅ MCP server instance created successfully", file=sys.stderr)
+def get_mcp_server():
+    """Lazily initialize and return the MCP server instance."""
+    global _mcp_server
+    if _mcp_server is None:
+        try:
+            print("🔧 Initializing MCP server...", file=sys.stderr)
+            logger.info("Creating global MCP server instance with tools:")
+            for tool in MCP_TOOLS:
+                logger.info(f"  - {tool.name}: {tool.description}")
+                print(f"📋 Tool loaded: {tool.name}", file=sys.stderr)
 
-except Exception as e:
-    logger.error(f"❌ Failed to create MCP server: {str(e)}", exc_info=True)
-    print(f"❌ Failed to create MCP server: {str(e)}", file=sys.stderr)
-    # Create with empty tools as fallback
-    logger.warning("Creating MCP server with empty tools as fallback")
-    mcp_server = MCPServer([])
-    logger.info("⚠️ MCP server created with empty tools (fallback mode)")
-    print("⚠️ MCP server created with empty tools (fallback mode)", file=sys.stderr)
+            _mcp_server = MCPServer(MCP_TOOLS)
+            logger.info("✅ MCP server instance created successfully")
+            print("✅ MCP server instance created successfully", file=sys.stderr)
+
+        except Exception as e:
+            logger.error(f"❌ Failed to create MCP server: {str(e)}", exc_info=True)
+            print(f"❌ Failed to create MCP server: {str(e)}", file=sys.stderr)
+            # Create with empty tools as fallback
+            logger.warning("Creating MCP server with empty tools as fallback")
+            _mcp_server = MCPServer([])
+            logger.info("⚠️ MCP server created with empty tools (fallback mode)")
+            print("⚠️ MCP server created with empty tools (fallback mode)", file=sys.stderr)
+
+    return _mcp_server
+
+# For backward compatibility, provide mcp_server as a property
+class LazyMCPServer:
+    def __getattr__(self, name):
+        return getattr(get_mcp_server(), name)
+
+mcp_server = LazyMCPServer()
