@@ -364,7 +364,7 @@ async def create_agent(client: str = 'talentco', role: str = 'admin', protocol: 
                             result_content = getattr(result_msg, 'content', '')
 
                             # Check if this tool execution should emit a UI event
-                            should_emit = should_emit_event_for_tool(tool_name, result_content)
+                            should_emit = should_emit_event_for_tool(tool_name, result_content, tool_call)
                             if should_emit:
                                 try:
                                     # Create and emit the UI event

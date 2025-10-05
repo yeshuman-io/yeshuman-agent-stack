@@ -207,7 +207,7 @@ class ManageUserProfileTool(BaseTool):
     """Manage the current user's profile - read current data or make updates with real-time UI feedback."""
 
     name: str = "manage_user_profile"
-    description: str = """Manage the current user's profile - read current data or make updates.
+    description: str = """Manage the current user's profile - read current data, make updates, or navigate to profile page.
 
 Parameters for reading:
 - action: "read" - Returns current profile information
@@ -221,6 +221,9 @@ Parameters for updating:
 - country: Update the user's country location
 - add_skills: List of new skills to add to the profile
 - remove_skills: List of skills to remove from the profile
+
+Parameters for navigation:
+- action: "show" - Navigate to the profile page
 
 For updates, the UI will automatically update when this tool completes successfully via SSE events."""
 
@@ -247,8 +250,10 @@ For updates, the UI will automatically update when this tool completes successfu
                     return await self._update_user_profile_async(
                         user_id, first_name, last_name, bio, city, country, add_skills, remove_skills
                     )
+                elif action == "show":
+                    return await self._show_user_profile_async(user_id)
                 else:
-                    return f"❌ Invalid action: {action}. Use 'read' or 'update'."
+                    return f"❌ Invalid action: {action}. Use 'read', 'update', or 'show'."
 
             return run_service()
 
@@ -266,8 +271,10 @@ For updates, the UI will automatically update when this tool completes successfu
             return await self._update_user_profile_async(
                 user_id, first_name, last_name, bio, city, country, add_skills, remove_skills
             )
+        elif action == "show":
+            return await self._show_user_profile_async(user_id)
         else:
-            return f"❌ Invalid action: {action}. Use 'read' or 'update'."
+            return f"❌ Invalid action: {action}. Use 'read', 'update', or 'show'."
 
     async def _read_user_profile_async(self, user_id: Optional[int] = None) -> str:
         """Read the current user's profile information."""
@@ -447,6 +454,11 @@ For updates, the UI will automatically update when this tool completes successfu
 
         except Exception as e:
             return f"❌ Failed to update profile: {str(e)}"
+
+    async def _show_user_profile_async(self, user_id: Optional[int] = None) -> str:
+        """Navigate to the user's profile page without modifying data."""
+        # This will trigger a UI navigation event through the existing TOOL_EVENT_MAPPINGS system
+        return "✅ Navigating to your profile page..."
 
 
 class UpdateProfileTool(BaseTool):
