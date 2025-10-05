@@ -1,4 +1,4 @@
-import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, Briefcase, Shield, Search, FileText, Users } from "lucide-react"
+import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, Briefcase, Shield, Search, FileText, Users, Settings } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 
@@ -299,8 +299,8 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
         setUserFocus(result) // Update with server response
         // Notify parent component of focus change
         onFocusChange?.(result)
-        // Navigate to home page to show the updated focus dashboard
-        navigate('/')
+        // Navigate to focus-specific route
+        navigate(`/${focus}`)
       } else {
         const errorText = await response.text()
         console.error('Failed to set focus:', response.status, response.statusText, errorText)
@@ -322,7 +322,9 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
         return <User className="size-4" />
       case 'employer':
         return <Briefcase className="size-4" />
-      case 'admin':
+      case 'recruiter':
+        return <Users className="size-4" />
+      case 'administrator':
         return <Shield className="size-4" />
       default:
         return <User className="size-4" />
@@ -338,7 +340,7 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
       'candidate': 'candidate',
       'employer': 'employer',
       'recruiter': 'recruiter',
-      'admin': 'administrator'  // focus uses 'admin', groups use 'administrator'
+      'administrator': 'administrator'  // focus uses 'administrator', groups use 'administrator'
     }
 
     const groupName = focusToGroupMapping[focus] || focus
@@ -453,6 +455,12 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
                 // Employer menu items
                 <>
                   <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Update your profile" onClick={() => navigate('/profile')}>
+                      <User className="size-4" />
+                      {!isCollapsed && <span>My Profile</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
                     <SidebarMenuButton tooltip="Post a new job">
                       <Briefcase className="size-4" />
                       {!isCollapsed && <span>Post Job</span>}
@@ -468,6 +476,50 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
                     <SidebarMenuButton tooltip="Review candidates">
                       <Users className="size-4" />
                       {!isCollapsed && <span>Candidates</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </>
+              ) : userFocus.current_focus === 'recruiter' ? (
+                // Recruiter menu items
+                <>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Update your profile" onClick={() => navigate('/profile')}>
+                      <User className="size-4" />
+                      {!isCollapsed && <span>My Profile</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Find talent">
+                      <Search className="size-4" />
+                      {!isCollapsed && <span>Find Talent</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Manage placements">
+                      <Users className="size-4" />
+                      {!isCollapsed && <span>My Placements</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </>
+              ) : userFocus.current_focus === 'administrator' ? (
+                // Administrator menu items
+                <>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Update your profile" onClick={() => navigate('/profile')}>
+                      <User className="size-4" />
+                      {!isCollapsed && <span>My Profile</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="System settings">
+                      <Settings className="size-4" />
+                      {!isCollapsed && <span>System Settings</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="User management">
+                      <Users className="size-4" />
+                      {!isCollapsed && <span>User Management</span>}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </>

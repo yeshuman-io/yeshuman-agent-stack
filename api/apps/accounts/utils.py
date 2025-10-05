@@ -12,7 +12,7 @@ async def get_available_foci_for_user(user):
     Get list of available focus options for a user based on their groups.
 
     Returns:
-        List of available focus strings: ['candidate', 'employer', 'admin']
+        List of available focus strings: ['candidate', 'employer', 'administrator']
     """
     from asgiref.sync import sync_to_async
 
@@ -31,7 +31,7 @@ async def get_available_foci_for_user(user):
 
     # Check for admin access
     if await sync_to_async(lambda: user.groups.filter(name='administrator').exists())():
-        foci.append('admin')
+        foci.append('administrator')
 
     return foci
 
@@ -98,8 +98,8 @@ async def negotiate_user_focus(request, requested_focus=None):
         return session_focus, None
 
     # Default based on permissions (prefer candidate)
-    if 'admin' in available_foci:
-        default_focus = 'admin'
+    if 'administrator' in available_foci:
+        default_focus = 'administrator'
     else:
         default_focus = 'candidate'
 
@@ -159,7 +159,7 @@ async def get_selectable_groups_for_user(user):
             'candidate': 'candidate',
             'employer': 'employer',
             'recruiter': 'recruiter',
-            'administrator': 'admin'
+            'administrator': 'administrator'
         }
         can_focus = group.name in focus_mapping
 
@@ -282,7 +282,7 @@ async def get_user_focus_context(request):
         'available_foci': available_foci,
         'focus_error': error,
         'can_switch_to_employer': 'employer' in available_foci,
-        'can_switch_to_admin': 'admin' in available_foci,
+        'can_switch_to_admin': 'administrator' in available_foci,
         'focus_timestamp': focus_timestamp,
         'focus_confirmed': focus_confirmed,
     }

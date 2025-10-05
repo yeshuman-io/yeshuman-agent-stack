@@ -26,8 +26,13 @@ class User(AbstractUser):
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']  # username becomes optional
 
-    # Add custom fields if needed
-    # For now, using Django's default User fields (username, email, password, etc.)
+    # Organisation management for employers (PoC: future multi-org support)
+    managed_organisations = models.ManyToManyField(
+        'organisations.Organisation',
+        related_name='managers',
+        blank=True,
+        help_text="Organisations this user can manage"
+    )
 
     def __str__(self):
         return self.email or self.username

@@ -44,6 +44,31 @@ TOOL_EVENT_MAPPINGS: Dict[str, Dict[str, Any]] = {
     # "create_application": {...},
     # "change_application_stage": {...},
 
+    # Organisation Management Tools
+    "create_organisation": {
+        "entity": "organisation",
+        "action": "created",
+        "success_check": lambda result: isinstance(result, dict) and result.get("success") == True,
+        "entity_id_extractor": lambda tool_call, result, user_id: result.get("organisation", {}).get("slug", "unknown"),
+        "description": "Organisation created by agent"
+    },
+
+    "update_organisation": {
+        "entity": "organisation",
+        "action": "updated",
+        "success_check": lambda result: isinstance(result, dict) and result.get("success") == True,
+        "entity_id_extractor": lambda tool_call, result, user_id: result.get("organisation", {}).get("slug", "unknown"),
+        "description": "Organisation updated by agent"
+    },
+
+    "delete_organisation": {
+        "entity": "organisation",
+        "action": "deleted",
+        "success_check": lambda result: isinstance(result, dict) and result.get("success") == True,
+        "entity_id_extractor": lambda tool_call, result, user_id: tool_call.get("args", {}).get("organisation_slug", "unknown"),
+        "description": "Organisation deleted by agent"
+    },
+
     # Future: Opportunity tools
     # "create_opportunity": {...},
     # "update_opportunity": {...},

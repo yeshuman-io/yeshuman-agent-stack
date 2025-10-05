@@ -9,7 +9,10 @@ import { ThinkingPanel, VoicePanel, ToolsPanel, SystemPanel } from './components
 import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { AppSidebar } from './components/app-sidebar'
 import { Profile } from './components/profile'
-import { FocusDashboard } from './components/focus-dashboard'
+import { CandidateRoutes } from './components/routes/candidate-routes'
+import { EmployerRoutes } from './components/routes/employer-routes'
+import { RecruiterRoutes } from './components/routes/recruiter-routes'
+import { AdministratorRoutes } from './components/routes/administrator-routes'
 import { useSSE } from './hooks/use-sse'
 import { useAuth } from './hooks/use-auth'
 import { useQueryClient } from '@tanstack/react-query'
@@ -285,13 +288,46 @@ function AppContent() {
             {/* Content Area: ~5/8 width (flex-1 makes it take remaining space) */}
             <div className="flex-1 border-r bg-background">
               <Routes>
+                {/* Universal routes - accessible from any focus */}
                 <Route path="/profile" element={<Profile />} />
+
+                {/* Focus-specific nested routes */}
+                <Route path="/candidate/*" element={
+                  userFocus && userFocus.available_foci.includes('candidate') ? (
+                    <CandidateRoutes onStartConversation={handleStartConversation} />
+                  ) : (
+                    <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
+                  )
+                } />
+
+                <Route path="/employer/*" element={
+                  userFocus && userFocus.available_foci.includes('employer') ? (
+                    <EmployerRoutes onStartConversation={handleStartConversation} />
+                  ) : (
+                    <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
+                  )
+                } />
+
+                <Route path="/recruiter/*" element={
+                  userFocus && userFocus.available_foci.includes('recruiter') ? (
+                    <RecruiterRoutes onStartConversation={handleStartConversation} />
+                  ) : (
+                    <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
+                  )
+                } />
+
+                <Route path="/administrator/*" element={
+                  userFocus && userFocus.available_foci.includes('administrator') ? (
+                    <AdministratorRoutes onStartConversation={handleStartConversation} />
+                  ) : (
+                    <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
+                  )
+                } />
+
+                {/* Root redirect to current focus */}
                 <Route path="/" element={
                   userFocus ? (
-                    <FocusDashboard
-                      focus={userFocus.current_focus}
-                      onStartConversation={handleStartConversation}
-                    />
+                    <Navigate to={`/${userFocus.current_focus}`} replace />
                   ) : (
                     <div className="h-full flex items-center justify-center">
                       <div className="text-center text-muted-foreground">
@@ -301,7 +337,9 @@ function AppContent() {
                     </div>
                   )
                 } />
-                <Route path="*" element={<Navigate to="/" replace />} />
+
+                {/* Catch-all redirect */}
+                <Route path="*" element={<Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />} />
               </Routes>
             </div>
 

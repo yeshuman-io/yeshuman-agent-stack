@@ -15,6 +15,7 @@ import {
   UserCheck,
   Star
 } from 'lucide-react'
+import { OrganisationList } from './organisation-list'
 
 interface FocusDashboardProps {
   focus: string
@@ -152,37 +153,45 @@ function EmployerDashboard({ onStartConversation }: { onStartConversation?: (mes
         </div>
         <div>
           <h1 className="text-2xl font-bold">Employer Dashboard</h1>
-          <p className="text-muted-foreground">Find and hire the best talent for your organization</p>
+          <p className="text-muted-foreground">Manage your organisations and find the best talent</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {quickActions.map((action, index) => (
-          <Card key={index} className="cursor-pointer hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-primary/5 rounded-lg">
-                  <action.icon className="h-4 w-4 text-primary" />
+      {/* Organisation Management */}
+      <OrganisationList onStartConversation={onStartConversation} />
+
+      {/* Quick Actions */}
+      <div>
+        <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {quickActions.map((action, index) => (
+            <Card key={index} className="cursor-pointer hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-primary/5 rounded-lg">
+                    <action.icon className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">{action.title}</CardTitle>
+                    <CardDescription>{action.description}</CardDescription>
+                  </div>
                 </div>
-                <div>
-                  <CardTitle className="text-lg">{action.title}</CardTitle>
-                  <CardDescription>{action.description}</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => handleQuickAction(action.action)}
-              >
-                Get Started
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleQuickAction(action.action)}
+                >
+                  Get Started
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
 
+      {/* Analytics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader>
