@@ -140,6 +140,38 @@ def get_tool_event_config(tool_name: str) -> Optional[Dict[str, Any]]:
     return TOOL_EVENT_MAPPINGS.get(tool_name)
 
 
+def create_thread_ui_event(action: str, thread_id: str, thread_data: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Create a UI event for thread operations (creation, updates, title generation).
+
+    Args:
+        action: The action performed ("created", "updated", "title_updated")
+        thread_id: The thread ID
+        thread_data: Optional additional thread data
+
+    Returns:
+        UI event dict ready for writer
+    """
+    event_data = {
+        "type": "ui",
+        "entity": "thread",
+        "entity_id": thread_id,
+        "action": action,
+        "description": f"Thread {action}"
+    }
+
+    # Add thread-specific data
+    if thread_data:
+        if action == "created" and "subject" in thread_data:
+            event_data["subject"] = thread_data["subject"]
+        elif action == "updated" and "message_count" in thread_data:
+            event_data["message_count"] = thread_data["message_count"]
+        elif action == "title_updated" and "subject" in thread_data:
+            event_data["subject"] = thread_data["subject"]
+
+    return event_data
+
+
 def create_ui_event(tool_name: str, tool_call: Dict[str, Any], result: Any, user_id: str) -> Dict[str, Any]:
     """
     Create a UI event for a successful tool execution.

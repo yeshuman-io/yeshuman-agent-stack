@@ -122,49 +122,8 @@ function AppContent() {
     }
   }, [token]);
 
-  // Thread event callbacks for TanStack Query invalidation
+  // Thread event callbacks - now simplified since most thread events come as UI deltas
   const threadCallbacks = {
-    onThreadCreated: (data: any) => {
-      console.log('🔄 [THREAD DELTA] Thread created:', {
-        threadId: data.thread_id,
-        subject: data.subject,
-        userId: data.user_id,
-        currentThreadId: currentThreadId
-      });
-
-      // Update our state when a new thread is created by the backend
-      if (data.thread_id && (!currentThreadId || currentThreadId !== data.thread_id.toString())) {
-        console.log('🔄 [THREAD DELTA] Updating frontend state with new thread:', data.thread_id);
-        setCurrentThreadId(data.thread_id.toString());
-
-        // Update URL to reflect the new thread
-        const newSearchParams = new URLSearchParams(searchParams);
-        newSearchParams.set('thread', data.thread_id.toString());
-        setSearchParams(newSearchParams);
-      }
-
-      console.log('🔄 [THREAD DELTA] Invalidating threads query for sidebar refresh');
-      queryClient.invalidateQueries({ queryKey: ['threads'] });
-    },
-    onThreadUpdated: (data: any) => {
-      console.log('🔄 [THREAD DELTA] Thread updated:', {
-        thread_id: data.thread_id,
-        message_count: data.message_count,
-        updated_at: data.updated_at
-      });
-      console.log('🔄 [THREAD DELTA] Invalidating threads query for sidebar refresh');
-      queryClient.invalidateQueries({ queryKey: ['threads'] });
-    },
-    onMessageSaved: (data: any) => {
-      console.log('🔄 [THREAD DELTA] Message saved:', {
-        thread_id: data.thread_id,
-        message_id: data.message_id,
-        message_type: data.message_type,
-        content_preview: data.content?.substring(0, 50) + (data.content?.length > 50 ? '...' : '')
-      });
-      console.log('🔄 [THREAD DELTA] Invalidating thread messages cache');
-      queryClient.invalidateQueries({ queryKey: ['thread', data.thread_id] });
-    },
     onUIEvent: (data: any) => {
       console.log('🔄 [UI EVENT] Received UI update event:', data);
       if (data.action === 'navigate' && data.target) {
@@ -178,6 +137,15 @@ function AppContent() {
       } else if (data.entity === 'profile' && data.action === 'updated') {
         console.log('🔄 [UI EVENT] Invalidating profile cache for real-time updates');
         queryClient.invalidateQueries({ queryKey: ['profile'] });
+      } else if (data.entity === 'thread' && data.action === 'created') {
+        console.log('🆕 [UI EVENT] Thread created:', data.entity_id);
+        queryClient.invalidateQueries({ queryKey: ['threads'] });
+      } else if (data.entity === 'thread' && data.action === 'updated') {
+        console.log('🔄 [UI EVENT] Thread updated:', data.entity_id);
+        queryClient.invalidateQueries({ queryKey: ['threads'] });
+      } else if (data.entity === 'thread' && data.action === 'title_updated') {
+        console.log('🎯 [UI EVENT] Thread title updated:', data.entity_id, data.subject);
+        queryClient.invalidateQueries({ queryKey: ['threads'] });
       } else {
         console.log(`🔄 [UI EVENT] Unhandled event: ${data.entity}.${data.action}`);
       }
@@ -355,6 +323,7 @@ function AppContent() {
             currentThreadId={currentThreadId}
             onClearCurrentThread={handleClearCurrentThread}
             onFocusChange={handleFocusChange}
+            threadCallbacks={threadCallbacks}
           />
           <SidebarInset className="flex flex-col h-screen">
           {/* Header */}

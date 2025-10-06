@@ -3,8 +3,12 @@ from django.forms.models import model_to_dict
 from asgiref.sync import sync_to_async
 from typing import Optional, Tuple, List
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+import asyncio
+import logging
 
 from .models import Thread, Message, HumanMessage as HumanMessageModel, AssistantMessage
+
+logger = logging.getLogger(__name__)
 
 
 async def get_thread(thread_id: str) -> Optional[Thread]:
@@ -290,3 +294,166 @@ async def cleanup_old_anonymous_threads(days_old: int = 30) -> int:
     )()
 
     return deleted_count[0] if isinstance(deleted_count, tuple) else deleted_count
+
+
+async def should_generate_thread_title(thread_id: str) -> bool:
+    """
+    Determine if a thread has enough messages to warrant LLM-based title generation.
+
+    Args:
+        thread_id: The thread ID to check
+
+    Returns:
+        True if thread should get LLM-generated title
+    """
+    try:
+        thread = await get_thread(thread_id)
+        if not thread:
+            return False
+
+        # Don't rename if already has a custom title
+        if thread.subject and not thread.subject.startswith(('Conversation', 'Anonymous', 'Untitled')):
+            return False
+
+        # Count messages
+        message_count = await sync_to_async(Message.objects.filter(thread=thread).count)()
+
+        # Need at least 3 messages for meaningful context
+        return message_count >= 3
+
+    except Exception as e:
+        logger.warning(f"Error checking thread title generation eligibility: {e}")
+        return False
+
+
+async def generate_thread_title_with_llm(thread_id: str) -> Optional[str]:
+    """
+    Generate a 2-5 word thread title using LLM analysis of conversation content.
+
+    Args:
+        thread_id: The thread ID to generate title for
+
+    Returns:
+        Generated title string or None if generation fails
+    """
+    try:
+        from langchain_openai import ChatOpenAI
+        from django.conf import settings
+
+        # Get recent messages for context (last 6 messages should be sufficient)
+        messages = await sync_to_async(list)(
+            Message.objects.filter(thread_id=thread_id).order_by('-created_at')[:6]
+        )
+        messages.reverse()  # Put in chronological order
+
+        if len(messages) < 3:
+            return None
+
+        # Format conversation for LLM
+        conversation_parts = []
+        for msg in messages:
+            msg_type = "Human" if isinstance(msg, HumanMessageModel) else "Assistant"
+            conversation_parts.append(f"{msg_type}: {msg.text[:200]}")  # Truncate long messages
+
+        conversation_text = "\n".join(conversation_parts)
+
+        # Create LLM prompt
+        prompt = f"""Analyze this conversation and create a concise title (2-5 words) that captures the main topic or purpose.
+
+Guidelines:
+- Focus on the core question, problem, or topic
+- Use specific, descriptive language
+- Keep it very brief (2-5 words maximum)
+- Avoid generic titles like "General Discussion" or "Help Request"
+
+Conversation:
+{conversation_text}
+
+Title:"""
+
+        # Call OpenAI
+        llm = ChatOpenAI(
+            model="gpt-4o",
+            api_key=settings.OPENAI_API_KEY,
+            temperature=0.3,
+            max_tokens=20  # Very short response needed
+        )
+
+        response = await llm.ainvoke(prompt)
+        title = response.content.strip()
+
+        # Validate and clean up
+        words = title.split()
+        if 2 <= len(words) <= 5:
+            # Capitalize first letter of each word
+            cleaned_title = " ".join(word.capitalize() for word in words)
+            return cleaned_title
+
+        logger.warning(f"LLM generated invalid title length: '{title}' ({len(words)} words)")
+        return None
+
+    except Exception as e:
+        logger.error(f"Error generating thread title with LLM: {e}")
+        return None
+
+
+async def update_thread_title(thread_id: str, title: str) -> bool:
+    """
+    Update a thread's title and emit UI delta.
+
+    Args:
+        thread_id: Thread to update
+        title: New title
+
+    Returns:
+        True if successful
+    """
+    try:
+        thread = await get_thread(thread_id)
+        if not thread:
+            return False
+
+        thread.subject = title
+        await sync_to_async(thread.save)()
+
+        logger.info(f"✅ [THREAD TITLE] Updated thread {thread_id} title to: '{title}'")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error updating thread title: {e}")
+        return False
+
+
+async def handle_thread_title_generation(thread_id: str):
+    """
+    Handle the complete thread title generation process including UI deltas.
+
+    Args:
+        thread_id: Thread to process
+    """
+    try:
+        # Check if we should generate a title
+        if not await should_generate_thread_title(thread_id):
+            return
+
+        logger.info(f"🎯 [THREAD TITLE] Starting LLM title generation for thread {thread_id}")
+
+        # Emit "generating" delta for UI feedback
+        # This will be yielded from the streaming endpoint that calls this
+        # For now, we'll handle this in the calling code
+
+        # Generate title
+        title = await generate_thread_title_with_llm(thread_id)
+
+        if title:
+            # Update thread title
+            success = await update_thread_title(thread_id, title)
+            if success:
+                logger.info(f"✅ [THREAD TITLE] Successfully generated and saved title: '{title}'")
+            else:
+                logger.warning(f"❌ [THREAD TITLE] Failed to save generated title: '{title}'")
+        else:
+            logger.warning(f"❌ [THREAD TITLE] LLM failed to generate valid title for thread {thread_id}")
+
+    except Exception as e:
+        logger.error(f"Error in thread title generation process: {e}")

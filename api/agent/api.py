@@ -18,6 +18,36 @@ logger = logging.getLogger(__name__)
 
 agent_api = NinjaAPI(urls_namespace="agent")
 
+# Import thread services
+from apps.threads.services import handle_thread_title_generation, generate_thread_title_with_llm, update_thread_title
+
+
+async def generate_and_update_thread_title(thread_id: str):
+    """
+    Async function to generate and update thread title.
+    This runs in the background and doesn't emit deltas since the stream has already ended.
+    """
+    try:
+        logger.info(f"🤖 [THREAD TITLE] Starting LLM title generation for thread {thread_id}")
+
+        # Generate title
+        title = await generate_thread_title_with_llm(thread_id)
+
+        if title:
+            # Update thread title
+            success = await update_thread_title(thread_id, title)
+            if success:
+                logger.info(f"✅ [THREAD TITLE] Successfully generated and saved title: '{title}' for thread {thread_id}")
+                # Note: UI will need to poll or use websockets to get title updates
+                # since this happens after the stream ends
+            else:
+                logger.warning(f"❌ [THREAD TITLE] Failed to save generated title: '{title}' for thread {thread_id}")
+        else:
+            logger.warning(f"❌ [THREAD TITLE] LLM failed to generate valid title for thread {thread_id}")
+
+    except Exception as e:
+        logger.error(f"Error in async thread title generation: {e}")
+
 
 class AgentRequest(BaseModel):
     """Request model for agent interactions."""
@@ -187,7 +217,7 @@ async def stream(request):
                         logger.info(f"🆕 [THREAD CREATION] Creating new session thread for message: '{message[:50]}...'")
                         current_thread = await get_or_create_session_thread(
                             session_id=session_id or "anonymous",
-                            subject=f"Anonymous conversation - {message[:50]}..."
+                            subject=f"{message[:50]}..."
                         )
                         logger.info(f"🆕 [THREAD CREATION] Created session thread {current_thread.id}")
                         thread_messages = None  # No previous messages for new thread
@@ -208,7 +238,7 @@ async def stream(request):
                     from apps.threads.services import get_or_create_thread
                     current_thread = await get_or_create_thread(
                         user_id=str(user.id) if user else None,
-                        subject=f"Conversation - {message[:50]}..."
+                        subject=f"{message[:50]}..."
                     )
                     logger.info(f"🆕 [THREAD CREATION] Created user thread {current_thread.id} for user {user.username if user else 'unknown'}")
                     thread_messages = None  # No previous messages for new thread
@@ -289,17 +319,7 @@ async def stream(request):
         async def stream_generator():
             accumulated_response = []
 
-            # Emit thread created event if this is a new thread
-            if current_thread and hasattr(current_thread, '_was_created') and current_thread._was_created:
-                logger.info(f"🔄 [DJANGO THREAD DELTA] Emitting thread_created: thread_id={current_thread.id}, subject='{current_thread.subject}', user_id={current_thread.user_id}, is_anonymous={current_thread.is_anonymous}")
-                yield {
-                    "type": "thread_created",
-                    "thread_id": str(current_thread.id),
-                    "subject": current_thread.subject,
-                    "user_id": current_thread.user_id,
-                    "is_anonymous": current_thread.is_anonymous,
-                    "created_at": current_thread.created_at.isoformat()
-                }
+            # Thread events are now emitted by graph nodes as UI deltas
 
             # Emit human message saved event (message was saved during request processing)
             if current_thread:
@@ -323,6 +343,36 @@ async def stream(request):
 
             final_thread_id = str(current_thread.id) if current_thread else thread_id
             logger.info(f"🎬 [STREAM LIFECYCLE] Calling astream_agent_tokens with thread_id: {final_thread_id}")
+
+            # Handle thread creation asynchronously (emit UI event)
+            if final_thread_id and current_thread and hasattr(current_thread, '_was_created') and current_thread._was_created:
+                async def _emit_thread_creation():
+                    try:
+                        from agent.mapper import create_thread_ui_event
+                        # Create a mock writer that yields UI events as SSE
+                        async def thread_writer(event):
+                            ui_event = {
+                                "type": "ui",
+                                "entity": "thread",
+                                "entity_id": final_thread_id,
+                                "action": "created",
+                                "subject": current_thread.subject or "New Conversation"
+                            }
+                            yield ui_event
+
+                        # Emit thread creation event through the stream
+                        async for event in thread_writer(None):
+                            yield event
+                            break  # Only emit once
+
+                        logger.info(f"🆕 [THREAD CREATION] Emitted thread creation event for {final_thread_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to emit thread creation event: {e}")
+
+                # Run thread creation emission
+                async for event in _emit_thread_creation():
+                    yield event
+
             async for chunk in astream_agent_tokens(message, None, user=user, focus=user_focus, thread_id=final_thread_id):
                 # Accumulate message content for thread saving
                 if chunk.get("type") == "content_block_delta":
@@ -355,16 +405,9 @@ async def stream(request):
                         "content": full_response[:200] + "..." if len(full_response) > 200 else full_response
                     }
 
-                    # Emit thread updated event
-                    from apps.threads.models import Message
-                    message_count = await Message.objects.filter(thread=current_thread).acount()
-                    logger.info(f"🔄 [DJANGO THREAD DELTA] Emitting thread_updated: thread_id={current_thread.id}, message_count={message_count}")
-                    yield {
-                        "type": "thread_updated",
-                        "thread_id": str(current_thread.id),
-                        "message_count": message_count,
-                        "updated_at": current_thread.updated_at.isoformat()
-                    }
+                    # Thread update events are now emitted by graph nodes as UI deltas
+
+                    # Thread title generation is now handled by graph nodes as UI deltas
 
                 except Exception as e:
                     logger.warning(f"Failed to save response to thread: {str(e)}")
