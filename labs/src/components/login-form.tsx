@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { Bot, Plane, Leaf, Heart } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -7,22 +6,6 @@ import { Label } from "@/components/ui/label"
 import { AnimatedLoginButton } from "@/components/animated-login-button"
 import { useAuth } from "@/hooks/use-auth"
 import { CURRENT_CLIENT } from "@/constants"
-
-// Helper function to get the appropriate icon component
-const getBrandIcon = (iconName: string) => {
-  switch (iconName) {
-    case 'Bot':
-      return Bot;
-    case 'Plane':
-      return Plane;
-    case 'Leaf':
-      return Leaf;
-    case 'Heart':
-      return Heart;
-    default:
-      return Bot; // fallback to Bot
-  }
-};
 
 interface LoginFormProps extends React.ComponentPropsWithoutRef<"div"> {
   onSuccess?: () => void;
@@ -56,17 +39,6 @@ export function LoginForm({ className, onSuccess, ...props }: LoginFormProps) {
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <form onSubmit={handleSubmit}>
         <div className="flex flex-col gap-6">
-          <div className="flex flex-col items-center gap-2">
-            <div className="flex flex-col items-center gap-2 font-medium">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md">
-                {(() => {
-                  const IconComponent = getBrandIcon(CURRENT_CLIENT.brandIcon || 'Bot');
-                  return <IconComponent className="size-6" />;
-                })()}
-              </div>
-            </div>
-            <h1 className="text-xl font-bold">{CURRENT_CLIENT.welcomeMessage}</h1>
-          </div>
           <div className="flex flex-col gap-6">
             {error && (
               <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md dark:bg-red-900/20 dark:text-red-400 dark:border-red-800">

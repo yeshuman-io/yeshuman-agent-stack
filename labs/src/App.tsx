@@ -9,6 +9,7 @@ import { ThinkingPanel, VoicePanel, ToolsPanel, SystemPanel } from './components
 import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { AppSidebar } from './components/app-sidebar'
 import { Profile } from './components/profile'
+import { LoginPage } from './components/login-page'
 import { CandidateRoutes } from './components/routes/candidate-routes'
 import { EmployerRoutes } from './components/routes/employer-routes'
 import { RecruiterRoutes } from './components/routes/recruiter-routes'
@@ -28,8 +29,8 @@ function AppContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  // Get auth token
-  const { token } = useAuth();
+  // Get auth state
+  const { isAuthenticated, token } = useAuth();
   // Get query client for invalidation
   const queryClient = useQueryClient();
 
@@ -334,6 +335,18 @@ function AppContent() {
     setSearchParams({});
   }, [setSearchParams]);
 
+  // If not authenticated, only show login page
+  if (!isAuthenticated) {
+    return (
+      <ThemeProvider defaultTheme="dark" storageKey="yeshuman-v2-theme">
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider defaultTheme="dark" storageKey="yeshuman-v2-theme">
       <SidebarProvider defaultOpen={false}>
@@ -381,60 +394,54 @@ function AppContent() {
 
             {/* Content Area: ~5/8 width (flex-1 makes it take remaining space) */}
             <div className="flex-1 border-r bg-background">
-              <Routes>
-                {/* Universal routes - accessible from any focus */}
-                <Route path="/profile" element={<Profile />} />
+            <Routes>
+              <Route path="/profile" element={<Profile />} />
 
-                {/* Focus-specific nested routes */}
-                <Route path="/candidate/*" element={
-                  userFocus && userFocus.available_foci.includes('candidate') ? (
-                    <CandidateRoutes onStartConversation={handleStartConversation} />
-                  ) : (
-                    <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
-                  )
-                } />
+              {/* Focus-specific nested routes */}
+              <Route path="/candidate/*" element={
+                userFocus && userFocus.available_foci.includes('candidate') ? (
+                  <CandidateRoutes onStartConversation={handleStartConversation} />
+                ) : (
+                  <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
+                )
+              } />
 
-                <Route path="/employer/*" element={
-                  userFocus && userFocus.available_foci.includes('employer') ? (
-                    <EmployerRoutes onStartConversation={handleStartConversation} />
-                  ) : (
-                    <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
-                  )
-                } />
+              <Route path="/employer/*" element={
+                userFocus && userFocus.available_foci.includes('employer') ? (
+                  <EmployerRoutes onStartConversation={handleStartConversation} />
+                ) : (
+                  <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
+                )
+              } />
 
-                <Route path="/recruiter/*" element={
-                  userFocus && userFocus.available_foci.includes('recruiter') ? (
-                    <RecruiterRoutes onStartConversation={handleStartConversation} />
-                  ) : (
-                    <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
-                  )
-                } />
+              <Route path="/recruiter/*" element={
+                userFocus && userFocus.available_foci.includes('recruiter') ? (
+                  <RecruiterRoutes onStartConversation={handleStartConversation} />
+                ) : (
+                  <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
+                )
+              } />
 
-                <Route path="/administrator/*" element={
-                  userFocus && userFocus.available_foci.includes('administrator') ? (
-                    <AdministratorRoutes onStartConversation={handleStartConversation} />
-                  ) : (
-                    <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
-                  )
-                } />
+              <Route path="/administrator/*" element={
+                userFocus && userFocus.available_foci.includes('administrator') ? (
+                  <AdministratorRoutes onStartConversation={handleStartConversation} />
+                ) : (
+                  <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
+                )
+              } />
 
-                {/* Root redirect to current focus */}
-                <Route path="/" element={
-                  userFocus ? (
-                    <Navigate to={`/${userFocus.current_focus}`} replace />
-                  ) : (
-                    <div className="h-full flex items-center justify-center">
-                      <div className="text-center text-muted-foreground">
-                        <p className="text-lg font-medium mb-2">Welcome to YesHuman</p>
-                        <p className="text-sm">Loading your personalized dashboard...</p>
-                      </div>
-                    </div>
-                  )
-                } />
+              {/* Root redirect to current focus */}
+              <Route path="/" element={
+                userFocus ? (
+                  <Navigate to={`/${userFocus.current_focus}`} replace />
+                ) : (
+                  <Navigate to="/candidate" replace />
+                )
+              } />
 
-                {/* Catch-all redirect */}
-                <Route path="*" element={<Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />} />
-              </Routes>
+              {/* Catch-all redirect */}
+              <Route path="*" element={<Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />} />
+            </Routes>
             </div>
 
             {/* Panels: 1/8 width, single column with equal height distribution */}

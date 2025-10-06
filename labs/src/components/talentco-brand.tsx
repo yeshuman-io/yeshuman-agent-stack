@@ -2,7 +2,7 @@ import { CURRENT_CLIENT } from "@/constants";
 
 interface TalentCoBrandProps {
   className?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
 }
 
 export const TalentCoBrand = ({ className = "", size = 'md' }: TalentCoBrandProps) => {
@@ -19,6 +19,18 @@ export const TalentCoBrand = ({ className = "", size = 'md' }: TalentCoBrandProp
       lg: {
         letter: "w-7 h-7 text-lg font-semibold",
         co: "font-semibold text-lg"
+      },
+      xl: {
+        letter: "w-8 h-8 text-xl font-semibold",
+        co: "font-semibold text-xl"
+      },
+      '2xl': {
+        letter: "w-10 h-10 text-2xl font-semibold",
+        co: "font-semibold text-2xl"
+      },
+      '3xl': {
+        letter: "w-12 h-12 text-3xl font-semibold",
+        co: "font-semibold text-3xl"
       }
     };
 
@@ -44,7 +56,10 @@ export const TalentCoBrand = ({ className = "", size = 'md' }: TalentCoBrandProp
   const sizeClasses = {
     sm: "font-semibold text-sm",
     md: "font-semibold text-base",
-    lg: "font-semibold text-lg"
+    lg: "font-semibold text-lg",
+    xl: "font-semibold text-xl",
+    '2xl': "font-semibold text-2xl",
+    '3xl': "font-semibold text-3xl"
   };
 
   return (
@@ -60,7 +75,10 @@ export const MatrixTalentCoBrand = ({ text, className = "", size = 'md' }: Talen
     const sizeClasses = {
       sm: "font-semibold text-sm",
       md: "font-semibold text-base",
-      lg: "font-semibold text-lg"
+      lg: "font-semibold text-lg",
+      xl: "font-semibold text-xl",
+      '2xl': "font-semibold text-2xl",
+      '3xl': "font-semibold text-3xl"
     };
 
     return (
@@ -85,6 +103,21 @@ export const MatrixTalentCoBrand = ({ text, className = "", size = 'md' }: Talen
       letter: "w-7 h-7 text-lg font-semibold",
       co: "font-semibold text-lg",
       normal: "font-semibold text-lg"
+    },
+    xl: {
+      letter: "w-8 h-8 text-xl font-semibold",
+      co: "font-semibold text-xl",
+      normal: "font-semibold text-xl"
+    },
+    '2xl': {
+      letter: "w-10 h-10 text-2xl font-semibold",
+      co: "font-semibold text-2xl",
+      normal: "font-semibold text-2xl"
+    },
+    '3xl': {
+      letter: "w-12 h-12 text-3xl font-semibold",
+      co: "font-semibold text-3xl",
+      normal: "font-semibold text-3xl"
     }
   };
 
