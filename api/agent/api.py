@@ -97,6 +97,7 @@ async def stream(request):
         message = request.GET.get('message')
         user_state = request.GET.get('user_state', 'new_user')
         thread_id = request.GET.get('thread_id')
+        user = None  # No user authentication for GET requests
 
         logger.info(f"💬 [MESSAGE LIFECYCLE] Received message via GET: length={len(message or '')}, thread_id={thread_id}, user_id={user.id if user else None}, user_state={user_state}")
 
@@ -200,6 +201,28 @@ async def stream(request):
                     logger.warning(f"Failed to create session thread: {str(e)}")
                     thread_messages = None
 
+            else:
+                # Authenticated user without thread_id - create new user-owned thread
+                logger.info(f"🆕 [THREAD CREATION] Creating new user thread for authenticated user: {user.username if user else 'unknown'}")
+                try:
+                    from apps.threads.services import get_or_create_thread
+                    current_thread = await get_or_create_thread(
+                        user_id=str(user.id) if user else None,
+                        subject=f"Conversation - {message[:50]}..."
+                    )
+                    logger.info(f"🆕 [THREAD CREATION] Created user thread {current_thread.id} for user {user.username if user else 'unknown'}")
+                    thread_messages = None  # No previous messages for new thread
+                    # Add the initial message
+                    logger.info(f"💾 [MESSAGE SAVE] Saving initial human message to new user thread {current_thread.id}")
+                    from apps.threads.services import create_human_message
+                    human_message = await create_human_message(str(current_thread.id), message)
+                    logger.info(f"💾 [MESSAGE SAVE] Successfully saved initial human message {human_message.id}")
+
+                except Exception as e:
+                    logger.warning(f"Failed to create user thread: {str(e)}")
+                    thread_messages = None
+
+
         # Determine user focus for tool selection
         user_focus = None
         if user and not user.is_anonymous:
@@ -298,8 +321,9 @@ async def stream(request):
                 except Exception as e:
                     logger.warning(f"Failed to emit human message delta: {str(e)}")
 
-            logger.info("🎬 [STREAM LIFECYCLE] Calling astream_agent_tokens...")
-            async for chunk in astream_agent_tokens(message, thread_messages, user=user, focus=user_focus):
+            final_thread_id = str(current_thread.id) if current_thread else thread_id
+            logger.info(f"🎬 [STREAM LIFECYCLE] Calling astream_agent_tokens with thread_id: {final_thread_id}")
+            async for chunk in astream_agent_tokens(message, None, user=user, focus=user_focus, thread_id=final_thread_id):
                 # Accumulate message content for thread saving
                 if chunk.get("type") == "content_block_delta":
                     delta = chunk.get("delta", {})

@@ -27,6 +27,7 @@ interface UserFocus {
 function AppContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+
   // Get auth token
   const { token } = useAuth();
   // Get query client for invalidation
@@ -52,11 +53,15 @@ function AppContent() {
     try {
       console.log('📂 [THREAD NAVIGATION] Loading thread messages:', {
         threadId,
-        tokenPresent: !!token
+        tokenPresent: !!token,
+        tokenPreview: token ? `${token.substring(0, 20)}...` : 'NO TOKEN'
       });
       setMessages([]); // Clear current messages
 
-      const response = await fetch(`/api/threads/${threadId}/messages`, {
+      const apiUrl = `/api/threads/${threadId}/messages`;
+      console.log('📂 [THREAD NAVIGATION] Making request to:', apiUrl);
+
+      const response = await fetch(apiUrl, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -64,29 +69,47 @@ function AppContent() {
         },
       });
 
+      console.log('📂 [THREAD NAVIGATION] Response received:', {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+
       if (response.ok) {
         const threadMessages = await response.json();
+        console.log('📂 [THREAD NAVIGATION] Raw API response:', threadMessages);
         console.log('📂 [THREAD NAVIGATION] Loaded thread messages successfully:', {
           threadId,
           messageCount: threadMessages.length,
-          messageTypes: threadMessages.map((msg: any) => msg.message_type)
+          messages: threadMessages
         });
 
         // Convert API messages to ChatMessage format
-        const chatMessages = threadMessages.map((msg: any) => ({
-          id: msg.id || `msg-${Date.now()}`,
-          content: msg.text || msg.content || '',
-          isUser: msg.message_type === 'human' || msg.role === 'user'
-        }));
+        const chatMessages = threadMessages.map((msg: any, index: number) => {
+          console.log(`📂 [THREAD NAVIGATION] Converting message ${index}:`, msg);
+          const converted = {
+            id: msg.id || `msg-${Date.now()}-${index}`,
+            content: msg.text || msg.content || '',
+            isUser: msg.message_type === 'human' || msg.role === 'user'
+          };
+          console.log(`📂 [THREAD NAVIGATION] Converted to:`, converted);
+          return converted;
+        });
 
+        console.log('📂 [THREAD NAVIGATION] Final chat messages:', chatMessages);
         setMessages(chatMessages);
+        return true; // Success
       } else {
+        const errorText = await response.text();
         console.error('📂 [THREAD NAVIGATION] Failed to load thread messages:', {
           threadId,
           status: response.status,
-          statusText: response.statusText
+          statusText: response.statusText,
+          errorBody: errorText
         });
         setMessages([]);
+        return false; // Failed to load
       }
     } catch (error) {
       console.error('📂 [THREAD NAVIGATION] Error loading thread messages:', {
@@ -94,6 +117,7 @@ function AppContent() {
         error: error instanceof Error ? error.message : String(error)
       });
       setMessages([]);
+      return false; // Failed to load
     }
   }, [token]);
 
@@ -101,19 +125,25 @@ function AppContent() {
   const threadCallbacks = {
     onThreadCreated: (data: any) => {
       console.log('🔄 [THREAD DELTA] Thread created:', {
-        thread_id: data.thread_id,
+        threadId: data.thread_id,
         subject: data.subject,
-        user_id: data.user_id,
-        is_anonymous: data.is_anonymous,
-        created_at: data.created_at
+        userId: data.user_id,
+        currentThreadId: currentThreadId
       });
+
+      // Update our state when a new thread is created by the backend
+      if (data.thread_id && (!currentThreadId || currentThreadId !== data.thread_id.toString())) {
+        console.log('🔄 [THREAD DELTA] Updating frontend state with new thread:', data.thread_id);
+        setCurrentThreadId(data.thread_id.toString());
+
+        // Update URL to reflect the new thread
+        const newSearchParams = new URLSearchParams(searchParams);
+        newSearchParams.set('thread', data.thread_id.toString());
+        setSearchParams(newSearchParams);
+      }
+
       console.log('🔄 [THREAD DELTA] Invalidating threads query for sidebar refresh');
       queryClient.invalidateQueries({ queryKey: ['threads'] });
-      // Update URL if it's a new thread and we don't have one
-      if (!currentThreadId) {
-        console.log('🔄 [THREAD DELTA] Setting URL to new thread:', data.thread_id);
-        setSearchParams({ thread: data.thread_id });
-      }
     },
     onThreadUpdated: (data: any) => {
       console.log('🔄 [THREAD DELTA] Thread updated:', {
@@ -169,35 +199,63 @@ function AppContent() {
     if (animationTriggerRef.current) {
       animationTriggerRef.current();
     }
-  }, token, true, threadCallbacks); // Auto-connect with thread event callbacks
+  }, token, true, threadCallbacks, currentThreadId); // Auto-connect with thread event callbacks and current thread
 
   // Sync URL params with thread state
   useEffect(() => {
     const urlThreadId = searchParams.get('thread');
-    console.log('🔗 [URL SYNC] Checking URL thread sync:', {
+    console.log('🔗 [URL SYNC] useEffect triggered - Checking URL thread sync:', {
       urlThreadId,
       currentThreadId,
-      needsSync: urlThreadId !== currentThreadId
+      urlHasThread: !!urlThreadId,
+      currentThreadExists: !!currentThreadId,
+      useEffectTriggered: true,
+      timestamp: Date.now(),
+      searchParamsString: searchParams.toString(),
+      allSearchParams: Object.fromEntries(searchParams.entries())
     });
 
-    if (urlThreadId !== currentThreadId) {
+    const handleUrlThreadSync = async () => {
       if (urlThreadId) {
-        console.log('🔗 [URL SYNC] Setting current thread from URL:', {
-          newThreadId: urlThreadId,
-          previousThreadId: currentThreadId
+        // Always try to load thread messages when there's a thread ID in the URL
+        // This handles both new URLs and page refreshes
+        console.log('🔗 [URL SYNC] Thread ID found in URL - attempting to load:', {
+          urlThreadId,
+          currentThreadId,
+          isPageRefresh: urlThreadId === currentThreadId
         });
-        setCurrentThreadId(urlThreadId);
-        // Load thread messages when URL changes
-        loadThreadMessages(urlThreadId);
+
+        if (urlThreadId !== currentThreadId) {
+          // URL changed - update our state first
+          console.log('🔗 [URL SYNC] URL thread changed - updating state');
+          setCurrentThreadId(urlThreadId);
+        }
+
+        // Always try to load messages for the thread in the URL
+        console.log('🔗 [URL SYNC] About to call loadThreadMessages with:', urlThreadId);
+        const loadSuccess = await loadThreadMessages(urlThreadId);
+
+        if (!loadSuccess) {
+          console.log('🔗 [URL SYNC] Failed to load thread from URL - clearing invalid thread ID');
+          // Clear the invalid thread ID from URL
+          const newSearchParams = new URLSearchParams(searchParams);
+          newSearchParams.delete('thread');
+          setSearchParams(newSearchParams);
+          setCurrentThreadId(null);
+          // Start new conversation
+          startNewConversation();
+        }
+      } else if (!currentThreadId) {
+        console.log('🔗 [URL SYNC] No thread in URL and no current thread - starting new conversation');
+        console.log('🚨 [THREAD DEBUG] Calling startNewConversation()');
+        startNewConversation();
       } else {
-        console.log('🔗 [URL SYNC] Clearing thread (new conversation):', {
-          previousThreadId: currentThreadId
-        });
-        setCurrentThreadId(null);
-        setMessages([]); // Clear messages for new conversation
+        console.log('🔗 [URL SYNC] No thread in URL but we have a current thread - keeping current state');
       }
-    }
-  }, [searchParams, loadThreadMessages]);
+    };
+
+    handleUrlThreadSync();
+  }, [searchParams, loadThreadMessages, startNewConversation, setSearchParams]);
 
   // Handle focus changes from sidebar
   const handleFocusChange = useCallback((focusData: UserFocus | null) => {
@@ -207,16 +265,43 @@ function AppContent() {
 
   // Handle input submission
   const handleSubmit = useCallback(() => {
+    console.log('🚨 [HANDLE SUBMIT] handleSubmit called with inputText:', inputText);
     if (inputText.trim()) {
       console.log('💬 [MESSAGE LIFECYCLE] Sending message:', {
         message: inputText.substring(0, 100) + (inputText.length > 100 ? '...' : ''),
         currentThreadId: currentThreadId,
-        hasExistingThread: !!currentThreadId
+        hasExistingThread: !!currentThreadId,
+        willLetBackendCreateThread: !currentThreadId
       });
-      sendMessage(inputText);
+
+      // Let the backend create thread IDs - don't generate them in frontend
+      // Pass null/undefined for new threads, existing thread_id for continuation
+      console.log('🚨 [THREAD DEBUG] About to call sendMessage with:', {
+        message: inputText.substring(0, 20),
+        threadId: currentThreadId,  // null for new threads, existing ID for continuation
+        threadIdType: typeof currentThreadId,
+        threadIdTruthy: !!currentThreadId
+      });
+      sendMessage(inputText, currentThreadId || undefined);
       setInputText('');
     }
   }, [inputText, sendMessage, currentThreadId]);
+
+  // Handle starting a new conversation (clears thread state)
+  const handleNewConversation = useCallback(() => {
+    console.log('🆕 [NEW CONVERSATION] Starting new conversation - clearing all thread state');
+
+    // Clear thread state in parent component
+    setCurrentThreadId(null);
+
+    // Clear URL thread parameter
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.delete('thread');
+    setSearchParams(newSearchParams);
+
+    // Clear local state in use-sse hook
+    startNewConversation();
+  }, [searchParams, setSearchParams, startNewConversation]);
 
   // Handle starting conversation from dashboard
   const handleStartConversation = useCallback((message: string) => {
@@ -227,7 +312,7 @@ function AppContent() {
     setInputText(message);
     // Small delay to ensure input is set before submitting
     setTimeout(() => {
-      sendMessage(message);
+      sendMessage(message, currentThreadId || undefined);
       setInputText('');
     }, 100);
   }, [sendMessage]);
@@ -270,7 +355,7 @@ function AppContent() {
             <div className="flex items-center space-x-4">
               <Activity className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
               <button
-                onClick={startNewConversation}
+                onClick={handleNewConversation}
                 className="flex items-center space-x-2 px-3 py-1 bg-muted hover:bg-muted/80 rounded-md text-sm transition-colors"
                 title="Start new conversation"
               >

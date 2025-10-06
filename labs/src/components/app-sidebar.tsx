@@ -551,23 +551,25 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
               ) : (
                 threads.slice(0, 10).map((thread) => (
                   <SidebarMenuItem key={thread.id}>
-                    <SidebarMenuButton
-                      onClick={() => handleThreadClick(thread.id)}
-                      tooltip={thread.subject}
-                      className="cursor-pointer group relative"
-                    >
-                      <MessageSquare className="size-4 flex-shrink-0" />
-                      <span className="break-words whitespace-normal leading-tight pr-6">
-                        {thread.subject || 'Untitled Thread'}
-                      </span>
+                    <div className="group relative">
+                      <SidebarMenuButton
+                        onClick={() => handleThreadClick(thread.id)}
+                        tooltip={thread.subject}
+                        className="cursor-pointer w-full pr-8"
+                      >
+                        <MessageSquare className="size-4 flex-shrink-0" />
+                        <span className="break-words whitespace-normal leading-tight">
+                          {thread.subject || 'Untitled Thread'}
+                        </span>
+                      </SidebarMenuButton>
                       <button
                         onClick={(e) => handleThreadDelete(thread.id, e)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity p-1"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity p-1 z-10"
                         title="Delete thread"
                       >
                         <Trash2 className="size-3" />
                       </button>
-                    </SidebarMenuButton>
+                    </div>
                   </SidebarMenuItem>
                 ))
               )}

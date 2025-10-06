@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.config import get_stream_writer
@@ -22,6 +23,7 @@ from langgraph.prebuilt import ToolNode
 
 from tools.compositions import get_tools_for_context, get_tools_for_user, get_tools_for_focus
 from .mapper import get_tool_event_config, create_ui_event
+from .checkpointer import DjangoCheckpointSaver
 
 # Semantic voice enhancement
 from sentence_transformers import SentenceTransformer
@@ -299,29 +301,9 @@ async def create_agent(client: str = 'talentco', role: str = 'admin', protocol: 
         focus: Current user focus ('candidate', 'employer', 'admin') - overrides group logic
     """
     logger.info(f"🎯 Creating agent with params: client={client}, role={role}, protocol={protocol}, user={user.username if user else None}, focus={focus}")
+    logger.info("🔧 Agent will load tools dynamically based on user/focus context")
 
-    # Get tools based on focus if provided, otherwise fall back to user groups or legacy logic
-    if user and focus:
-        logger.info(f"🎯 Getting tools for focus: user={user.username}, focus={focus}, protocol={protocol}")
-        tools = await get_tools_for_focus(user, focus, protocol)
-        logger.info(f"✅ Retrieved {len(tools)} tools for focus-based selection: {[t.name for t in tools]}")
-    elif user:
-        logger.info(f"👤 Getting tools for user groups: user={user.username}, protocol={protocol}")
-        tools = await get_tools_for_user(user, protocol)
-        logger.info(f"✅ Retrieved {len(tools)} tools for user-based selection: {[t.name for t in tools]}")
-    else:
-        logger.info(f"🏛️ Getting tools for legacy context: client={client}, role={role}, protocol={protocol}")
-        tools = get_tools_for_context(client, role, protocol)
-        logger.info(f"✅ Retrieved {len(tools)} tools for legacy context selection: {[t.name for t in tools]}")
-
-    # Final tool summary
-    tool_names = [tool.name for tool in tools]
-    logger.info(f"🎉 Agent ready with {len(tools)} tools: {tool_names}")
-
-    if not tools:
-        logger.warning("No tools available for this context - agent will not be able to call any tools!")
-
-    async def agent_node(state: AgentState) -> AgentState:
+    async def agent_node(state: AgentState, config: RunnableConfig) -> AgentState:
         """Single LLM call that can both call tools and generate responses."""
         writer = get_stream_writer()
 
@@ -333,7 +315,33 @@ async def create_agent(client: str = 'talentco', role: str = 'admin', protocol: 
             return state
 
         try:
-            logger.info(f"Agent node started - user_id: {state.get('user_id', 'none')}")
+            # Extract user and focus from config for dynamic tool loading
+            configurable = config.get("configurable", {})
+            user = configurable.get("user")
+            focus = configurable.get("focus")
+            protocol = configurable.get("protocol", "graph")
+
+            logger.info(f"Agent node started - user: {user.username if user else 'none'}, focus: {focus}")
+
+            # Dynamically load tools based on user/focus context
+            if user and focus:
+                logger.info(f"🔧 Loading tools for focus: user={user.username}, focus={focus}, protocol={protocol}")
+                tools = await get_tools_for_focus(user, focus, protocol)
+                logger.info(f"✅ Retrieved {len(tools)} tools for focus-based selection: {[t.name for t in tools]}")
+            elif user:
+                logger.info(f"👤 Loading tools for user groups: user={user.username}, protocol={protocol}")
+                tools = await get_tools_for_user(user, protocol)
+                logger.info(f"✅ Retrieved {len(tools)} tools for user-based selection: {[t.name for t in tools]}")
+            else:
+                logger.info(f"🏛️ Loading tools for legacy context: protocol={protocol}")
+                tools = get_tools_for_context('talentco', 'admin', protocol)  # Default fallback
+                logger.info(f"✅ Retrieved {len(tools)} tools for legacy context selection: {[t.name for t in tools]}")
+
+            if not tools:
+                logger.warning("No tools available for this context - agent will not be able to call any tools!")
+            else:
+                tool_names = [tool.name for tool in tools]
+                logger.info(f"🎉 Agent ready with {len(tools)} tools: {tool_names}")
 
             # Check for tool results and emit UI events
             if state.get("messages"):
@@ -580,11 +588,27 @@ Return ONLY the status line, no quotes or explanation."""
 
     workflow = StateGraph(AgentState)
 
-    # Create tool node with logging wrapper
-    base_tool_node = ToolNode(tools)
-    
-    async def tools_node_with_logging(state: AgentState):
+    # Create tool node dynamically (will be created in the tools node function)
+    async def tools_node_with_logging(state: AgentState, config: RunnableConfig):
         logger.info("🛠️ Tools node called")
+
+        # Extract user and focus from config for dynamic tool loading
+        configurable = config.get("configurable", {})
+        user = configurable.get("user")
+        focus = configurable.get("focus")
+        protocol = configurable.get("protocol", "graph")
+
+        # Load tools dynamically (same logic as agent node)
+        if user and focus:
+            tools = await get_tools_for_focus(user, focus, protocol)
+        elif user:
+            tools = await get_tools_for_user(user, protocol)
+        else:
+            tools = get_tools_for_context('talentco', 'admin', protocol)
+
+        # Create ToolNode with the dynamically loaded tools
+        base_tool_node = ToolNode(tools)
+
         writer = state.get("writer")
 
         if state.get('messages'):
@@ -694,7 +718,10 @@ Return ONLY the status line, no quotes or explanation."""
     )
     workflow.add_edge("tools", "agent")  # After tools, back to agent
 
-    return workflow.compile()
+    # Create Django-based checkpointer for persistence (singleton)
+    checkpointer = DjangoCheckpointSaver.get_instance()
+
+    return workflow.compile(checkpointer=checkpointer)
 
 
 # Keep the existing API functions for compatibility
@@ -770,28 +797,22 @@ async def astream_agent(message: str, agent=None, user=None, focus=None):
         yield chunk
 
 
-async def astream_agent_tokens(message: str, messages: Optional[List[BaseMessage]] = None, agent=None, user=None, focus=None):
+async def astream_agent_tokens(message: str, messages: Optional[List[BaseMessage]] = None, agent=None, user=None, focus=None, thread_id: Optional[str] = None):
     """Stream agent tokens - unified writer() approach."""
-    logger.info(f"🚀 astream_agent_tokens called with: message='{message[:50]}...', messages_count={len(messages) if messages else 0}, agent_provided={agent is not None}, user={user.username if user else None}, focus={focus}")
+    logger.info(f"🚀 astream_agent_tokens called with: message='{message[:50]}...', messages_count={len(messages) if messages else 0}, agent_provided={agent is not None}, user={user.username if user else None}, focus={focus}, thread_id={thread_id}")
 
     if agent is None:
         logger.info("🏗️ Creating new agent...")
         agent = await create_agent(user=user, focus=focus)
-        logger.info(f"✅ Agent created (tools verified during creation)")
+        logger.info("✅ Agent created (tools verified during creation)")
     else:
         logger.info("♻️ Using provided agent")
 
-    # Use provided messages or create new message list
-    if messages:
-        logger.info(f"📚 Using {len(messages)} existing messages + new message")
-        for i, msg in enumerate(messages[-3:]):  # Log last 3 messages
-            logger.info(f"  Message {len(messages)-3+i}: {type(msg).__name__} - '{str(msg.content)[:100]}...'")
-        state_messages = messages + [HumanMessage(content=message)]
-    else:
-        logger.info("📝 Starting fresh conversation (no existing messages)")
-        state_messages = [HumanMessage(content=message)]
+    # With checkpointer, we only need the new message - checkpointer loads history
+    logger.info("📝 Creating minimal state with new message (checkpointer handles history)")
+    state_messages = [HumanMessage(content=message)]
 
-    logger.info(f"📤 Final state has {len(state_messages)} messages")
+    logger.info(f"📤 State has 1 new message (checkpointer will load conversation history)")
 
     state = {
         "messages": state_messages,
@@ -799,8 +820,19 @@ async def astream_agent_tokens(message: str, messages: Optional[List[BaseMessage
         "tool_call_count": 0  # Initialize tool call counter
     }
 
+    # Config for checkpointer with thread_id and user/focus for dynamic tool loading
+    config = {
+        "configurable": {
+            "thread_id": thread_id or "default",
+            "user_id": user.id if user else None,
+            "user": user,  # Pass user object for dynamic tool loading
+            "focus": focus,  # Pass focus for dynamic tool loading
+            "protocol": "graph"  # Default protocol
+        }
+    }
+
     # Only use custom stream mode - everything flows through writer()
-    async for chunk in agent.astream(state, stream_mode="custom"):
+    async for chunk in agent.astream(state, config=config, stream_mode="custom"):
         if isinstance(chunk, dict) and "type" in chunk:
             yield chunk
 

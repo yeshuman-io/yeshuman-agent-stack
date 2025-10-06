@@ -183,6 +183,12 @@ class AnthropicSSEGenerator:
                     chunk_type = chunk.get("type", "message")
                     content = chunk.get("content", "")
 
+                    # Handle thread lifecycle events specially - send as direct SSE events
+                    if chunk_type in ["thread_created", "thread_updated", "message_saved"]:
+                        logger.info(f"🔄 SSE sending thread event: {chunk_type}")
+                        yield (await self.format_sse_event(chunk_type, chunk)).encode('utf-8')
+                        continue
+
                     # Log UI chunks for monitoring
                     if chunk_type == "ui":
                         logger.info(f"📦 SSE received UI chunk: keys={list(chunk.keys())}")
@@ -318,6 +324,15 @@ class AnthropicSSEGenerator:
                 
             except Exception as e:
                 logger.error(f"Error processing stream: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                # Log the chunk that caused the error if available
+                try:
+                    logger.error(f"Failing chunk type: {chunk_type if 'chunk_type' in locals() else 'unknown'}")
+                    logger.error(f"Failing chunk: {chunk if 'chunk' in locals() else 'unknown'}")
+                except:
+                    logger.error("Could not log failing chunk details")
                 # Create an error content block
                 error_index = self.get_block_index_for_type("error")
                 

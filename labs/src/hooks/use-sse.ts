@@ -23,14 +23,14 @@ import type { ChatMessage, SSEEvent, ContentBlock } from '../types';
  * // With thread event callbacks
  * const sse = useSSE(onMessageStart, token, true, { onThreadCreated, onThreadUpdated, onMessageSaved });
  */
-export const useSSE = (onMessageStart?: () => void, token?: string | null, autoConnect: boolean = false, threadCallbacks?: { onThreadCreated?: (data: any) => void; onThreadUpdated?: (data: any) => void; onMessageSaved?: (data: any) => void; onUIEvent?: (data: any) => void }) => {
+export const useSSE = (onMessageStart?: () => void, token?: string | null, autoConnect: boolean = false, threadCallbacks?: { onThreadCreated?: (data: any) => void; onThreadUpdated?: (data: any) => void; onMessageSaved?: (data: any) => void; onUIEvent?: (data: any) => void }, currentThreadId?: string | null) => {
   // Core state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Thread management
-  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+  // Thread management (received from parent)
+  const effectiveCurrentThreadId = currentThreadId;
 
   // Token ref
   const tokenRef = useRef<string | null>(null);
@@ -39,6 +39,11 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
   useEffect(() => {
     tokenRef.current = token || null;
   }, [token]);
+
+  // Debug when currentThreadId changes
+  useEffect(() => {
+    console.log('🚨 [USE SSE] currentThreadId changed to:', currentThreadId, 'effectiveCurrentThreadId:', effectiveCurrentThreadId);
+  }, [currentThreadId, effectiveCurrentThreadId]);
 
   // Content streaming state
   const [thinkingContent, setThinkingContent] = useState('');
@@ -277,9 +282,10 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
         console.log('[MESSAGE START]');
 
         // Extract thread_id if provided (for new threads)
-        if (data.thread_id && !currentThreadId) {
+        if (data.thread_id && !effectiveCurrentThreadId) {
           console.log(`[THREAD] New thread created: ${data.thread_id}`);
-          setCurrentThreadId(data.thread_id);
+          // Thread ID is managed by parent component, so we don't set it here
+          console.log(`[THREAD] Thread ID received from backend: ${data.thread_id} (managed by parent)`);
         }
 
         // Trigger sarcastic animation on AI response
@@ -349,7 +355,30 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
 
   // Send message function
   const sendMessage = useCallback(async (message: string, threadId?: string) => {
+    console.log('🚀 [SEND MESSAGE] sendMessage function called with threadId:', threadId);
+    console.log('🚨 [USE SSE] sendMessage called with:', {
+      message: message.substring(0, 30) + (message.length > 30 ? '...' : ''),
+      threadId: threadId,
+      effectiveCurrentThreadId: effectiveCurrentThreadId,
+      threadIdIsUndefined: threadId === undefined,
+      threadIdIsNull: threadId === null,
+      threadIdIsEmptyString: threadId === '',
+      willUseCurrentThreadId: !threadId && effectiveCurrentThreadId,
+      finalThreadId: threadId || effectiveCurrentThreadId,
+      callStack: new Error().stack?.split('\n').slice(0, 5).join('\n')
+    });
+    console.log('🚨 [THREAD DEBUG] sendMessage() called with:', {
+      message: message.substring(0, 30) + (message.length > 30 ? '...' : ''),
+      threadId: threadId,
+      threadIdType: typeof threadId,
+      threadIdTruthy: !!threadId,
+      effectiveCurrentThreadId: effectiveCurrentThreadId
+    });
     if (!message.trim()) return;
+
+    // Use current thread ID if none provided
+    const finalThreadId = threadId || effectiveCurrentThreadId;
+    console.log('🚨 [THREAD FIX] Using finalThreadId:', finalThreadId, 'original threadId:', threadId, 'effectiveCurrentThreadId:', effectiveCurrentThreadId);
 
     // If we're in persistent mode, disconnect first
     if (isConnected && autoConnect) {
@@ -393,6 +422,13 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
         console.error('🚨 URL contains = character at position:', SSE_ENDPOINT.indexOf('='));
       }
 
+      console.log('[SSE] Sending message:', {
+        message: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
+        threadId,
+        currentThreadId,
+        final_thread_id: threadId || currentThreadId
+      });
+
       await fetchEventSource(SSE_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -402,7 +438,7 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
         },
         body: JSON.stringify({
           message,
-          ...((threadId || currentThreadId) && { thread_id: threadId || currentThreadId })
+          ...(finalThreadId && { thread_id: finalThreadId })
         }),
         signal: abortController.signal,
         
@@ -449,12 +485,13 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
 
   // Function to start a new conversation
   const startNewConversation = useCallback(() => {
-    setCurrentThreadId(null);
+    console.log('🚨 [THREAD DEBUG] startNewConversation() called!');
+    // Clear local state - thread ID is managed by parent component
     setMessages([]);
     setThinkingContent('');
     setVoiceLines([]);
     setActiveTools([]);
-    console.log('[THREAD] Started new conversation');
+    console.log('[THREAD] Started new conversation (thread ID managed by parent)');
   }, []);
 
   return {
