@@ -127,38 +127,10 @@ async def create_organisation(request, payload: OrganisationCreateSchema):
     )
 
 
-@organisations_router.get("/{organisation_id}", response={200: OrganisationSchema, 404: dict}, tags=["Organisations"])
-async def get_organisation(request, organisation_id: str):
-    """Get a specific organisation by ID."""
-    @sync_to_async
-    def get_organisation_sync():
-        try:
-            organisation = Organisation.objects.get(id=organisation_id)
-            return organisation, None
-        except Organisation.DoesNotExist:
-            return None, "Organisation not found"
-
-    organisation, error = await get_organisation_sync()
-    if error:
-        return 404, {"error": error}
-
-    return 200, OrganisationSchema(
-        id=str(organisation.id),
-        name=organisation.name,
-        slug=organisation.slug,
-        description=organisation.description,
-        website=organisation.website,
-        industry=organisation.industry,
-        created_at=organisation.created_at,
-        updated_at=organisation.updated_at
-    )
-
-
-
 
 # Employer-focused organisation endpoints (integrated into main router)
 
-@organisations_router.get("/managed/", response=List[OrganisationSchema], tags=["Organisations"])
+@organisations_router.get("/managed", response=List[OrganisationSchema], tags=["Organisations"])
 async def list_managed_organisations(request):
     """List organisations managed by the authenticated employer user."""
     user = await get_user_from_token(request)
@@ -184,7 +156,7 @@ async def list_managed_organisations(request):
     ]
 
 
-@organisations_router.post("/managed/", response=OrganisationSchema, tags=["Organisations"])
+@organisations_router.post("/managed", response=OrganisationSchema, tags=["Organisations"])
 async def create_managed_organisation(request, payload: OrganisationCreateSchema):
     """Create a new organisation and assign it to the authenticated employer user."""
     user = await get_user_from_token(request)
@@ -300,3 +272,30 @@ async def delete_managed_organisation(request, organisation_slug: str):
         raise HttpError(404, error)
 
     return {"success": True, "message": "Organisation deleted successfully"}
+
+
+@organisations_router.get("/{organisation_id}", response={200: OrganisationSchema, 404: dict}, tags=["Organisations"])
+async def get_organisation(request, organisation_id: str):
+    """Get a specific organisation by ID."""
+    @sync_to_async
+    def get_organisation_sync():
+        try:
+            organisation = Organisation.objects.get(id=organisation_id)
+            return organisation, None
+        except Organisation.DoesNotExist:
+            return None, "Organisation not found"
+
+    organisation, error = await get_organisation_sync()
+    if error:
+        return 404, {"error": error}
+
+    return 200, OrganisationSchema(
+        id=str(organisation.id),
+        name=organisation.name,
+        slug=organisation.slug,
+        description=organisation.description,
+        website=organisation.website,
+        industry=organisation.industry,
+        created_at=organisation.created_at,
+        updated_at=organisation.updated_at
+    )
