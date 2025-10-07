@@ -101,6 +101,13 @@ class DjangoCheckpointSaver(BaseCheckpointSaver):
                     # Since Checkpoint is a dict subclass, we can use the stored dict directly
                     checkpoint = stored_checkpoint  # Already in the right format
                     metadata = checkpoint_data.get('metadata', {})
+
+                    # Ensure metadata has required fields for LangGraph
+                    if 'step' not in metadata:
+                        # Estimate step from message count if available
+                        messages = checkpoint.get('channel_values', {}).get('messages', [])
+                        metadata['step'] = len(messages) if messages else 1
+
                     self._checkpoints[thread_id] = CheckpointTuple(
                         config=config,
                         checkpoint=checkpoint,
@@ -115,9 +122,10 @@ class DjangoCheckpointSaver(BaseCheckpointSaver):
                         user = await sync_to_async(lambda: thread.user)()
 
                         # Create initial checkpoint from existing messages
+                        import uuid
                         checkpoint = Checkpoint(
                             v=1,
-                            id=f"checkpoint_{thread_id}_initial",
+                            id=str(uuid.uuid4()),  # Generate proper UUID for LangGraph
                             ts=datetime.now().isoformat(),
                             channel_values={
                                 "messages": messages,
@@ -128,20 +136,28 @@ class DjangoCheckpointSaver(BaseCheckpointSaver):
                                 "tool_call_count": 0
                             },
                             channel_versions={
-                                "messages": 1,
+                                "messages": len(messages),
                                 "user_id": 1,
                                 "tools_done": 1,
                                 "voice_messages": 1,
                                 "last_voice_sig": 1,
                                 "tool_call_count": 1
                             },
-                            versions_seen={},
+                            versions_seen={
+                                "__input__": {},
+                                "__start__": {
+                                    "__start__": len(messages)
+                                }
+                            },
                             pending_sends=[]
                         )
                         tuple_obj = CheckpointTuple(
                             config=config,
                             checkpoint=checkpoint,
-                            metadata={"source": "django_thread"}
+                            metadata={
+                                "source": "django_thread",
+                                "step": len(messages)  # Set step based on message count
+                            }
                         )
                         self._checkpoints[thread_id] = tuple_obj
                         return tuple_obj
