@@ -7,7 +7,6 @@ from typing import List
 from datetime import datetime
 from asgiref.sync import sync_to_async
 from apps.organisations.models import Organisation
-from django.contrib.auth.models import Group
 from ninja.errors import HttpError
 import jwt
 from django.conf import settings
@@ -159,8 +158,8 @@ async def get_organisation(request, organisation_id: str):
 
 # Employer-focused organisation endpoints (integrated into main router)
 
-@organisations_router.get("/group/", response=List[OrganisationSchema], tags=["Organisations"])
-async def list_group_organisations(request):
+@organisations_router.get("/managed/", response=List[OrganisationSchema], tags=["Organisations"])
+async def list_managed_organisations(request):
     """List organisations managed by the authenticated employer user."""
     user = await get_user_from_token(request)
     await check_employer_permissions(user)
@@ -185,8 +184,8 @@ async def list_group_organisations(request):
     ]
 
 
-@organisations_router.post("/group/", response=OrganisationSchema, tags=["Organisations"])
-async def create_group_organisation(request, payload: OrganisationCreateSchema):
+@organisations_router.post("/managed/", response=OrganisationSchema, tags=["Organisations"])
+async def create_managed_organisation(request, payload: OrganisationCreateSchema):
     """Create a new organisation and assign it to the authenticated employer user."""
     user = await get_user_from_token(request)
     await check_employer_permissions(user)
@@ -216,8 +215,8 @@ async def create_group_organisation(request, payload: OrganisationCreateSchema):
     )
 
 
-@organisations_router.get("/group/{organisation_slug}", response=OrganisationSchema, tags=["Organisations"])
-async def get_group_organisation(request, organisation_slug: str):
+@organisations_router.get("/managed/{organisation_slug}", response=OrganisationSchema, tags=["Organisations"])
+async def get_managed_organisation(request, organisation_slug: str):
     """Get a specific organisation by slug (must be managed by the authenticated employer user)."""
     user = await get_user_from_token(request)
     await check_employer_permissions(user)
@@ -246,8 +245,8 @@ async def get_group_organisation(request, organisation_slug: str):
     )
 
 
-@organisations_router.put("/group/{organisation_slug}", response=OrganisationSchema, tags=["Organisations"])
-async def update_group_organisation(request, organisation_slug: str, payload: OrganisationUpdateSchema):
+@organisations_router.put("/managed/{organisation_slug}", response=OrganisationSchema, tags=["Organisations"])
+async def update_managed_organisation(request, organisation_slug: str, payload: OrganisationUpdateSchema):
     """Update a specific organisation by slug (must be managed by the authenticated employer user)."""
     user = await get_user_from_token(request)
     await check_employer_permissions(user)
@@ -281,8 +280,8 @@ async def update_group_organisation(request, organisation_slug: str, payload: Or
     )
 
 
-@organisations_router.delete("/group/{organisation_slug}", response=dict, tags=["Organisations"])
-async def delete_group_organisation(request, organisation_slug: str):
+@organisations_router.delete("/managed/{organisation_slug}", response=dict, tags=["Organisations"])
+async def delete_managed_organisation(request, organisation_slug: str):
     """Delete a specific organisation by slug (must be managed by the authenticated employer user)."""
     user = await get_user_from_token(request)
     await check_employer_permissions(user)
