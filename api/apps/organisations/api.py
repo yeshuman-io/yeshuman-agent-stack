@@ -7,6 +7,7 @@ from typing import List
 from datetime import datetime
 from asgiref.sync import sync_to_async
 from apps.organisations.models import Organisation
+from apps.opportunities.models import Opportunity, OpportunitySkill, OpportunityExperience
 from ninja.errors import HttpError
 import jwt
 from django.conf import settings
@@ -77,6 +78,42 @@ class OrganisationUpdateSchema(Schema):
     description: str = ""
     website: str = ""
     industry: str = ""
+
+
+class OpportunitySkillSchema(Schema):
+    """Schema for OpportunitySkill in organisation context."""
+    id: str
+    skill_name: str
+    requirement_type: str
+
+
+class OpportunityExperienceSchema(Schema):
+    """Schema for OpportunityExperience in organisation context."""
+    id: str
+    description: str
+
+
+class OrganisationOpportunitySchema(Schema):
+    """Schema for Opportunity in organisation context."""
+    id: str
+    title: str
+    description: str
+    skills: List[OpportunitySkillSchema]
+    experiences: List[OpportunityExperienceSchema]
+    created_at: datetime
+    updated_at: datetime
+
+
+class OrganisationOpportunityCreateSchema(Schema):
+    """Schema for creating an Opportunity for an Organisation."""
+    title: str
+    description: str
+
+
+class OrganisationOpportunityUpdateSchema(Schema):
+    """Schema for updating an Opportunity for an Organisation."""
+    title: str
+    description: str
 
 
 @organisations_router.get("/", response=List[OrganisationSchema], tags=["Organisations"])
@@ -272,6 +309,200 @@ async def delete_managed_organisation(request, organisation_slug: str):
         raise HttpError(404, error)
 
     return {"success": True, "message": "Organisation deleted successfully"}
+
+
+# Opportunity management endpoints for organisations
+
+@organisations_router.get("/managed/{organisation_slug}/opportunities", response=List[OrganisationOpportunitySchema], tags=["Organisations"])
+async def list_organisation_opportunities(request, organisation_slug: str):
+    """List opportunities for a managed organisation."""
+    user = await get_user_from_token(request)
+    await check_employer_permissions(user)
+
+    @sync_to_async
+    def get_opportunities_sync():
+        try:
+            org = user.managed_organisations.get(slug=organisation_slug)
+            opportunities = list(org.opportunities.all().prefetch_related('opportunity_skills__skill', 'opportunity_experiences'))
+            return opportunities, None
+        except Organisation.DoesNotExist:
+            return None, "Organisation not found or access denied"
+
+    opportunities, error = await get_opportunities_sync()
+    if error:
+        raise HttpError(404, error)
+
+    return [
+        OrganisationOpportunitySchema(
+            id=str(opp.id),
+            title=opp.title,
+            description=opp.description,
+            skills=[
+                OpportunitySkillSchema(
+                    id=str(skill.id),
+                    skill_name=skill.skill.name,
+                    requirement_type=skill.requirement_type
+                )
+                for skill in opp.opportunity_skills.all()
+            ],
+            experiences=[
+                OpportunityExperienceSchema(
+                    id=str(exp.id),
+                    description=exp.description
+                )
+                for exp in opp.opportunity_experiences.all()
+            ],
+            created_at=opp.created_at,
+            updated_at=opp.updated_at
+        )
+        for opp in opportunities
+    ]
+
+
+@organisations_router.post("/managed/{organisation_slug}/opportunities", response=OrganisationOpportunitySchema, tags=["Organisations"])
+async def create_organisation_opportunity(request, organisation_slug: str, payload: OrganisationOpportunityCreateSchema):
+    """Create a new opportunity for a managed organisation."""
+    user = await get_user_from_token(request)
+    await check_employer_permissions(user)
+
+    @sync_to_async
+    def create_opportunity_sync():
+        try:
+            org = user.managed_organisations.get(slug=organisation_slug)
+            opportunity = Opportunity.objects.create(
+                title=payload.title,
+                description=payload.description,
+                organisation=org
+            )
+            return opportunity, None
+        except Organisation.DoesNotExist:
+            return None, "Organisation not found or access denied"
+
+    opportunity, error = await create_opportunity_sync()
+    if error:
+        raise HttpError(404, error)
+
+    return OrganisationOpportunitySchema(
+        id=str(opportunity.id),
+        title=opportunity.title,
+        description=opportunity.description,
+        skills=[],
+        experiences=[],
+        created_at=opportunity.created_at,
+        updated_at=opportunity.updated_at
+    )
+
+
+@organisations_router.get("/managed/{organisation_slug}/opportunities/{opportunity_id}", response=OrganisationOpportunitySchema, tags=["Organisations"])
+async def get_organisation_opportunity(request, organisation_slug: str, opportunity_id: str):
+    """Get a specific opportunity for a managed organisation."""
+    user = await get_user_from_token(request)
+    await check_employer_permissions(user)
+
+    @sync_to_async
+    def get_opportunity_sync():
+        try:
+            org = user.managed_organisations.get(slug=organisation_slug)
+            opportunity = org.opportunities.prefetch_related('opportunity_skills__skill', 'opportunity_experiences').get(id=opportunity_id)
+            return opportunity, None
+        except (Organisation.DoesNotExist, Opportunity.DoesNotExist):
+            return None, "Organisation or opportunity not found or access denied"
+
+    opportunity, error = await get_opportunity_sync()
+    if error:
+        raise HttpError(404, error)
+
+    return OrganisationOpportunitySchema(
+        id=str(opportunity.id),
+        title=opportunity.title,
+        description=opportunity.description,
+        skills=[
+            OpportunitySkillSchema(
+                id=str(skill.id),
+                skill_name=skill.skill.name,
+                requirement_type=skill.requirement_type
+            )
+            for skill in opportunity.opportunity_skills.all()
+        ],
+        experiences=[
+            OpportunityExperienceSchema(
+                id=str(exp.id),
+                description=exp.description
+            )
+            for exp in opportunity.opportunity_experiences.all()
+        ],
+        created_at=opportunity.created_at,
+        updated_at=opportunity.updated_at
+    )
+
+
+@organisations_router.put("/managed/{organisation_slug}/opportunities/{opportunity_id}", response=OrganisationOpportunitySchema, tags=["Organisations"])
+async def update_organisation_opportunity(request, organisation_slug: str, opportunity_id: str, payload: OrganisationOpportunityUpdateSchema):
+    """Update a specific opportunity for a managed organisation."""
+    user = await get_user_from_token(request)
+    await check_employer_permissions(user)
+
+    @sync_to_async
+    def update_opportunity_sync():
+        try:
+            org = user.managed_organisations.get(slug=organisation_slug)
+            opportunity = org.opportunities.get(id=opportunity_id)
+            opportunity.title = payload.title
+            opportunity.description = payload.description
+            opportunity.save()
+            return opportunity, None
+        except (Organisation.DoesNotExist, Opportunity.DoesNotExist):
+            return None, "Organisation or opportunity not found or access denied"
+
+    opportunity, error = await update_opportunity_sync()
+    if error:
+        raise HttpError(404, error)
+
+    return OrganisationOpportunitySchema(
+        id=str(opportunity.id),
+        title=opportunity.title,
+        description=opportunity.description,
+        skills=[
+            OpportunitySkillSchema(
+                id=str(skill.id),
+                skill_name=skill.skill.name,
+                requirement_type=skill.requirement_type
+            )
+            for skill in opportunity.opportunity_skills.all()
+        ],
+        experiences=[
+            OpportunityExperienceSchema(
+                id=str(exp.id),
+                description=exp.description
+            )
+            for exp in opportunity.opportunity_experiences.all()
+        ],
+        created_at=opportunity.created_at,
+        updated_at=opportunity.updated_at
+    )
+
+
+@organisations_router.delete("/managed/{organisation_slug}/opportunities/{opportunity_id}", response=dict, tags=["Organisations"])
+async def delete_organisation_opportunity(request, organisation_slug: str, opportunity_id: str):
+    """Delete a specific opportunity for a managed organisation."""
+    user = await get_user_from_token(request)
+    await check_employer_permissions(user)
+
+    @sync_to_async
+    def delete_opportunity_sync():
+        try:
+            org = user.managed_organisations.get(slug=organisation_slug)
+            opportunity = org.opportunities.get(id=opportunity_id)
+            opportunity.delete()
+            return True, None
+        except (Organisation.DoesNotExist, Opportunity.DoesNotExist):
+            return False, "Organisation or opportunity not found or access denied"
+
+    success, error = await delete_opportunity_sync()
+    if error:
+        raise HttpError(404, error)
+
+    return {"success": True, "message": "Opportunity deleted successfully"}
 
 
 @organisations_router.get("/{organisation_id}", response={200: OrganisationSchema, 404: dict}, tags=["Organisations"])
