@@ -8,6 +8,7 @@ from datetime import datetime
 from asgiref.sync import sync_to_async
 from apps.organisations.models import Organisation
 from apps.opportunities.models import Opportunity, OpportunitySkill, OpportunityExperience
+from apps.skills.models import Skill
 from ninja.errors import HttpError
 import jwt
 from django.conf import settings
@@ -104,10 +105,17 @@ class OrganisationOpportunitySchema(Schema):
     updated_at: datetime
 
 
+class OrganisationOpportunitySkillSchema(Schema):
+    """Schema for OpportunitySkill in organisation context."""
+    skill_id: str
+    requirement_type: str  # 'required' or 'preferred'
+
+
 class OrganisationOpportunityCreateSchema(Schema):
     """Schema for creating an Opportunity for an Organisation."""
     title: str
     description: str
+    skills: List[OrganisationOpportunitySkillSchema] = []
 
 
 class OrganisationOpportunityUpdateSchema(Schema):
@@ -332,31 +340,35 @@ async def list_organisation_opportunities(request, organisation_slug: str):
     if error:
         raise HttpError(404, error)
 
-    return [
-        OrganisationOpportunitySchema(
-            id=str(opp.id),
-            title=opp.title,
-            description=opp.description,
-            skills=[
-                OpportunitySkillSchema(
-                    id=str(skill.id),
-                    skill_name=skill.skill.name,
-                    requirement_type=skill.requirement_type
-                )
-                for skill in opp.opportunity_skills.all()
-            ],
-            experiences=[
-                OpportunityExperienceSchema(
-                    id=str(exp.id),
-                    description=exp.description
-                )
-                for exp in opp.opportunity_experiences.all()
-            ],
-            created_at=opp.created_at,
-            updated_at=opp.updated_at
-        )
-        for opp in opportunities
-    ]
+    @sync_to_async
+    def build_response_data():
+        return [
+            OrganisationOpportunitySchema(
+                id=str(opp.id),
+                title=opp.title,
+                description=opp.description,
+                skills=[
+                    OpportunitySkillSchema(
+                        id=str(skill.id),
+                        skill_name=skill.skill.name,
+                        requirement_type=skill.requirement_type
+                    )
+                    for skill in opp.opportunity_skills.all()
+                ],
+                experiences=[
+                    OpportunityExperienceSchema(
+                        id=str(exp.id),
+                        description=exp.description
+                    )
+                    for exp in opp.opportunity_experiences.all()
+                ],
+                created_at=opp.created_at,
+                updated_at=opp.updated_at
+            )
+            for opp in opportunities
+        ]
+
+    return await build_response_data()
 
 
 @organisations_router.post("/managed/{organisation_slug}/opportunities", response=OrganisationOpportunitySchema, tags=["Organisations"])
@@ -374,6 +386,20 @@ async def create_organisation_opportunity(request, organisation_slug: str, paylo
                 description=payload.description,
                 organisation=org
             )
+
+            # Create opportunity skills
+            for skill_data in payload.skills:
+                try:
+                    skill = Skill.objects.get(id=skill_data.skill_id)
+                    OpportunitySkill.objects.create(
+                        opportunity=opportunity,
+                        skill=skill,
+                        requirement_type=skill_data.requirement_type
+                    )
+                except Skill.DoesNotExist:
+                    # Skip invalid skill IDs
+                    pass
+
             return opportunity, None
         except Organisation.DoesNotExist:
             return None, "Organisation not found or access denied"
@@ -382,11 +408,24 @@ async def create_organisation_opportunity(request, organisation_slug: str, paylo
     if error:
         raise HttpError(404, error)
 
+    @sync_to_async
+    def get_opportunity_skills():
+        return list(opportunity.opportunity_skills.select_related('skill').all())
+
+    skills_data = await get_opportunity_skills()
+
     return OrganisationOpportunitySchema(
         id=str(opportunity.id),
         title=opportunity.title,
         description=opportunity.description,
-        skills=[],
+        skills=[
+            OpportunitySkillSchema(
+                id=str(skill.id),
+                skill_name=skill.skill.name,
+                requirement_type=skill.requirement_type
+            )
+            for skill in skills_data
+        ],
         experiences=[],
         created_at=opportunity.created_at,
         updated_at=opportunity.updated_at
@@ -412,6 +451,14 @@ async def get_organisation_opportunity(request, organisation_slug: str, opportun
     if error:
         raise HttpError(404, error)
 
+    @sync_to_async
+    def get_opportunity_data():
+        skills = list(opportunity.opportunity_skills.select_related('skill').all())
+        experiences = list(opportunity.opportunity_experiences.all())
+        return skills, experiences
+
+    skills_data, experiences_data = await get_opportunity_data()
+
     return OrganisationOpportunitySchema(
         id=str(opportunity.id),
         title=opportunity.title,
@@ -422,14 +469,14 @@ async def get_organisation_opportunity(request, organisation_slug: str, opportun
                 skill_name=skill.skill.name,
                 requirement_type=skill.requirement_type
             )
-            for skill in opportunity.opportunity_skills.all()
+            for skill in skills_data
         ],
         experiences=[
             OpportunityExperienceSchema(
                 id=str(exp.id),
                 description=exp.description
             )
-            for exp in opportunity.opportunity_experiences.all()
+            for exp in experiences_data
         ],
         created_at=opportunity.created_at,
         updated_at=opportunity.updated_at
@@ -458,6 +505,14 @@ async def update_organisation_opportunity(request, organisation_slug: str, oppor
     if error:
         raise HttpError(404, error)
 
+    @sync_to_async
+    def get_opportunity_data():
+        skills = list(opportunity.opportunity_skills.select_related('skill').all())
+        experiences = list(opportunity.opportunity_experiences.all())
+        return skills, experiences
+
+    skills_data, experiences_data = await get_opportunity_data()
+
     return OrganisationOpportunitySchema(
         id=str(opportunity.id),
         title=opportunity.title,
@@ -468,14 +523,14 @@ async def update_organisation_opportunity(request, organisation_slug: str, oppor
                 skill_name=skill.skill.name,
                 requirement_type=skill.requirement_type
             )
-            for skill in opportunity.opportunity_skills.all()
+            for skill in skills_data
         ],
         experiences=[
             OpportunityExperienceSchema(
                 id=str(exp.id),
                 description=exp.description
             )
-            for exp in opportunity.opportunity_experiences.all()
+            for exp in experiences_data
         ],
         created_at=opportunity.created_at,
         updated_at=opportunity.updated_at
