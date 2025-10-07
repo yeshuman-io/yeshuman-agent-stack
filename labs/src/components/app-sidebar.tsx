@@ -51,6 +51,9 @@ interface AppSidebarProps {
   currentThreadId?: string | null
   onClearCurrentThread?: () => void
   onFocusChange?: (focusData: UserFocus | null) => void
+  threadCallbacks?: {
+    onThreadTitleGenerating?: (data: any) => void
+  }
 }
 
 // Focus interface
@@ -60,12 +63,13 @@ interface UserFocus {
   focus_confirmed: boolean
 }
 
-export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, onClearCurrentThread, onFocusChange }: AppSidebarProps = {}) {
+export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, onClearCurrentThread, onFocusChange, threadCallbacks }: AppSidebarProps = {}) {
   const navigate = useNavigate()
   const { user, token, isAuthenticated, logout } = useAuth()
   const { state } = useSidebar()
   const [threads, setThreads] = useState<Thread[]>([])
   const [threadsLoading, setThreadsLoading] = useState(false)
+  const [generatingTitles, setGeneratingTitles] = useState<Set<string>>(new Set())
   const [userFocus, setUserFocus] = useState<UserFocus | null>(null)
 
   const isCollapsed = state === "collapsed"
@@ -106,6 +110,20 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
     }
   }, [isAuthenticated, user, token])
 
+  // Set up thread title generating callback
+  useEffect(() => {
+    if (threadCallbacks?.onThreadTitleGenerating) {
+      // Replace the callback to also update local state
+      const originalCallback = threadCallbacks.onThreadTitleGenerating
+      threadCallbacks.onThreadTitleGenerating = (data: any) => {
+        console.log('🎯 [SIDEBAR] Thread title generating:', data.thread_id)
+        // Add to generating set
+        setGeneratingTitles(prev => new Set(prev).add(data.thread_id))
+        // Call original callback if needed
+        originalCallback(data)
+      }
+    }
+  }, [threadCallbacks])
 
   const fetchThreads = async () => {
     console.log('fetchThreads called, token:', token ? token.substring(0, 20) + '...' : 'null')
@@ -155,6 +173,8 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
             console.log('Array length via Object.keys:', Object.keys(threadsData).length)
 
             setThreads(threadsData)
+            // Clear generating titles when threads are refreshed
+            setGeneratingTitles(new Set())
             console.log('Successfully set threads state with', threadsData.length, 'threads')
 
             // Double-check the state was set correctly
@@ -559,7 +579,16 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
                       >
                         <MessageSquare className="size-4 flex-shrink-0" />
                         <span className="break-words whitespace-normal leading-tight">
-                          {thread.subject || 'Untitled Thread'}
+                          {generatingTitles.has(thread.id) ? (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="animate-pulse bg-muted rounded h-4 flex-1 min-w-16"></span>
+                              <span className="text-xs text-muted-foreground animate-pulse">naming...</span>
+                            </span>
+                          ) : (
+                            (thread.subject || 'Untitled Thread')
+                              .replace(/^Conversation - /, '')
+                              .replace(/^Anonymous conversation - /, '')
+                          )}
                         </span>
                       </SidebarMenuButton>
                       <button

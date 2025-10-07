@@ -23,7 +23,7 @@ import type { ChatMessage, SSEEvent, ContentBlock } from '../types';
  * // With thread event callbacks
  * const sse = useSSE(onMessageStart, token, true, { onThreadCreated, onThreadUpdated, onMessageSaved });
  */
-export const useSSE = (onMessageStart?: () => void, token?: string | null, autoConnect: boolean = false, threadCallbacks?: { onThreadCreated?: (data: any) => void; onThreadUpdated?: (data: any) => void; onMessageSaved?: (data: any) => void; onUIEvent?: (data: any) => void }, currentThreadId?: string | null) => {
+export const useSSE = (onMessageStart?: () => void, token?: string | null, autoConnect: boolean = false, threadCallbacks?: { onThreadCreated?: (data: any) => void; onThreadUpdated?: (data: any) => void; onThreadTitleGenerating?: (data: any) => void; onMessageSaved?: (data: any) => void; onUIEvent?: (data: any) => void }, currentThreadId?: string | null) => {
   // Core state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -300,37 +300,6 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
         setIsLoading(false);
         break;
 
-      case 'thread_created':
-        console.log('🔄 [SSE THREAD] Thread created event received:', {
-          thread_id: data.thread_id,
-          subject: data.subject,
-          user_id: data.user_id,
-          is_anonymous: data.is_anonymous,
-          created_at: data.created_at
-        });
-        // Emit thread event for UI updates
-        if (threadCallbacks?.onThreadCreated) {
-          console.log('🔄 [SSE THREAD] Calling onThreadCreated callback');
-          threadCallbacks.onThreadCreated(data);
-        } else {
-          console.log('🔄 [SSE THREAD] No onThreadCreated callback registered');
-        }
-        break;
-
-      case 'thread_updated':
-        console.log('🔄 [SSE THREAD] Thread updated event received:', {
-          thread_id: data.thread_id,
-          message_count: data.message_count,
-          updated_at: data.updated_at
-        });
-        // Emit thread event for UI updates
-        if (threadCallbacks?.onThreadUpdated) {
-          console.log('🔄 [SSE THREAD] Calling onThreadUpdated callback');
-          threadCallbacks.onThreadUpdated(data);
-        } else {
-          console.log('🔄 [SSE THREAD] No onThreadUpdated callback registered');
-        }
-        break;
 
       case 'message_saved':
         console.log('🔄 [SSE THREAD] Message saved event received:', {

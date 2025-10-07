@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
@@ -11,6 +12,7 @@ interface OrganisationListProps {
 }
 
 export function OrganisationList({ onStartConversation }: OrganisationListProps) {
+  const navigate = useNavigate()
   const {
     organisations,
     isLoading,
@@ -108,7 +110,11 @@ export function OrganisationList({ onStartConversation }: OrganisationListProps)
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {organisations.map((org) => (
-                <Card key={org.id} className="hover:shadow-md transition-shadow">
+                <Card
+                  key={org.id}
+                  className="hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => navigate(`/employer/organisation/${org.slug}`)}
+                >
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">

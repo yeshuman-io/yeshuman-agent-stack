@@ -570,6 +570,54 @@ Return ONLY the status line, no quotes or explanation."""
             final_response = AIMessage(content=final_content)
 
             logger.info("✅ Pipeline completed successfully")
+
+            # Handle thread operations asynchronously (like voice)
+            thread_id = configurable.get("thread_id")
+            if thread_id and writer:
+                # Create async task for thread operations
+                async def _thread_operations_task():
+                    try:
+                        logger.info(f"🧵 [THREAD OPS] Starting async thread operations for {thread_id}")
+
+                        # Emit thread update event
+                        from .mapper import create_thread_ui_event
+                        message_count = len(state.get("messages", [])) + 1  # +1 for the new response
+                        ui_event = create_thread_ui_event("updated", thread_id, {"message_count": message_count})
+                        writer(ui_event)
+                        logger.info(f"🔄 [THREAD OPS] Emitted thread update event for {thread_id} (messages: {message_count})")
+
+                        # Check for title generation (async background task)
+                        if message_count >= 3:  # Same criteria as before
+                            async def _title_generation_task():
+                                try:
+                                    from apps.threads.services import generate_thread_title_with_llm, update_thread_title
+
+                                    title = await generate_thread_title_with_llm(thread_id)
+                                    if title:
+                                        success = await update_thread_title(thread_id, title)
+                                        if success:
+                                            # Emit title update event
+                                            title_event = create_thread_ui_event("title_updated", thread_id, {"subject": title})
+                                            writer(title_event)
+                                            logger.info(f"🎯 [THREAD OPS] Generated and emitted title: '{title}' for thread {thread_id}")
+                                        else:
+                                            logger.warning(f"❌ [THREAD OPS] Failed to update title for thread {thread_id}")
+                                    else:
+                                        logger.warning(f"❌ [THREAD OPS] LLM failed to generate title for thread {thread_id}")
+                                except Exception as e:
+                                    logger.error(f"Error in title generation task: {e}")
+
+                            # Run title generation as separate async task
+                            import asyncio
+                            asyncio.create_task(_title_generation_task())
+
+                    except Exception as e:
+                        logger.error(f"Error in thread operations task: {e}")
+
+                # Run thread operations as background task (non-blocking)
+                import asyncio
+                asyncio.create_task(_thread_operations_task())
+
             return {
                 "messages": state["messages"] + [final_response],  # Preserve full conversation history
                 "writer": writer,
@@ -704,7 +752,7 @@ Return ONLY the status line, no quotes or explanation."""
     workflow.add_node("context_preparation", context_preparation_node)
     workflow.add_node("agent", agent_node)
     workflow.add_node("tools", tools_node_with_logging)
-    
+
     # Define flow
     workflow.set_entry_point("context_preparation")
     workflow.add_edge("context_preparation", "agent")

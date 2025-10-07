@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './use-auth'
+import { API_BASE_URL } from '../constants'
 
 export interface Organisation {
   id: string
@@ -28,12 +29,13 @@ export interface UpdateOrganisationData {
 
 export function useOrganisations() {
   const { token } = useAuth()
+  const API_URL = API_BASE_URL || '/api'
   const queryClient = useQueryClient()
 
   const organisationsQuery = useQuery({
-    queryKey: ['group-organisations'],
+    queryKey: ['managed-organisations'],
     queryFn: async (): Promise<Organisation[]> => {
-      const response = await fetch('/api/organisations/group/', {
+      const response = await fetch(`${API_URL}/api/organisations/managed`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -49,7 +51,7 @@ export function useOrganisations() {
 
   const createOrganisationMutation = useMutation({
     mutationFn: async (data: CreateOrganisationData): Promise<Organisation> => {
-      const response = await fetch('/api/organisations/group/', {
+      const response = await fetch(`${API_URL}/api/organisations/managed`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -64,13 +66,13 @@ export function useOrganisations() {
       return response.json()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['group-organisations'] })
+      queryClient.invalidateQueries({ queryKey: ['managed-organisations'] })
     },
   })
 
   const updateOrganisationMutation = useMutation({
     mutationFn: async ({ slug, data }: { slug: string; data: UpdateOrganisationData }): Promise<Organisation> => {
-      const response = await fetch(`/api/organisations/group/${slug}/`, {
+      const response = await fetch(`${API_URL}/api/organisations/managed/${slug}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -85,13 +87,13 @@ export function useOrganisations() {
       return response.json()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['group-organisations'] })
+      queryClient.invalidateQueries({ queryKey: ['managed-organisations'] })
     },
   })
 
   const deleteOrganisationMutation = useMutation({
     mutationFn: async (slug: string): Promise<void> => {
-      const response = await fetch(`/api/organisations/group/${slug}/`, {
+      const response = await fetch(`${API_URL}/api/organisations/managed/${slug}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -103,7 +105,7 @@ export function useOrganisations() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['group-organisations'] })
+      queryClient.invalidateQueries({ queryKey: ['managed-organisations'] })
     },
   })
 

@@ -83,7 +83,9 @@ class DjangoCheckpointSaver(BaseCheckpointSaver):
                     logger.warning(f"Thread {thread_id} not found for checkpoint retrieval")
                     return None
 
-                logger.info(f"Found thread {thread_id}: {thread.subject}")
+                # Get thread subject safely in async context
+                thread_subject = await sync_to_async(lambda: thread.subject)()
+                logger.info(f"Found thread {thread_id}: {thread_subject}")
             except Exception as e:
                 # Thread doesn't exist, or thread_id is not a valid ID
                 logger.warning(f"Error retrieving thread {thread_id}: {e}")
@@ -91,14 +93,21 @@ class DjangoCheckpointSaver(BaseCheckpointSaver):
 
             # Check if we have a checkpoint stored for this thread
             if thread_id not in self._checkpoints:
-                # Load checkpoint from Django if it exists
-                checkpoint_data = getattr(thread, '_langgraph_checkpoint', None)
+                # Load checkpoint from Django if it exists (wrap in sync_to_async)
+                checkpoint_data = await sync_to_async(lambda: getattr(thread, '_langgraph_checkpoint', None))()
                 if checkpoint_data:
                     # Use the stored checkpoint data directly (it's already a dict)
                     stored_checkpoint = checkpoint_data['checkpoint']
                     # Since Checkpoint is a dict subclass, we can use the stored dict directly
                     checkpoint = stored_checkpoint  # Already in the right format
                     metadata = checkpoint_data.get('metadata', {})
+
+                    # Ensure metadata has required fields for LangGraph
+                    if 'step' not in metadata:
+                        # Estimate step from message count if available
+                        messages = checkpoint.get('channel_values', {}).get('messages', [])
+                        metadata['step'] = len(messages) if messages else 1
+
                     self._checkpoints[thread_id] = CheckpointTuple(
                         config=config,
                         checkpoint=checkpoint,
@@ -108,34 +117,47 @@ class DjangoCheckpointSaver(BaseCheckpointSaver):
                     # No checkpoint exists, create initial state from thread messages
                     messages = await get_thread_messages_as_langchain(thread_id)
                     if messages:
+                        # Get thread attributes safely
+                        user_id = await sync_to_async(lambda: thread.user_id)()
+                        user = await sync_to_async(lambda: thread.user)()
+
                         # Create initial checkpoint from existing messages
+                        import uuid
                         checkpoint = Checkpoint(
                             v=1,
-                            id=f"checkpoint_{thread_id}_initial",
+                            id=str(uuid.uuid4()),  # Generate proper UUID for LangGraph
                             ts=datetime.now().isoformat(),
                             channel_values={
                                 "messages": messages,
-                                "user_id": str(thread.user_id) if thread.user else None,
+                                "user_id": str(user_id) if user else None,
                                 "tools_done": True,  # Assume tools are done for loaded conversations
                                 "voice_messages": [],
                                 "last_voice_sig": None,
                                 "tool_call_count": 0
                             },
                             channel_versions={
-                                "messages": 1,
+                                "messages": len(messages),
                                 "user_id": 1,
                                 "tools_done": 1,
                                 "voice_messages": 1,
                                 "last_voice_sig": 1,
                                 "tool_call_count": 1
                             },
-                            versions_seen={},
+                            versions_seen={
+                                "__input__": {},
+                                "__start__": {
+                                    "__start__": len(messages)
+                                }
+                            },
                             pending_sends=[]
                         )
                         tuple_obj = CheckpointTuple(
                             config=config,
                             checkpoint=checkpoint,
-                            metadata={"source": "django_thread"}
+                            metadata={
+                                "source": "django_thread",
+                                "step": len(messages)  # Set step based on message count
+                            }
                         )
                         self._checkpoints[thread_id] = tuple_obj
                         return tuple_obj
@@ -239,11 +261,12 @@ class DjangoCheckpointSaver(BaseCheckpointSaver):
                         checkpoint_dict[key] = None
 
             # Store on thread object (temporary - in production you'd want a proper model)
-            thread._langgraph_checkpoint = {
+            # Wrap attribute assignment in sync_to_async
+            await sync_to_async(lambda: setattr(thread, '_langgraph_checkpoint', {
                 'checkpoint': checkpoint_dict,
                 'metadata': metadata,
                 'saved_at': datetime.now().isoformat()
-            }
+            }))()
 
             # Save the thread with checkpoint data
             from asgiref.sync import sync_to_async

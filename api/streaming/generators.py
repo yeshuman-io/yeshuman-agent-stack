@@ -184,6 +184,7 @@ class AnthropicSSEGenerator:
                     content = chunk.get("content", "")
 
                     # Handle thread lifecycle events specially - send as direct SSE events
+                    # Note: thread_title_generating is now handled as UI delta through graph nodes
                     if chunk_type in ["thread_created", "thread_updated", "message_saved"]:
                         logger.info(f"🔄 SSE sending thread event: {chunk_type}")
                         yield (await self.format_sse_event(chunk_type, chunk)).encode('utf-8')

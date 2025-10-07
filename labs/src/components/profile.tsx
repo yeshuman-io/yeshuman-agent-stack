@@ -6,7 +6,7 @@ import { Label } from './ui/label'
 import { Textarea } from './ui/textarea'
 import { Badge } from './ui/badge'
 import { useProfile, ProfileData } from '../hooks/use-profile'
-import { User, MapPin, Plus, X } from 'lucide-react'
+import { User, MapPin, Plus, X, Edit, Save, Loader2 } from 'lucide-react'
 
 export function Profile() {
   const { profile, isLoading, error, updateProfile, isUpdating, updateError } = useProfile()
@@ -125,14 +125,31 @@ export function Profile() {
             <h1 className="text-3xl font-bold">My Profile</h1>
             <p className="text-muted-foreground">Manage your professional information</p>
           </div>
-          <Button
-            onClick={() => {
-              setEditing(!editing)
-            }}
-            variant={editing ? "outline" : "default"}
-          >
-            {editing ? "Cancel" : "Edit Profile"}
-          </Button>
+          <div className="flex gap-2">
+            {!editing ? (
+              <Button
+                onClick={() => setEditing(true)}
+                variant="default"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            ) : (
+              <>
+                <Button
+                  onClick={() => setEditing(false)}
+                  variant="outline"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  disabled={isUpdating}
+                >
+                  {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                </Button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Messages */}
@@ -335,14 +352,6 @@ export function Profile() {
           </CardContent>
         </Card>
 
-        {/* Save Button */}
-        {editing && (
-          <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={isUpdating}>
-              {isUpdating ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
-        )}
       </div>
     </div>
   )
