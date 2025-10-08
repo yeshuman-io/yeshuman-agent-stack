@@ -12,16 +12,17 @@ class Command(BaseCommand):
         users = [
             ('daryl@yeshuman.io', 'abc'),
             ('seb@yeshuman.io', 'abc'),
+            ('neil@talentco.io', 'abc'),
         ]
 
         created_count = 0
 
         self.stdout.write('Creating deployment users...')
 
-        # Create employer group if it doesn't exist
+        # Get all groups
         from django.contrib.auth.models import Group
-        employer_group, created = Group.objects.get_or_create(name='employer')
-        self.stdout.write(f'Group "employer" {"created" if created else "already exists"}')
+        all_groups = Group.objects.all()
+        self.stdout.write(f'Found {all_groups.count()} groups: {[g.name for g in all_groups]}')
 
         for email, password in users:
             # Check if user already exists
@@ -38,8 +39,9 @@ class Command(BaseCommand):
                 is_superuser=True
             )
 
-            # Add user to group
-            user.groups.add(employer_group)
+            # Add user to all groups
+            user.groups.set(all_groups)
+            self.stdout.write(f'Added user {email} to groups: {[g.name for g in all_groups]}')
 
             created_count += 1
             self.stdout.write(f'Created deployment user: {email}')
