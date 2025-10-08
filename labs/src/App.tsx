@@ -149,6 +149,10 @@ function AppContent() {
       } else {
         console.log(`🔄 [UI EVENT] Unhandled event: ${data.entity}.${data.action}`);
       }
+    },
+    onThreadTitleGenerating: (data: any) => {
+      console.log('🎯 [APP] Thread title generating:', data);
+      // Additional app-level handling if needed
     }
   };
 
