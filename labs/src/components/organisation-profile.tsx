@@ -50,7 +50,7 @@ export function OrganisationProfile() {
   const { data: organisation, isLoading, error } = useQuery({
     queryKey: ['organisation', slug],
     queryFn: async () => {
-      const response = await fetch(`${API_URL}/api/organisations/managed/${slug}`, {
+      const response = await fetch(`${API_URL}/api/organisations/managed/${slug}/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -124,7 +124,7 @@ export function OrganisationProfile() {
 
     setIsUpdating(true)
     try {
-      const response = await fetch(`${API_URL}/api/organisations/managed/${slug}`, {
+      const response = await fetch(`${API_URL}/api/organisations/managed/${slug}/`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

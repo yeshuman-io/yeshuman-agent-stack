@@ -23,9 +23,15 @@ export interface OrganisationOpportunityExperience {
   description: string
 }
 
+export interface OrganisationOpportunitySkillData {
+  skill_id: string
+  requirement_type: 'required' | 'preferred'
+}
+
 export interface CreateOrganisationOpportunityData {
   title: string
   description: string
+  skills: OrganisationOpportunitySkillData[]
 }
 
 export interface UpdateOrganisationOpportunityData {
@@ -41,7 +47,7 @@ export function useOrganisationOpportunities(organisationSlug: string) {
   const opportunitiesQuery = useQuery({
     queryKey: ['organisation-opportunities', organisationSlug],
     queryFn: async (): Promise<OrganisationOpportunity[]> => {
-      const response = await fetch(`${API_URL}/organisations/managed/${organisationSlug}/opportunities`, {
+      const response = await fetch(`${API_URL}/api/organisations/managed/${organisationSlug}/opportunities/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -57,7 +63,7 @@ export function useOrganisationOpportunities(organisationSlug: string) {
 
   const createOpportunityMutation = useMutation({
     mutationFn: async (data: CreateOrganisationOpportunityData): Promise<OrganisationOpportunity> => {
-      const response = await fetch(`${API_URL}/organisations/managed/${organisationSlug}/opportunities`, {
+      const response = await fetch(`${API_URL}/api/organisations/managed/${organisationSlug}/opportunities/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -78,7 +84,7 @@ export function useOrganisationOpportunities(organisationSlug: string) {
 
   const updateOpportunityMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: UpdateOrganisationOpportunityData }): Promise<OrganisationOpportunity> => {
-      const response = await fetch(`${API_URL}/organisations/managed/${organisationSlug}/opportunities/${id}`, {
+      const response = await fetch(`${API_URL}/api/organisations/managed/${organisationSlug}/opportunities/${id}/`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -99,7 +105,7 @@ export function useOrganisationOpportunities(organisationSlug: string) {
 
   const deleteOpportunityMutation = useMutation({
     mutationFn: async (id: string): Promise<void> => {
-      const response = await fetch(`${API_URL}/organisations/managed/${organisationSlug}/opportunities/${id}`, {
+      const response = await fetch(`${API_URL}/api/organisations/managed/${organisationSlug}/opportunities/${id}/`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

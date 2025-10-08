@@ -321,7 +321,7 @@ async def delete_managed_organisation(request, organisation_slug: str):
 
 # Opportunity management endpoints for organisations
 
-@organisations_router.get("/managed/{organisation_slug}/opportunities", response=List[OrganisationOpportunitySchema], tags=["Organisations"])
+@organisations_router.get("/managed/{organisation_slug}/opportunities/", response=List[OrganisationOpportunitySchema], tags=["Organisations"])
 async def list_organisation_opportunities(request, organisation_slug: str):
     """List opportunities for a managed organisation."""
     user = await get_user_from_token(request)
@@ -371,7 +371,7 @@ async def list_organisation_opportunities(request, organisation_slug: str):
     return await build_response_data()
 
 
-@organisations_router.post("/managed/{organisation_slug}/opportunities", response=OrganisationOpportunitySchema, tags=["Organisations"])
+@organisations_router.post("/managed/{organisation_slug}/opportunities/", response=OrganisationOpportunitySchema, tags=["Organisations"])
 async def create_organisation_opportunity(request, organisation_slug: str, payload: OrganisationOpportunityCreateSchema):
     """Create a new opportunity for a managed organisation."""
     user = await get_user_from_token(request)
@@ -432,7 +432,7 @@ async def create_organisation_opportunity(request, organisation_slug: str, paylo
     )
 
 
-@organisations_router.get("/managed/{organisation_slug}/opportunities/{opportunity_id}", response=OrganisationOpportunitySchema, tags=["Organisations"])
+@organisations_router.get("/managed/{organisation_slug}/opportunities/{opportunity_id}/", response=OrganisationOpportunitySchema, tags=["Organisations"])
 async def get_organisation_opportunity(request, organisation_slug: str, opportunity_id: str):
     """Get a specific opportunity for a managed organisation."""
     user = await get_user_from_token(request)
@@ -483,7 +483,7 @@ async def get_organisation_opportunity(request, organisation_slug: str, opportun
     )
 
 
-@organisations_router.put("/managed/{organisation_slug}/opportunities/{opportunity_id}", response=OrganisationOpportunitySchema, tags=["Organisations"])
+@organisations_router.put("/managed/{organisation_slug}/opportunities/{opportunity_id}/", response=OrganisationOpportunitySchema, tags=["Organisations"])
 async def update_organisation_opportunity(request, organisation_slug: str, opportunity_id: str, payload: OrganisationOpportunityUpdateSchema):
     """Update a specific opportunity for a managed organisation."""
     user = await get_user_from_token(request)
@@ -537,7 +537,7 @@ async def update_organisation_opportunity(request, organisation_slug: str, oppor
     )
 
 
-@organisations_router.delete("/managed/{organisation_slug}/opportunities/{opportunity_id}", response=dict, tags=["Organisations"])
+@organisations_router.delete("/managed/{organisation_slug}/opportunities/{opportunity_id}/", response=dict, tags=["Organisations"])
 async def delete_organisation_opportunity(request, organisation_slug: str, opportunity_id: str):
     """Delete a specific opportunity for a managed organisation."""
     user = await get_user_from_token(request)

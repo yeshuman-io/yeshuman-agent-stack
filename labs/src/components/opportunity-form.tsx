@@ -6,6 +6,7 @@ import { Label } from './ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { ArrowLeft, Save, Loader2 } from 'lucide-react'
 import { useOrganisationOpportunities, OrganisationOpportunity, CreateOrganisationOpportunityData, UpdateOrganisationOpportunityData } from '../hooks/use-organisation-opportunities'
+import { OpportunitySkillsEditor, OpportunitySkill } from './opportunity-skills-editor'
 
 interface OpportunityFormProps {
   organisationSlug: string
@@ -26,6 +27,7 @@ export function OpportunityForm({
     title: '',
     description: ''
   })
+  const [skills, setSkills] = useState<OpportunitySkill[]>([])
 
   const isEditing = !!opportunity
   const isLoading = isCreating || isUpdating
@@ -36,6 +38,11 @@ export function OpportunityForm({
         title: opportunity.title,
         description: opportunity.description
       })
+      setSkills(opportunity.skills.map(s => ({
+        skill_id: s.id,
+        skill_name: s.skill_name,
+        requirement_type: s.requirement_type as 'required' | 'preferred'
+      })))
     }
   }, [opportunity])
 
@@ -64,7 +71,11 @@ export function OpportunityForm({
       } else {
         const createData: CreateOrganisationOpportunityData = {
           title: formData.title,
-          description: formData.description
+          description: formData.description,
+          skills: skills.map(s => ({
+            skill_id: s.skill_id,
+            requirement_type: s.requirement_type
+          }))
         }
         await createOpportunity(createData)
       }
@@ -126,6 +137,7 @@ export function OpportunityForm({
               />
             </div>
 
+            {/* Form Actions */}
             <div className="flex justify-end gap-3">
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
@@ -147,6 +159,12 @@ export function OpportunityForm({
           </form>
         </CardContent>
       </Card>
+
+      {/* Skills Section */}
+      <OpportunitySkillsEditor
+        skills={skills}
+        onSkillsChange={setSkills}
+      />
     </div>
   )
 }
