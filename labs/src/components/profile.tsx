@@ -5,15 +5,29 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Textarea } from './ui/textarea'
 import { Badge } from './ui/badge'
-import { useProfile, ProfileData } from '../hooks/use-profile'
-import { User, MapPin, Plus, X, Edit, Save, Loader2 } from 'lucide-react'
+import { DatePicker } from './ui/date-picker'
+import { useProfile, ProfileData, Experience } from '../hooks/use-profile'
+import { User, MapPin, Plus, X, Edit, Save, Loader2, Trash2 } from 'lucide-react'
 
 export function Profile() {
-  const { profile, isLoading, error, updateProfile, isUpdating, updateError } = useProfile()
+  const { profile, isLoading, error, updateProfile, isUpdating, updateError, addExperience, updateExperience, deleteExperience, addExperienceSkill, removeExperienceSkill } = useProfile()
   const [editing, setEditing] = useState(false)
   const [formData, setFormData] = useState<ProfileData>({})
   const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set())
   const [previousProfile, setPreviousProfile] = useState<ProfileData | null>(null)
+
+  // Experience UI state
+  const [newExperience, setNewExperience] = useState<Partial<Experience>>({ title: '', company: '', start_date: '' })
+  const [newExperienceStartDate, setNewExperienceStartDate] = useState<Date>()
+  const [newExperienceEndDate, setNewExperienceEndDate] = useState<Date>()
+  const [experienceError, setExperienceError] = useState<string | null>(null)
+  const [editingExperienceId, setEditingExperienceId] = useState<string | null>(null)
+  const [editingExperienceForm, setEditingExperienceForm] = useState<Partial<Experience>>({})
+  const [editingStartDate, setEditingStartDate] = useState<Date>()
+  const [editingEndDate, setEditingEndDate] = useState<Date>()
+
+  // Experience skills UI state
+  const [newSkillInputs, setNewSkillInputs] = useState<Record<string, string>>({}) // experienceId -> skill name input
 
   // Track profile changes and highlight differences
   React.useEffect(() => {
@@ -87,6 +101,98 @@ export function Profile() {
         setEditing(false)
       },
     })
+  }
+
+  const formatDateRange = (start?: string, end?: string | null) => {
+    if (!start) return 'Unknown'
+    const startStr = start.slice(0, 7) // YYYY-MM
+    const endStr = end ? end.slice(0, 7) : 'Present'
+    return `${startStr} - ${endStr}`
+  }
+
+  const resetNewExperience = () => {
+    setNewExperience({ title: '', company: '', start_date: '', description: '', end_date: '' })
+    setNewExperienceStartDate(undefined)
+    setNewExperienceEndDate(undefined)
+    setExperienceError(null)
+  }
+
+  const handleAddExperience = () => {
+    setExperienceError(null)
+    const { title, company } = newExperience
+    if (!title?.trim() || !company?.trim() || !newExperienceStartDate) {
+      setExperienceError('Title, company, and start date are required')
+      return
+    }
+
+    const startDateStr = newExperienceStartDate.toISOString().split('T')[0]
+    const endDateStr = newExperienceEndDate ? newExperienceEndDate.toISOString().split('T')[0] : undefined
+
+    addExperience({
+      title: title.trim(),
+      company: company.trim(),
+      start_date: startDateStr,
+      description: newExperience.description?.trim() || '',
+      end_date: endDateStr,
+    })
+    resetNewExperience()
+  }
+
+  const startEditingExperience = (exp: Experience) => {
+    setEditingExperienceId(exp.id)
+    setEditingExperienceForm({
+      title: exp.title,
+      company: exp.company,
+      start_date: exp.start_date,
+      end_date: exp.end_date || '',
+      description: exp.description || '',
+    })
+    setEditingStartDate(exp.start_date ? new Date(exp.start_date) : undefined)
+    setEditingEndDate(exp.end_date ? new Date(exp.end_date) : undefined)
+  }
+
+  const cancelEditingExperience = () => {
+    setEditingExperienceId(null)
+    setEditingExperienceForm({})
+    setEditingStartDate(undefined)
+    setEditingEndDate(undefined)
+  }
+
+  const handleUpdateExperience = (id: string) => {
+    const updates: Partial<Experience> = {}
+    if (editingExperienceForm.title !== undefined) updates.title = editingExperienceForm.title || ''
+    if (editingExperienceForm.company !== undefined) updates.company = editingExperienceForm.company || ''
+    if (editingStartDate !== undefined) updates.start_date = editingStartDate ? editingStartDate.toISOString().split('T')[0] : ''
+    if (editingEndDate !== undefined) updates.end_date = editingEndDate ? editingEndDate.toISOString().split('T')[0] : undefined
+    if (editingExperienceForm.description !== undefined) updates.description = editingExperienceForm.description || ''
+
+    if (!updates.title?.trim() || !updates.company?.trim() || !updates.start_date?.trim()) {
+      setExperienceError('Title, company, and start date are required')
+      return
+    }
+
+    updateExperience({ id, updates })
+    cancelEditingExperience()
+  }
+
+  const handleDeleteExperience = (id: string) => {
+    deleteExperience(id)
+  }
+
+  const handleAddExperienceSkill = (experienceId: string) => {
+    const skillName = newSkillInputs[experienceId]?.trim()
+    if (!skillName) return
+
+    addExperienceSkill({ experienceId, skillName })
+    setNewSkillInputs(prev => ({ ...prev, [experienceId]: '' }))
+  }
+
+  const handleRemoveExperienceSkill = (experienceId: string, skillName: string) => {
+    removeExperienceSkill({ experienceId, skillName })
+  }
+
+  const updateSkillInput = (experienceId: string, value: string) => {
+    setNewSkillInputs(prev => ({ ...prev, [experienceId]: value }))
   }
 
   const addSkill = (skill: string) => {
@@ -339,16 +445,204 @@ export function Profile() {
           </CardContent>
         </Card>
 
-        {/* Coming Soon */}
+        {/* Experience */}
         <Card>
           <CardHeader>
-            <CardTitle>Coming Soon</CardTitle>
-            <CardDescription>Experience, education, and advanced profile features</CardDescription>
+            <CardTitle>Experience</CardTitle>
+            <CardDescription>Add and manage your work experience</CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              More profile features like work experience, education, and detailed skills will be available soon.
-            </p>
+          <CardContent className="space-y-4">
+            {editing ? (
+              <>
+                {/* Add form */}
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="exp_title">Title *</Label>
+                      <Input id="exp_title" value={newExperience.title || ''} onChange={(e) => setNewExperience(prev => ({ ...prev, title: e.target.value }))} placeholder="e.g., Software Engineer" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="exp_company">Company *</Label>
+                      <Input id="exp_company" value={newExperience.company || ''} onChange={(e) => setNewExperience(prev => ({ ...prev, company: e.target.value }))} placeholder="e.g., Talentco" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Start Date *</Label>
+                      <DatePicker
+                        date={newExperienceStartDate}
+                        onSelect={setNewExperienceStartDate}
+                        placeholder="Select start date"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>End Date (optional)</Label>
+                      <DatePicker
+                        date={newExperienceEndDate}
+                        onSelect={setNewExperienceEndDate}
+                        placeholder="Select end date (leave empty for current)"
+                        showClearButton={true}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="exp_desc">Description</Label>
+                    <Textarea id="exp_desc" rows={3} value={newExperience.description || ''} onChange={(e) => setNewExperience(prev => ({ ...prev, description: e.target.value }))} placeholder="What did you do?" />
+                  </div>
+                  {experienceError && (
+                    <p className="text-sm text-destructive">{experienceError}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button type="button" onClick={handleAddExperience}><Plus className="h-4 w-4 mr-1" /> Add experience</Button>
+                    <Button type="button" variant="outline" onClick={resetNewExperience}><X className="h-4 w-4 mr-1" /> Reset</Button>
+                  </div>
+                </div>
+
+                {/* List with inline edit */}
+                <div className="space-y-3">
+                  {(profile?.experiences || []).map((exp) => (
+                    <div key={exp.id} className="p-3 border rounded-md">
+                      {editingExperienceId === exp.id ? (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Title *</Label>
+                              <Input value={editingExperienceForm.title || ''} onChange={(e) => setEditingExperienceForm(prev => ({ ...prev, title: e.target.value }))} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Company *</Label>
+                              <Input value={editingExperienceForm.company || ''} onChange={(e) => setEditingExperienceForm(prev => ({ ...prev, company: e.target.value }))} />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Start Date *</Label>
+                              <DatePicker
+                                date={editingStartDate}
+                                onSelect={setEditingStartDate}
+                                placeholder="Select start date"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>End Date</Label>
+                              <DatePicker
+                                date={editingEndDate}
+                                onSelect={setEditingEndDate}
+                                placeholder="Select end date (leave empty for current)"
+                                showClearButton={true}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Description</Label>
+                            <Textarea rows={3} value={editingExperienceForm.description || ''} onChange={(e) => setEditingExperienceForm(prev => ({ ...prev, description: e.target.value }))} />
+                          </div>
+                          {/* Skills management */}
+                          <div className="space-y-2">
+                            <Label>Skills</Label>
+                            <div className="flex flex-wrap gap-2 min-h-[2rem]">
+                              {(exp.skills || []).map((skill) => (
+                                <Badge key={skill} variant="secondary" className="flex items-center gap-1 px-3 py-1">
+                                  {skill}
+                                  <span title={`Remove ${skill}`}>
+                                    <X
+                                      className="h-3 w-3 cursor-pointer hover:text-destructive transition-colors"
+                                      onClick={() => handleRemoveExperienceSkill(exp.id, skill)}
+                                    />
+                                  </span>
+                                </Badge>
+                              ))}
+                            </div>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Add a skill..."
+                                value={newSkillInputs[exp.id] || ''}
+                                onChange={(e) => updateSkillInput(exp.id, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    handleAddExperienceSkill(exp.id)
+                                  }
+                                }}
+                                className="flex-1"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={() => handleAddExperienceSkill(exp.id)}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button type="button" onClick={() => handleUpdateExperience(exp.id)}><Save className="h-4 w-4 mr-1" /> Save</Button>
+                            <Button type="button" variant="outline" onClick={cancelEditingExperience}><X className="h-4 w-4 mr-1" /> Cancel</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="font-medium">{exp.title} <span className="text-muted-foreground">@ {exp.company}</span></p>
+                            <p className="text-xs text-muted-foreground">{formatDateRange(exp.start_date, exp.end_date)}</p>
+                            {exp.description && (
+                              <p className="text-sm text-muted-foreground mt-1">{exp.description}</p>
+                            )}
+                            {/* Skills display */}
+                            {(exp.skills || []).length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {(exp.skills || []).map((skill) => (
+                                  <Badge key={skill} variant="outline" className="text-xs px-2 py-0">
+                                    {skill}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            <Button type="button" size="icon" variant="outline" onClick={() => startEditingExperience(exp)}><Edit className="h-4 w-4" /></Button>
+                            <Button type="button" size="icon" variant="destructive" onClick={() => handleDeleteExperience(exp.id)}><Trash2 className="h-4 w-4" /></Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {(!profile?.experiences || profile.experiences.length === 0) && (
+                    <p className="text-sm text-muted-foreground">No experiences added yet</p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                {(profile?.experiences || []).map((exp) => (
+                  <div key={exp.id} className="p-3 border rounded-md">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="font-medium">{exp.title} <span className="text-muted-foreground">@ {exp.company}</span></p>
+                        <p className="text-xs text-muted-foreground">{formatDateRange(exp.start_date, exp.end_date)}</p>
+                        {exp.description && (
+                          <p className="text-sm text-muted-foreground mt-1">{exp.description}</p>
+                        )}
+                        {/* Skills display */}
+                        {(exp.skills || []).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {(exp.skills || []).map((skill) => (
+                              <Badge key={skill} variant="outline" className="text-xs px-2 py-0">
+                                {skill}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {(!profile?.experiences || profile.experiences.length === 0) && (
+                  <p className="text-sm text-muted-foreground">No experiences added yet</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
