@@ -172,7 +172,6 @@ async def create_organisation(request, payload: OrganisationCreateSchema):
     )
 
 
-
 # Employer-focused organisation endpoints (integrated into main router)
 
 @organisations_router.get("/managed", response=List[OrganisationSchema], tags=["Organisations"])
@@ -232,7 +231,7 @@ async def create_managed_organisation(request, payload: OrganisationCreateSchema
     )
 
 
-@organisations_router.get("/managed/{organisation_slug}", response=OrganisationSchema, tags=["Organisations"])
+@organisations_router.get("/managed/{organisation_slug}/", response=OrganisationSchema, tags=["Organisations"])
 async def get_managed_organisation(request, organisation_slug: str):
     """Get a specific organisation by slug (must be managed by the authenticated employer user)."""
     user = await get_user_from_token(request)
@@ -262,7 +261,7 @@ async def get_managed_organisation(request, organisation_slug: str):
     )
 
 
-@organisations_router.put("/managed/{organisation_slug}", response=OrganisationSchema, tags=["Organisations"])
+@organisations_router.put("/managed/{organisation_slug}/", response=OrganisationSchema, tags=["Organisations"])
 async def update_managed_organisation(request, organisation_slug: str, payload: OrganisationUpdateSchema):
     """Update a specific organisation by slug (must be managed by the authenticated employer user)."""
     user = await get_user_from_token(request)
@@ -297,7 +296,7 @@ async def update_managed_organisation(request, organisation_slug: str, payload: 
     )
 
 
-@organisations_router.delete("/managed/{organisation_slug}", response=dict, tags=["Organisations"])
+@organisations_router.delete("/managed/{organisation_slug}/", response=dict, tags=["Organisations"])
 async def delete_managed_organisation(request, organisation_slug: str):
     """Delete a specific organisation by slug (must be managed by the authenticated employer user)."""
     user = await get_user_from_token(request)
@@ -585,3 +584,5 @@ async def get_organisation(request, organisation_id: str):
         created_at=organisation.created_at,
         updated_at=organisation.updated_at
     )
+
+
