@@ -50,6 +50,9 @@ export function EmployerEvaluations() {
     enabled: !!selectedOpportunity, // Only fetch when opportunity is selected
   })
 
+  // Track invited candidates for immediate UI updates
+  const [invitedCandidates, setInvitedCandidates] = useState<Set<string>>(new Set())
+
   // Create a map of candidate profile IDs who have applied to the current opportunity
   const appliedCandidatesMap = useMemo(() => {
     const appliedProfiles: Set<string> = new Set()
@@ -63,6 +66,13 @@ export function EmployerEvaluations() {
     }
     return appliedProfiles
   }, [applicationsQuery.data, selectedOpportunity])
+
+  // Combined set of candidates who have either applied or been invited
+  const unavailableCandidatesMap = useMemo(() => {
+    const combined = new Set(appliedCandidatesMap)
+    invitedCandidates.forEach(id => combined.add(id))
+    return combined
+  }, [appliedCandidatesMap, invitedCandidates])
 
   // Reset show counts when evaluations data changes
   useEffect(() => {
@@ -103,8 +113,8 @@ export function EmployerEvaluations() {
   }
 
   const handleInviteCandidate = async (profileId: string, opportunityId: string) => {
-    // Don't allow inviting candidates who have already applied
-    if (appliedCandidatesMap.has(profileId)) {
+    // Don't allow inviting candidates who have already applied or been invited
+    if (unavailableCandidatesMap.has(profileId)) {
       return
     }
 
@@ -123,8 +133,9 @@ export function EmployerEvaluations() {
       })
 
       if (response.ok) {
+        // Immediately update UI state
+        setInvitedCandidates(prev => new Set(prev).add(profileId))
         toast.success('Candidate invited successfully!')
-        // Could refresh evaluations here if needed
       } else {
         const error = await response.json()
         toast.error(error.error || 'Failed to invite candidate')
@@ -330,7 +341,7 @@ export function EmployerEvaluations() {
                                 AI Reviewed
                               </Badge>
                             )}
-                            {appliedCandidatesMap.has(evaluation.profile_id) ? (
+                            {unavailableCandidatesMap.has(evaluation.profile_id) ? (
                               <Button
                                 size="sm"
                                 disabled
