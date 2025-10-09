@@ -134,10 +134,11 @@ export function useEvaluations(profileId?: string, opportunityId?: string) {
 
   // Mutation for regenerating evaluations (employer perspective)
   const regenerateForOpportunityMutation = useMutation({
-    mutationFn: async ({ opportunityId, threshold, limit }: {
+    mutationFn: async ({ opportunityId, threshold, limit, appliedFilter }: {
       opportunityId: string,
       threshold?: number,
-      limit?: number
+      limit?: number,
+      appliedFilter?: string
     }): Promise<MatchingResponse> => {
       if (!token) throw new Error('Not authenticated')
 
@@ -150,6 +151,7 @@ export function useEvaluations(profileId?: string, opportunityId?: string) {
         body: JSON.stringify({
           llm_similarity_threshold: threshold ?? 0.7,
           limit: limit ?? 10,
+          applied_filter: appliedFilter,
         }),
       })
 

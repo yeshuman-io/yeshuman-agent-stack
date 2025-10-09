@@ -27,6 +27,7 @@ export function EmployerEvaluations() {
   const { opportunities, isLoading: oppsLoading } = useOrganisationOpportunities(selectedOrganisation)
   const { evaluations, regenerateForOpportunity, isRegenerating } = useEvaluations(undefined, selectedOpportunity)
   const [showCounts, setShowCounts] = useState<Record<string, number>>({})
+  const [appliedFilter, setAppliedFilter] = useState<'all' | 'applied' | 'not_applied'>('all')
 
   // Reset show counts when evaluations data changes
   useEffect(() => {
@@ -60,7 +61,8 @@ export function EmployerEvaluations() {
       regenerateForOpportunity({
         opportunityId: selectedOpportunity,
         threshold: 0.7,
-        limit: 10
+        limit: 10,
+        appliedFilter: appliedFilter === 'all' ? undefined : appliedFilter
       })
     }
   }
@@ -194,6 +196,27 @@ export function EmployerEvaluations() {
               ) : (
                 <div className="text-sm text-muted-foreground">Select an organisation first</div>
               )}
+            </div>
+
+            {/* Applied Filter Toggle */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Filter Candidates</label>
+              <Select
+                value={appliedFilter}
+                onValueChange={(value: 'all' | 'applied' | 'not_applied') => setAppliedFilter(value)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Filter candidates..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Candidates</SelectItem>
+                  <SelectItem value="applied">Applied Candidates</SelectItem>
+                  <SelectItem value="not_applied">Not Applied Candidates</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Filter to see only candidates who have or haven't applied to this job
+              </p>
             </div>
 
             {/* Run Evaluation Button */}

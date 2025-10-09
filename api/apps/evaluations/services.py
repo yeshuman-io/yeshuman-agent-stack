@@ -391,7 +391,38 @@ class EvaluationService:
         
         # Return average of best matches for each opportunity experience
         return sum(similarities) / len(similarities) if similarities else 0.0
-    
+
+    def _get_filtered_evaluations(self, eval_set: EvaluationSet, limit: int = None, applied_filter: str = None):
+        """
+        Get evaluations with optional filtering by application status.
+        applied_filter: "applied", "not_applied", or None for all
+        """
+        from apps.applications.models import Application
+
+        evaluations = eval_set.evaluations.select_related('profile')
+
+        if applied_filter == "applied":
+            # Only show candidates who have applied to this opportunity
+            applied_profile_ids = Application.objects.filter(
+                opportunity_id=eval_set.opportunity_id,
+                profile__in=[e.profile_id for e in evaluations]
+            ).values_list('profile_id', flat=True)
+            evaluations = evaluations.filter(profile_id__in=applied_profile_ids)
+        elif applied_filter == "not_applied":
+            # Only show candidates who have NOT applied to this opportunity
+            applied_profile_ids = Application.objects.filter(
+                opportunity_id=eval_set.opportunity_id,
+                profile__in=[e.profile_id for e in evaluations]
+            ).values_list('profile_id', flat=True)
+            evaluations = evaluations.exclude(profile_id__in=applied_profile_ids)
+
+        # Apply ordering and limit
+        evaluations = evaluations.order_by('rank_in_set')
+        if limit:
+            evaluations = evaluations[:limit]
+
+        return list(evaluations)
+
     def _calculate_contextual_skills_similarity(self, profile: Profile, opportunity: Opportunity) -> float:
         """
         Calculate semantic similarity between ProfileExperienceSkills and OpportunitySkills
@@ -588,10 +619,11 @@ Respond in JSON format: {{"score": 0.85, "reasoning": "detailed analysis here"}}
     # ================================================================
     
     async def find_candidates_for_opportunity_async(
-        self, 
+        self,
         opportunity_id: str,
         llm_similarity_threshold: float = 0.7,
-        limit: int = None
+        limit: int = None,
+        applied_filter: str = None  # "applied", "not_applied", or None for all
     ) -> Dict:
         """
         Async version for employer agent tools.
@@ -601,11 +633,9 @@ Respond in JSON format: {{"score": 0.85, "reasoning": "detailed analysis here"}}
         sync_create = sync_to_async(self.create_candidate_evaluation_set)
         eval_set = await sync_create(opportunity_id, llm_similarity_threshold)
         
-        # Get top matches 
+        # Get top matches with optional applied filter
         sync_get_evaluations = sync_to_async(
-            lambda: list(eval_set.evaluations.select_related(
-                'profile'
-            ).order_by('rank_in_set')[:limit] if limit else eval_set.evaluations.all())
+            lambda: self._get_filtered_evaluations(eval_set, limit, applied_filter)
         )
         evaluations = await sync_get_evaluations()
         

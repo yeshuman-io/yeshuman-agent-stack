@@ -77,6 +77,7 @@ class MatchingRequestSchema(Schema):
     """Request schema for matching operations."""
     llm_similarity_threshold: Optional[float] = 0.7
     limit: Optional[int] = 10
+    applied_filter: Optional[str] = None  # "applied", "not_applied", or None for all
 
 
 class OpportunityFitAnalysisSchema(Schema):
@@ -227,7 +228,8 @@ async def find_candidates_for_opportunity(request, opportunity_id: str, payload:
         result = await service.find_candidates_for_opportunity_async(
             opportunity_id=opportunity_id,
             llm_similarity_threshold=payload.llm_similarity_threshold,
-            limit=payload.limit
+            limit=payload.limit,
+            applied_filter=payload.applied_filter
         )
 
         return MatchingResponseSchema(
