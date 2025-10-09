@@ -448,6 +448,7 @@ async def apply_to_opportunity(request, payload: ApplicationApplySchema):
     """Apply to an opportunity (requires authentication)."""
     from yeshuman.api import get_user_from_token
     from apps.profiles.models import Profile
+    from asgiref.sync import sync_to_async
 
     # Get current user and their profile
     user = await get_user_from_token(request)
@@ -455,21 +456,21 @@ async def apply_to_opportunity(request, payload: ApplicationApplySchema):
         return 400, {"error": "Authentication required"}
 
     @sync_to_async
-    def get_profile_id():
+    def get_profile():
         try:
-            return str(user.profile.id)
-        except:
+            return Profile.objects.get(email=user.email)
+        except Profile.DoesNotExist:
             return None
 
-    profile_id = await get_profile_id()
-    if not profile_id:
+    profile = await get_profile()
+    if not profile:
         return 400, {"error": "Profile not found"}
 
     # Create application using service
     service = ApplicationService()
     try:
         result = await service.create_application(
-            profile_id=profile_id,
+            profile_id=str(profile.id),
             opportunity_id=payload.opportunity_id,
             source="direct",
             answers=payload.answers
@@ -483,7 +484,7 @@ async def apply_to_opportunity(request, payload: ApplicationApplySchema):
 
     return 200, ApplicationSchema(
         id=str(application.id),
-        profile_id=str(application.profile.id),
+        profile_id=str(profile.id),
         opportunity_title=application.opportunity.title,
         organisation_name=application.organisation.name,
         status=application.status,
@@ -502,19 +503,24 @@ async def apply_to_opportunity(request, payload: ApplicationApplySchema):
 async def list_my_applications(request):
     """List current user's applications."""
     from yeshuman.api import get_user_from_token
+    from apps.profiles.models import Profile
     from asgiref.sync import sync_to_async
 
     user = await get_user_from_token(request)
-    if not user:
+    if not user or not user.is_authenticated:
         return []
 
     @sync_to_async
-    def get_applications_sync():
-        return list(user.profile.applications.all().prefetch_related(
-            'opportunity', 'organisation', 'current_stage_instance__stage_template'
-        ))
+    def get_profile_and_applications():
+        try:
+            profile = Profile.objects.get(email=user.email)
+            return list(profile.applications.all().prefetch_related(
+                'opportunity', 'organisation', 'current_stage_instance__stage_template'
+            ))
+        except Profile.DoesNotExist:
+            return []
 
-    applications = await get_applications_sync()
+    applications = await get_profile_and_applications()
     return [
         ApplicationSchema(
             id=str(app.id),
