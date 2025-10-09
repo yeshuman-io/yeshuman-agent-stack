@@ -24,6 +24,7 @@ class ApplicationSchema(Schema):
     """Schema for Application model."""
     id: str
     profile_id: str
+    opportunity_id: str
     opportunity_title: str
     organisation_name: str
     status: str
