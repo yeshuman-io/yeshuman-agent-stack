@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useEvaluations } from '../../hooks/use-evaluations'
 import { useOrganisations } from '../../hooks/use-organisations'
 import { useOrganisationOpportunities } from '../../hooks/use-organisation-opportunities'
+import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
@@ -28,6 +29,40 @@ export function EmployerEvaluations() {
   const { evaluations, regenerateForOpportunity, isRegenerating } = useEvaluations(undefined, selectedOpportunity)
   const [showCounts, setShowCounts] = useState<Record<string, number>>({})
   const [appliedFilter, setAppliedFilter] = useState<'all' | 'applied' | 'not_applied'>('all')
+
+  // Fetch applications to check candidate application status
+  const applicationsQuery = useQuery({
+    queryKey: ['my-applications'],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token')
+      if (!token) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/applications/my', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) throw new Error('Failed to fetch applications')
+      return response.json()
+    },
+    enabled: !!selectedOpportunity, // Only fetch when opportunity is selected
+  })
+
+  // Create a map of candidate profile IDs who have applied to the current opportunity
+  const appliedCandidatesMap = useMemo(() => {
+    const appliedProfiles: Set<string> = new Set()
+    if (applicationsQuery.data && Array.isArray(applicationsQuery.data) && selectedOpportunity) {
+      applicationsQuery.data.forEach((app: any) => {
+        // Only include applications for the currently selected opportunity
+        if (app.opportunity_id === selectedOpportunity && app.profile_id) {
+          appliedProfiles.add(app.profile_id)
+        }
+      })
+    }
+    return appliedProfiles
+  }, [applicationsQuery.data, selectedOpportunity])
 
   // Reset show counts when evaluations data changes
   useEffect(() => {
@@ -68,6 +103,11 @@ export function EmployerEvaluations() {
   }
 
   const handleInviteCandidate = async (profileId: string, opportunityId: string) => {
+    // Don't allow inviting candidates who have already applied
+    if (appliedCandidatesMap.has(profileId)) {
+      return
+    }
+
     try {
       const token = localStorage.getItem('auth_token')
       const response = await fetch('/api/applications/invite', {
@@ -290,15 +330,26 @@ export function EmployerEvaluations() {
                                 AI Reviewed
                               </Badge>
                             )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleInviteCandidate(evaluation.profile_id, selectedOpportunity)}
-                              className="h-7 px-2"
-                            >
-                              <UserPlus className="h-3 w-3 mr-1" />
-                              Invite
-                            </Button>
+                            {appliedCandidatesMap.has(evaluation.profile_id) ? (
+                              <Button
+                                size="sm"
+                                disabled
+                                className="h-7 px-2 bg-green-100 text-green-800 hover:bg-green-100"
+                              >
+                                <UserPlus className="h-3 w-3 mr-1" />
+                                Applied
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleInviteCandidate(evaluation.profile_id, selectedOpportunity)}
+                                className="h-7 px-2"
+                              >
+                                <UserPlus className="h-3 w-3 mr-1" />
+                                Invite
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>
