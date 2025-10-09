@@ -341,7 +341,7 @@ export function EmployerEvaluations() {
                                 AI Reviewed
                               </Badge>
                             )}
-                            {unavailableCandidatesMap.has(evaluation.profile_id) ? (
+                            {appliedCandidatesMap.has(evaluation.profile_id) ? (
                               <Button
                                 size="sm"
                                 disabled
@@ -349,6 +349,15 @@ export function EmployerEvaluations() {
                               >
                                 <UserPlus className="h-3 w-3 mr-1" />
                                 Applied
+                              </Button>
+                            ) : invitedCandidates.has(evaluation.profile_id) ? (
+                              <Button
+                                size="sm"
+                                disabled
+                                className="h-7 px-2 bg-blue-100 text-blue-800 hover:bg-blue-100"
+                              >
+                                <UserPlus className="h-3 w-3 mr-1" />
+                                Invited
                               </Button>
                             ) : (
                               <Button
