@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useEvaluations } from '../../hooks/use-evaluations'
 import { useProfile } from '../../hooks/use-profile'
+import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
@@ -19,6 +20,43 @@ export function CandidateEvaluations() {
   const { profile, isLoading: profileLoading, error: profileError } = useProfile()
   const { evaluations, isLoading, error, regenerate, isRegenerating } = useEvaluations(profile?.id)
   const [showCounts, setShowCounts] = useState<Record<string, number>>({})
+
+  // Fetch user's applications to check application status
+  const applicationsQuery = useQuery({
+    queryKey: ['my-applications'],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token')
+      if (!token) throw new Error('Not authenticated')
+
+      const response = await fetch('/api/applications/my', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) throw new Error('Failed to fetch applications')
+      return response.json()
+    },
+    enabled: !!profile?.id,
+  })
+
+  // Create a map of opportunity IDs to application status
+  const applicationStatusMap = useMemo(() => {
+    const map: Record<string, { status: string; applied_at: string }> = {}
+    if (applicationsQuery.data) {
+      console.log('Applications data:', applicationsQuery.data)
+      applicationsQuery.data.forEach((app: any) => {
+        console.log('Processing application:', app.opportunity_id, app.status)
+        map[app.opportunity_id] = {
+          status: app.status,
+          applied_at: app.applied_at
+        }
+      })
+      console.log('Application status map:', map)
+    }
+    return map
+  }, [applicationsQuery.data])
 
   // Apply modal state
   const [applyModalOpen, setApplyModalOpen] = useState(false)
@@ -42,12 +80,18 @@ export function CandidateEvaluations() {
   }
 
   const handleApplyClick = async (opportunityId: string) => {
+    // Don't allow applying if already applied
+    if (applicationStatusMap[opportunityId]) {
+      return
+    }
+
     setSelectedOpportunityId(opportunityId)
     setAnswers({})
 
     // Fetch screening questions for this opportunity
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
+      console.log('Fetching questions for opportunity:', opportunityId)
       const response = await fetch(`/api/opportunities/${opportunityId}/questions`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -57,8 +101,10 @@ export function CandidateEvaluations() {
 
       if (response.ok) {
         const questions = await response.json()
+        console.log('Questions loaded:', questions)
         setScreeningQuestions(questions)
       } else {
+        console.log('Questions endpoint returned:', response.status)
         setScreeningQuestions([])
       }
     } catch (error) {
@@ -76,22 +122,59 @@ export function CandidateEvaluations() {
     }))
   }
 
+  const validateAnswers = () => {
+    for (const question of screeningQuestions) {
+      if (question.is_required) {
+        const answer = answers[question.id]
+        if (answer === undefined || answer === null || answer === '') {
+          return false
+        }
+        if (Array.isArray(answer) && answer.length === 0) {
+          return false
+        }
+      }
+    }
+    return true
+  }
+
   const handleSubmitApplication = async () => {
     if (!selectedOpportunityId) return
 
+    // Validate required answers
+    if (screeningQuestions.length > 0 && !validateAnswers()) {
+      toast.error('Please answer all required questions')
+      return
+    }
+
     setIsSubmitting(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
+      console.log('Submitting application:', {
+        opportunityId: selectedOpportunityId,
+        hasToken: !!token,
+        tokenPrefix: token ? token.substring(0, 20) + '...' : 'none',
+        screeningQuestionsCount: screeningQuestions.length,
+        answersCount: Object.keys(answers).length
+      })
+      const requestBody: any = {
+        opportunity_id: selectedOpportunityId
+      }
+
+      if (screeningQuestions.length > 0) {
+        requestBody.answers = Object.entries(answers).map(([questionId, value]) => ({
+          question_id: questionId,
+          answer_text: typeof value === 'string' ? value : typeof value === 'boolean' ? (value ? 'true' : 'false') : '',
+          answer_options: Array.isArray(value) ? value : []
+        }))
+      }
+
       const response = await fetch('/api/applications/apply', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          opportunity_id: selectedOpportunityId,
-          answers: screeningQuestions.length > 0 ? answers : undefined
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (response.ok) {
@@ -100,6 +183,7 @@ export function CandidateEvaluations() {
         // Could refresh evaluations here if needed
       } else {
         const error = await response.json()
+        console.error('Application submission error:', error)
         toast.error(error.error || 'Failed to submit application')
       }
     } catch (error) {
@@ -262,14 +346,29 @@ export function CandidateEvaluations() {
                                 AI Reviewed
                               </Badge>
                             )}
-                            <Button
-                              size="sm"
-                              onClick={() => handleApplyClick(evaluation.opportunity_id)}
-                              className="h-8 px-3"
-                            >
-                              <Send className="h-3 w-3 mr-1" />
-                              Apply
-                            </Button>
+                            {(() => {
+                              const status = applicationStatusMap[evaluation.opportunity_id]
+                              console.log(`Button for opportunity ${evaluation.opportunity_id}:`, status ? 'applied' : 'not applied')
+                              return status ? (
+                                <Button
+                                  size="sm"
+                                  disabled
+                                  className="h-8 px-3 bg-green-100 text-green-800 hover:bg-green-100"
+                                >
+                                  <Send className="h-3 w-3 mr-1" />
+                                  Applied
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleApplyClick(evaluation.opportunity_id)}
+                                  className="h-8 px-3"
+                                >
+                                  <Send className="h-3 w-3 mr-1" />
+                                  Apply
+                                </Button>
+                              )
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -391,6 +490,21 @@ export function CandidateEvaluations() {
                             </div>
                           ))}
                         </div>
+                      )}
+
+                      {question.question_type === 'boolean' && (
+                        <Select
+                          value={answers[question.id] === true ? 'true' : answers[question.id] === false ? 'false' : ''}
+                          onValueChange={(value) => handleAnswerChange(question.id, value === 'true')}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select yes or no..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="true">Yes</SelectItem>
+                            <SelectItem value="false">No</SelectItem>
+                          </SelectContent>
+                        </Select>
                       )}
                     </div>
                   ))}

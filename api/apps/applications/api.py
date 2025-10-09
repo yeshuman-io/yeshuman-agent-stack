@@ -452,7 +452,7 @@ async def apply_to_opportunity(request, payload: ApplicationApplySchema):
 
     # Get current user and their profile
     user = await get_user_from_token(request)
-    if not user:
+    if not user or not user.is_authenticated:
         return 400, {"error": "Authentication required"}
 
     @sync_to_async
@@ -482,21 +482,26 @@ async def apply_to_opportunity(request, payload: ApplicationApplySchema):
 
     application = result.application
 
-    return 200, ApplicationSchema(
-        id=str(application.id),
-        profile_id=str(profile.id),
-        opportunity_title=application.opportunity.title,
-        organisation_name=application.organisation.name,
-        status=application.status,
-        source=application.source,
-        applied_at=application.applied_at.isoformat(),
-        current_stage=ApplicationStageSchema(
-            id=str(application.current_stage_instance.id),
-            stage_name=application.current_stage_instance.stage_template.name,
-            entered_at=application.current_stage_instance.entered_at.isoformat(),
-            is_open=application.current_stage_instance.is_open
-        ) if application.current_stage_instance else None
-    )
+    @sync_to_async
+    def build_response():
+        return ApplicationSchema(
+            id=str(application.id),
+            profile_id=str(profile.id),
+            opportunity_title=application.opportunity.title,
+            organisation_name=application.organisation.name,
+            status=application.status,
+            source=application.source,
+            applied_at=application.applied_at.isoformat(),
+            current_stage=ApplicationStageSchema(
+                id=str(application.current_stage_instance.id),
+                stage_name=application.current_stage_instance.stage_template.name,
+                entered_at=application.current_stage_instance.entered_at.isoformat(),
+                is_open=application.current_stage_instance.is_open
+            ) if application.current_stage_instance else None
+        )
+
+    response_data = await build_response()
+    return 200, response_data
 
 
 @applications_router.get("/my", response=List[ApplicationSchema], tags=["Applications"])
@@ -511,33 +516,40 @@ async def list_my_applications(request):
         return []
 
     @sync_to_async
-    def get_profile_and_applications():
+    def get_applications_data():
         try:
             profile = Profile.objects.get(email=user.email)
-            return list(profile.applications.all().prefetch_related(
+            applications = list(profile.applications.all().prefetch_related(
                 'opportunity', 'organisation', 'current_stage_instance__stage_template'
             ))
+
+            # Build the response data synchronously
+            result = []
+            for app in applications:
+                result.append({
+                    'id': str(app.id),
+                    'profile_id': str(app.profile.id),
+                    'opportunity_id': str(app.opportunity.id),
+                    'opportunity_title': app.opportunity.title,
+                    'organisation_name': app.organisation.name,
+                    'status': app.status,
+                    'source': app.source,
+                    'applied_at': app.applied_at.isoformat(),
+                    'current_stage': {
+                        'id': str(app.current_stage_instance.id),
+                        'stage_name': app.current_stage_instance.stage_template.name,
+                        'entered_at': app.current_stage_instance.entered_at.isoformat(),
+                        'is_open': app.current_stage_instance.is_open
+                    } if app.current_stage_instance else None
+                })
+            return result
         except Profile.DoesNotExist:
             return []
 
-    applications = await get_profile_and_applications()
+    applications_data = await get_applications_data()
     return [
-        ApplicationSchema(
-            id=str(app.id),
-            profile_id=str(app.profile.id),
-            opportunity_title=app.opportunity.title,
-            organisation_name=app.organisation.name,
-            status=app.status,
-            source=app.source,
-            applied_at=app.applied_at.isoformat(),
-            current_stage=ApplicationStageSchema(
-                id=str(app.current_stage_instance.id),
-                stage_name=app.current_stage_instance.stage_template.name,
-                entered_at=app.current_stage_instance.entered_at.isoformat(),
-                is_open=app.current_stage_instance.is_open
-            ) if app.current_stage_instance else None
-        )
-        for app in applications
+        ApplicationSchema(**app_data)
+        for app_data in applications_data
     ]
 
 
@@ -552,7 +564,7 @@ async def invite_to_apply(request, payload: ApplicationInviteSchema):
     from apps.organisations.api import check_employer_permissions
 
     user = await get_user_from_token(request)
-    if not user:
+    if not user or not user.is_authenticated:
         return 400, {"error": "Authentication required"}
 
     # Check employer permissions
