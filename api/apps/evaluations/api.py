@@ -17,6 +17,7 @@ class EvaluationSchema(Schema):
     opportunity_id: str
     opportunity_title: str
     opportunity_organisation_name: str
+    candidate_name: Optional[str] = None  # For employer perspective
     final_score: float
     rank_in_set: int
     was_llm_judged: bool
@@ -29,6 +30,8 @@ class EvaluationSetSchema(Schema):
     """Schema for EvaluationSet model."""
     id: str
     evaluator_perspective: str
+    opportunity_id: Optional[str] = None
+    profile_id: Optional[str] = None
     total_evaluated: int
     llm_judged_count: int
     is_complete: bool
@@ -94,12 +97,14 @@ async def list_evaluation_sets(request):
     evaluation_sets = await sync_to_async(list)(
         EvaluationSet.objects.all().prefetch_related(
             'evaluations__profile', 'evaluations__opportunity', 'evaluations__opportunity__organisation'
-        )
+        ).select_related('profile', 'opportunity')
     )
     return [
         EvaluationSetSchema(
             id=str(eval_set.id),
             evaluator_perspective=eval_set.evaluator_perspective,
+            opportunity_id=str(eval_set.opportunity.id) if eval_set.opportunity else None,
+            profile_id=str(eval_set.profile.id) if eval_set.profile else None,
             total_evaluated=eval_set.total_evaluated,
             llm_judged_count=eval_set.llm_judged_count,
             is_complete=eval_set.is_complete,
@@ -110,6 +115,7 @@ async def list_evaluation_sets(request):
                     opportunity_id=str(eval.opportunity.id),
                     opportunity_title=eval.opportunity.title,
                     opportunity_organisation_name=eval.opportunity.organisation.name,
+                    candidate_name=f"{eval.profile.first_name} {eval.profile.last_name}" if eval_set.evaluator_perspective == 'employer' else None,
                     final_score=eval.final_score,
                     rank_in_set=eval.rank_in_set,
                     was_llm_judged=eval.was_llm_judged,
@@ -138,6 +144,8 @@ async def get_evaluation_set(request, evaluation_set_id: str):
     return EvaluationSetSchema(
         id=str(evaluation_set.id),
         evaluator_perspective=evaluation_set.evaluator_perspective,
+        opportunity_id=str(evaluation_set.opportunity.id) if evaluation_set.opportunity else None,
+        profile_id=str(evaluation_set.profile.id) if evaluation_set.profile else None,
         total_evaluated=evaluation_set.total_evaluated,
         llm_judged_count=evaluation_set.llm_judged_count,
         is_complete=evaluation_set.is_complete,
@@ -148,6 +156,7 @@ async def get_evaluation_set(request, evaluation_set_id: str):
                 opportunity_id=str(eval.opportunity.id),
                 opportunity_title=eval.opportunity.title,
                 opportunity_organisation_name=eval.opportunity.organisation.name,
+                candidate_name=f"{eval.profile.first_name} {eval.profile.last_name}" if evaluation_set.evaluator_perspective == 'employer' else None,
                 final_score=eval.final_score,
                 rank_in_set=eval.rank_in_set,
                 was_llm_judged=eval.was_llm_judged,
