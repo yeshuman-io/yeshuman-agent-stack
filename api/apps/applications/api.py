@@ -5,6 +5,7 @@ API endpoints for applications app using Django Ninja.
 from ninja import Router
 from typing import List, Optional
 from datetime import datetime
+from asgiref.sync import sync_to_async
 from apps.applications.models import (
     Application,
     StageTemplate,
