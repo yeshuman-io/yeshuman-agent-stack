@@ -585,16 +585,21 @@ async def invite_to_apply(request, payload: ApplicationInviteSchema):
     except Exception as e:
         return 400, {"error": f"Failed to create invitation: {str(e)}"}
 
-    return 200, ApplicationSchema(
-        id=str(application.id),
-        profile_id=str(application.profile.id),
-        opportunity_id=str(application.opportunity.id),
-        opportunity_title=application.opportunity.title,
-        organisation_name=application.organisation.name,
-        status=application.status,
-        source=application.source,
-        applied_at=application.applied_at.isoformat(),
-        current_stage=None  # Invited applications don't have stages yet
-    )
+    @sync_to_async
+    def build_invite_response():
+        return ApplicationSchema(
+            id=str(application.id),
+            profile_id=str(application.profile.id),
+            opportunity_id=str(application.opportunity.id),
+            opportunity_title=application.opportunity.title,
+            organisation_name=application.organisation.name,
+            status=application.status,
+            source=application.source,
+            applied_at=application.applied_at.isoformat(),
+            current_stage=None  # Invited applications don't have stages yet
+        )
+
+    response_data = await build_invite_response()
+    return 200, response_data
 
 
