@@ -140,7 +140,7 @@ export function CandidateEvaluations() {
                         Evaluation Set #{evaluationSet.id.slice(-8)}
                       </CardTitle>
                       <CardDescription>
-                        Completed {new Date(evaluationSet.completed_at || '').toLocaleDateString()} •
+                        Completed {new Date(evaluationSet.created_at).toLocaleDateString()} •
                         Evaluated {evaluationSet.total_evaluated} opportunities •
                         {evaluationSet.llm_judged_count} AI analyzed
                       </CardDescription>

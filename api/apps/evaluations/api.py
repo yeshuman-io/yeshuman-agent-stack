@@ -35,6 +35,7 @@ class EvaluationSetSchema(Schema):
     total_evaluated: int
     llm_judged_count: int
     is_complete: bool
+    created_at: str
     evaluations: List[EvaluationSchema]
 
 
@@ -108,6 +109,7 @@ async def list_evaluation_sets(request):
             total_evaluated=eval_set.total_evaluated,
             llm_judged_count=eval_set.llm_judged_count,
             is_complete=eval_set.is_complete,
+            created_at=eval_set.created_at.isoformat(),
             evaluations=[
                 EvaluationSchema(
                     id=str(eval.id),
@@ -149,6 +151,7 @@ async def get_evaluation_set(request, evaluation_set_id: str):
         total_evaluated=evaluation_set.total_evaluated,
         llm_judged_count=evaluation_set.llm_judged_count,
         is_complete=evaluation_set.is_complete,
+        created_at=evaluation_set.created_at.isoformat(),
         evaluations=[
             EvaluationSchema(
                 id=str(eval.id),

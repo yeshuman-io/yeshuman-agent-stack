@@ -24,7 +24,7 @@ export interface EvaluationSet {
   total_evaluated: number
   llm_judged_count: number
   is_complete: boolean
-  completed_at?: string
+  created_at: string
   evaluations: Evaluation[]
 }
 
@@ -167,7 +167,7 @@ export function useEvaluations(profileId?: string, opportunityId?: string) {
   })
 
   return {
-    evaluations: evaluationsQuery.data,
+    evaluations: evaluationsQuery.data?.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
     isLoading: evaluationsQuery.isLoading,
     error: evaluationsQuery.error,
     refetch: evaluationsQuery.refetch,
