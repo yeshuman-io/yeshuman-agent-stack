@@ -446,7 +446,7 @@ async def get_application_events(request, application_id: str):
 @applications_router.post("/apply", response={200: ApplicationSchema, 400: dict}, tags=["Applications"])
 async def apply_to_opportunity(request, payload: ApplicationApplySchema):
     """Apply to an opportunity (requires authentication)."""
-    from apps.accounts.api import get_user_from_token
+    from yeshuman.api import get_user_from_token
     from apps.profiles.models import Profile
 
     # Get current user and their profile
@@ -501,7 +501,7 @@ async def apply_to_opportunity(request, payload: ApplicationApplySchema):
 @applications_router.get("/my", response=List[ApplicationSchema], tags=["Applications"])
 async def list_my_applications(request):
     """List current user's applications."""
-    from apps.accounts.api import get_user_from_token
+    from yeshuman.api import get_user_from_token
 
     user = await get_user_from_token(request)
     if not user:
@@ -541,7 +541,8 @@ async def list_my_applications(request):
 @applications_router.post("/invite", response={200: ApplicationSchema, 400: dict, 403: dict}, tags=["Applications"])
 async def invite_to_apply(request, payload: ApplicationInviteSchema):
     """Invite a profile to apply for an opportunity (employer only)."""
-    from apps.accounts.api import get_user_from_token, check_employer_permissions
+    from yeshuman.api import get_user_from_token
+    from apps.organisations.api import check_employer_permissions
 
     user = await get_user_from_token(request)
     if not user:
