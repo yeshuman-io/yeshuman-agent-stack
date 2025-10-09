@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useEvaluations } from '../../hooks/use-evaluations'
 import { useProfile } from '../../hooks/use-profile'
 import { useQuery } from '@tanstack/react-query'
@@ -21,10 +21,13 @@ export function CandidateEvaluations() {
   const { evaluations, isLoading, error, regenerate, isRegenerating } = useEvaluations(profile?.id)
   const [showCounts, setShowCounts] = useState<Record<string, number>>({})
 
+  console.log('🎯 CandidateEvaluations component rendered, profile:', profile?.id)
+
   // Fetch user's applications to check application status
   const applicationsQuery = useQuery({
     queryKey: ['my-applications'],
     queryFn: async () => {
+      console.log('Fetching applications for profile:', profile?.id)
       const token = localStorage.getItem('auth_token')
       if (!token) throw new Error('Not authenticated')
 
@@ -35,28 +38,63 @@ export function CandidateEvaluations() {
         },
       })
 
+      console.log('Applications response status:', response.status)
       if (!response.ok) throw new Error('Failed to fetch applications')
-      return response.json()
+      const data = await response.json()
+      console.log('Applications response data:', data)
+      return data
     },
     enabled: !!profile?.id,
   })
 
+  console.log('Applications query state:', {
+    enabled: !!profile?.id,
+    isLoading: applicationsQuery.isLoading,
+    error: applicationsQuery.error,
+    data: applicationsQuery.data,
+    profileId: profile?.id
+  })
+
   // Create a map of opportunity IDs to application status
-  const applicationStatusMap = useMemo(() => {
+  const [applicationStatusMap, setApplicationStatusMap] = useState<Record<string, { status: string; applied_at: string }>>({})
+
+  // Update the status map when applications data changes
+  useEffect(() => {
+    console.log('🚀 BUILDING APPLICATION STATUS MAP - useEffect triggered!')
+    console.log('Full applicationsQuery:', {
+      data: applicationsQuery.data,
+      isLoading: applicationsQuery.isLoading,
+      error: applicationsQuery.error,
+      isSuccess: applicationsQuery.isSuccess,
+      status: applicationsQuery.status
+    })
+
     const map: Record<string, { status: string; applied_at: string }> = {}
-    if (applicationsQuery.data) {
-      console.log('Applications data:', applicationsQuery.data)
-      applicationsQuery.data.forEach((app: any) => {
-        console.log('Processing application:', app.opportunity_id, app.status)
-        map[app.opportunity_id] = {
-          status: app.status,
-          applied_at: app.applied_at
+
+    const data = applicationsQuery.data
+    console.log('Building applicationStatusMap, data:', data, 'isArray:', Array.isArray(data), 'length:', data?.length)
+
+    if (data && Array.isArray(data) && data.length > 0) {
+      console.log('Processing', data.length, 'applications')
+      data.forEach((app: any, index: number) => {
+        console.log(`App ${index}: id=${app.id}, opp_id=${app.opportunity_id}, status=${app.status}`)
+        if (app.opportunity_id) {
+          map[app.opportunity_id] = {
+            status: app.status,
+            applied_at: app.applied_at
+          }
+          console.log(`✓ Added to map: ${app.opportunity_id} -> ${app.status}`)
+        } else {
+          console.log('❌ Missing opportunity_id for app:', app.id)
         }
       })
-      console.log('Application status map:', map)
+      console.log('🎯 Final status map:', Object.keys(map).length, 'entries:', map)
+    } else {
+      console.log('❌ No valid data to process')
     }
-    return map
-  }, [applicationsQuery.data])
+
+    setApplicationStatusMap(map)
+  }, [applicationsQuery.isSuccess, JSON.stringify(applicationsQuery.data)]) // More reliable dependencies
 
   // Apply modal state
   const [applyModalOpen, setApplyModalOpen] = useState(false)
