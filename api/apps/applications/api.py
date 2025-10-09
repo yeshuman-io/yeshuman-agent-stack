@@ -588,6 +588,7 @@ async def invite_to_apply(request, payload: ApplicationInviteSchema):
     return 200, ApplicationSchema(
         id=str(application.id),
         profile_id=str(application.profile.id),
+        opportunity_id=str(application.opportunity.id),
         opportunity_title=application.opportunity.title,
         organisation_name=application.organisation.name,
         status=application.status,
