@@ -6,6 +6,7 @@ import { Label } from './ui/label'
 import { Textarea } from './ui/textarea'
 import { Badge } from './ui/badge'
 import { DatePicker } from './ui/date-picker'
+import { PageContainer } from './ui/page-container'
 import { useProfile, ProfileData, Experience } from '../hooks/use-profile'
 import { User, MapPin, Plus, X, Edit, Save, Loader2, Trash2 } from 'lucide-react'
 
@@ -223,8 +224,7 @@ export function Profile() {
   }
 
   return (
-    <div className="h-full overflow-auto p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <PageContainer maxWidth="4xl">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -645,8 +645,6 @@ export function Profile() {
             )}
           </CardContent>
         </Card>
-
-      </div>
-    </div>
+    </PageContainer>
   )
 }

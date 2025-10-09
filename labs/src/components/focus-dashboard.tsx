@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { PageContainer } from './ui/page-container'
 import { Button } from './ui/button'
 import {
   User,
@@ -55,7 +56,7 @@ function CandidateDashboard({ onStartConversation }: { onStartConversation?: (me
   }
 
   return (
-    <div className="h-full p-6 space-y-6">
+    <PageContainer maxWidth="6xl" padding="p-6" className="space-y-6">
       <div className="flex items-center space-x-3">
         <div className="p-2 bg-primary/10 rounded-lg">
           <User className="h-6 w-6 text-primary" />
@@ -109,7 +110,7 @@ function CandidateDashboard({ onStartConversation }: { onStartConversation?: (me
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   )
 }
 
@@ -146,7 +147,7 @@ function EmployerDashboard({ onStartConversation }: { onStartConversation?: (mes
   ]
 
   return (
-    <div className="h-full p-6 space-y-6">
+    <PageContainer maxWidth="6xl" padding="p-6" className="space-y-6">
       <div className="flex items-center space-x-3">
         <div className="p-2 bg-primary/10 rounded-lg">
           <Briefcase className="h-6 w-6 text-primary" />
@@ -220,7 +221,7 @@ function EmployerDashboard({ onStartConversation }: { onStartConversation?: (mes
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 
@@ -257,7 +258,7 @@ function RecruiterDashboard({ onStartConversation }: { onStartConversation?: (me
   ]
 
   return (
-    <div className="h-full p-6 space-y-6">
+    <PageContainer maxWidth="6xl" padding="p-6" className="space-y-6">
       <div className="flex items-center space-x-3">
         <div className="p-2 bg-primary/10 rounded-lg">
           <Users className="h-6 w-6 text-primary" />
@@ -326,7 +327,7 @@ function RecruiterDashboard({ onStartConversation }: { onStartConversation?: (me
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 
@@ -363,7 +364,7 @@ function AdminDashboard({ onStartConversation }: { onStartConversation?: (messag
   ]
 
   return (
-    <div className="h-full p-6 space-y-6">
+    <PageContainer maxWidth="6xl" padding="p-6" className="space-y-6">
       <div className="flex items-center space-x-3">
         <div className="p-2 bg-primary/10 rounded-lg">
           <Shield className="h-6 w-6 text-primary" />
@@ -441,7 +442,7 @@ function AdminDashboard({ onStartConversation }: { onStartConversation?: (messag
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 

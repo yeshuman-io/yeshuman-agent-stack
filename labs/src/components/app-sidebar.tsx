@@ -1,4 +1,4 @@
-import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, Briefcase, Shield, Search, FileText, Users, Settings } from "lucide-react"
+import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, Briefcase, Shield, Search, FileText, Users, Settings, Sparkles } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 
@@ -468,6 +468,12 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
                     <SidebarMenuButton tooltip="View application status">
                       <FileText className="size-4" />
                       {!isCollapsed && <span>My Applications</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Evaluate jobs for your profile" onClick={() => navigate('/candidate/evaluations')}>
+                      <Sparkles className="size-4" />
+                      {!isCollapsed && <span>Evaluate Jobs</span>}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </>
