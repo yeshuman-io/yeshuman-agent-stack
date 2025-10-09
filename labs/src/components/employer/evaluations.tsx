@@ -8,6 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
 import { PageContainer } from '../ui/page-container'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select'
 import { Sparkles, RefreshCw, ChevronDown, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -109,19 +116,22 @@ export function EmployerEvaluations() {
             {/* Organisation Selector */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Organisation</label>
-              <select
+              <Select
                 value={selectedOrganisation}
-                onChange={(e) => {
-                  setSelectedOrganisation(e.target.value)
+                onValueChange={(value) => {
+                  setSelectedOrganisation(value)
                   setSelectedOpportunity('') // Reset opportunity when org changes
                 }}
-                className="w-full p-2 border rounded-md"
               >
-                <option value="">Select organisation...</option>
-                {organisations?.map(org => (
-                  <option key={org.slug} value={org.slug}>{org.name}</option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select organisation..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {organisations?.map(org => (
+                    <SelectItem key={org.slug} value={org.slug}>{org.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Opportunity Selector */}
@@ -130,16 +140,19 @@ export function EmployerEvaluations() {
               {selectedOrganisation && oppsLoading ? (
                 <div className="text-sm text-muted-foreground">Loading opportunities...</div>
               ) : opportunities && opportunities.length > 0 ? (
-                <select
+                <Select
                   value={selectedOpportunity}
-                  onChange={(e) => setSelectedOpportunity(e.target.value)}
-                  className="w-full p-2 border rounded-md"
+                  onValueChange={setSelectedOpportunity}
                 >
-                  <option value="">Select opportunity...</option>
-                  {opportunities.map(opp => (
-                    <option key={opp.id} value={opp.id}>{opp.title}</option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select opportunity..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {opportunities.map(opp => (
+                      <SelectItem key={opp.id} value={opp.id}>{opp.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : selectedOrganisation ? (
                 <div className="text-sm text-muted-foreground">
                   No opportunities found.{' '}
