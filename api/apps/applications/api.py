@@ -502,6 +502,7 @@ async def apply_to_opportunity(request, payload: ApplicationApplySchema):
 async def list_my_applications(request):
     """List current user's applications."""
     from yeshuman.api import get_user_from_token
+    from asgiref.sync import sync_to_async
 
     user = await get_user_from_token(request)
     if not user:
