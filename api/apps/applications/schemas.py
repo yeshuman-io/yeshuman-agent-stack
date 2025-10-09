@@ -4,7 +4,7 @@ Separated from api.py for better organization.
 """
 
 from ninja import Schema
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 
 
@@ -33,11 +33,23 @@ class ApplicationSchema(Schema):
 
 
 class ApplicationCreateSchema(Schema):
-    """Schema for creating an Application."""
+    """Schema for creating an Application (legacy)."""
     profile_id: str
     opportunity_id: str
     organisation_id: str
     source: str = "direct"
+
+
+class ApplicationApplySchema(Schema):
+    """Schema for candidate applying to an opportunity."""
+    opportunity_id: str
+    answers: Optional[List[Dict[str, Any]]] = None
+
+
+class ApplicationInviteSchema(Schema):
+    """Schema for employer inviting a profile to apply."""
+    profile_id: str
+    opportunity_id: str
 
 
 # =====================================================

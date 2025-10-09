@@ -20,6 +20,8 @@ from apps.applications.schemas import (
     ApplicationStageSchema,
     ApplicationSchema,
     ApplicationCreateSchema,
+    ApplicationApplySchema,
+    ApplicationInviteSchema,
 
     # Stage management schemas
     StageTemplateSchema,
@@ -435,5 +437,141 @@ async def get_application_events(request, application_id: str):
         )
         for event in events
     ]
+
+
+# =====================================================
+# CANDIDATE APPLICATION ENDPOINTS
+# =====================================================
+
+@applications_router.post("/apply", response={200: ApplicationSchema, 400: dict}, tags=["Applications"])
+async def apply_to_opportunity(request, payload: ApplicationApplySchema):
+    """Apply to an opportunity (requires authentication)."""
+    from apps.accounts.api import get_user_from_token
+    from apps.profiles.models import Profile
+
+    # Get current user and their profile
+    user = await get_user_from_token(request)
+    if not user:
+        return 400, {"error": "Authentication required"}
+
+    @sync_to_async
+    def get_profile_id():
+        try:
+            return str(user.profile.id)
+        except:
+            return None
+
+    profile_id = await get_profile_id()
+    if not profile_id:
+        return 400, {"error": "Profile not found"}
+
+    # Create application using service
+    service = ApplicationService()
+    try:
+        result = await service.create_application(
+            profile_id=profile_id,
+            opportunity_id=payload.opportunity_id,
+            source="direct",
+            answers=payload.answers
+        )
+    except ValueError as e:
+        return 400, {"error": str(e)}
+    except Exception as e:
+        return 400, {"error": f"Failed to create application: {str(e)}"}
+
+    application = result.application
+
+    return 200, ApplicationSchema(
+        id=str(application.id),
+        profile_id=str(application.profile.id),
+        opportunity_title=application.opportunity.title,
+        organisation_name=application.organisation.name,
+        status=application.status,
+        source=application.source,
+        applied_at=application.applied_at.isoformat(),
+        current_stage=ApplicationStageSchema(
+            id=str(application.current_stage_instance.id),
+            stage_name=application.current_stage_instance.stage_template.name,
+            entered_at=application.current_stage_instance.entered_at.isoformat(),
+            is_open=application.current_stage_instance.is_open
+        ) if application.current_stage_instance else None
+    )
+
+
+@applications_router.get("/my", response=List[ApplicationSchema], tags=["Applications"])
+async def list_my_applications(request):
+    """List current user's applications."""
+    from apps.accounts.api import get_user_from_token
+
+    user = await get_user_from_token(request)
+    if not user:
+        return []
+
+    @sync_to_async
+    def get_applications_sync():
+        return list(user.profile.applications.all().prefetch_related(
+            'opportunity', 'organisation', 'current_stage_instance__stage_template'
+        ))
+
+    applications = await get_applications_sync()
+    return [
+        ApplicationSchema(
+            id=str(app.id),
+            profile_id=str(app.profile.id),
+            opportunity_title=app.opportunity.title,
+            organisation_name=app.organisation.name,
+            status=app.status,
+            source=app.source,
+            applied_at=app.applied_at.isoformat(),
+            current_stage=ApplicationStageSchema(
+                id=str(app.current_stage_instance.id),
+                stage_name=app.current_stage_instance.stage_template.name,
+                entered_at=app.current_stage_instance.entered_at.isoformat(),
+                is_open=app.current_stage_instance.is_open
+            ) if app.current_stage_instance else None
+        )
+        for app in applications
+    ]
+
+
+# =====================================================
+# EMPLOYER INVITATION ENDPOINTS
+# =====================================================
+
+@applications_router.post("/invite", response={200: ApplicationSchema, 400: dict, 403: dict}, tags=["Applications"])
+async def invite_to_apply(request, payload: ApplicationInviteSchema):
+    """Invite a profile to apply for an opportunity (employer only)."""
+    from apps.accounts.api import get_user_from_token, check_employer_permissions
+
+    user = await get_user_from_token(request)
+    if not user:
+        return 400, {"error": "Authentication required"}
+
+    # Check employer permissions
+    try:
+        await check_employer_permissions(user)
+    except:
+        return 403, {"error": "Employer access required"}
+
+    # Create invitation using service
+    service = ApplicationService()
+    try:
+        application = await service.invite_profile_to_opportunity(
+            profile_id=payload.profile_id,
+            opportunity_id=payload.opportunity_id
+        )
+    except Exception as e:
+        return 400, {"error": f"Failed to create invitation: {str(e)}"}
+
+    return 200, ApplicationSchema(
+        id=str(application.id),
+        profile_id=str(application.profile.id),
+        opportunity_title=application.opportunity.title,
+        organisation_name=application.organisation.name,
+        status=application.status,
+        source=application.source,
+        applied_at=application.applied_at.isoformat(),
+        current_stage=None  # Invited applications don't have stages yet
+    )
 
 

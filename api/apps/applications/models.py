@@ -36,6 +36,7 @@ class Application(models.Model):
     """
     STATUS_CHOICES = [
         ("applied", "Applied"),
+        ("invited", "Invited"),
         ("in_review", "In Review"),
         ("interview", "Interview"),
         ("offer", "Offer"),

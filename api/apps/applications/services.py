@@ -145,6 +145,11 @@ class ApplicationService:
                 if existing:
                     return CreateApplicationResult(application=existing, created=False)
 
+                # Check if screening questions exist and require answers
+                opportunity_questions = opportunity.opportunity_questions.all()
+                if opportunity_questions.exists() and not answers:
+                    raise ValueError("Screening answers are required for this opportunity")
+
                 application = Application.objects.create(
                     profile=profile,
                     opportunity=opportunity,
@@ -197,6 +202,43 @@ class ApplicationService:
                 return CreateApplicationResult(application=application, created=True)
 
         return await _create_application_sync()
+
+    async def invite_profile_to_opportunity(self, profile_id: str, opportunity_id: str) -> Application:
+        """
+        Invite a profile to apply for an opportunity.
+        Creates an application with status 'invited' if one doesn't exist.
+        """
+        @sync_to_async
+        def _invite_sync():
+            with transaction.atomic():
+                profile = Profile.objects.get(id=profile_id)
+                opportunity = Opportunity.objects.select_related("organisation").get(id=opportunity_id)
+
+                # Check if application already exists
+                existing = Application.objects.filter(profile=profile, opportunity=opportunity).first()
+                if existing:
+                    # If already invited or applied, return existing
+                    return existing
+
+                # Create invited application
+                application = Application.objects.create(
+                    profile=profile,
+                    opportunity=opportunity,
+                    organisation=opportunity.organisation,
+                    source="referral",
+                    status="invited",
+                )
+
+                # Create invitation event
+                ApplicationEvent.objects.create(
+                    application=application,
+                    event_type="invited",
+                    metadata={}
+                )
+
+                return application
+
+        return await _invite_sync()
 
     async def change_stage(self, application_id: str, stage_slug: str, actor_id: Optional[int] = None) -> Application:
         @sync_to_async
