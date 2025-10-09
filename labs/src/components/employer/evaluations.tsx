@@ -15,8 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select'
-import { Sparkles, RefreshCw, ChevronDown, Users } from 'lucide-react'
+import { Sparkles, RefreshCw, ChevronDown, Users, UserPlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 
 export function EmployerEvaluations() {
   const navigate = useNavigate()
@@ -61,6 +62,33 @@ export function EmployerEvaluations() {
         threshold: 0.7,
         limit: 10
       })
+    }
+  }
+
+  const handleInviteCandidate = async (profileId: string, opportunityId: string) => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/applications/invite', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          profile_id: profileId,
+          opportunity_id: opportunityId
+        }),
+      })
+
+      if (response.ok) {
+        toast.success('Candidate invited successfully!')
+        // Could refresh evaluations here if needed
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to invite candidate')
+      }
+    } catch (error) {
+      toast.error('Failed to invite candidate')
     }
   }
 
@@ -233,11 +261,22 @@ export function EmployerEvaluations() {
                               Semantic: {(evaluation.semantic_score * 100).toFixed(0)}%
                             </div>
                           </div>
-                          {evaluation.was_llm_judged && (
-                            <Badge variant="outline" className="text-xs">
-                              AI Reviewed
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {evaluation.was_llm_judged && (
+                              <Badge variant="outline" className="text-xs">
+                                AI Reviewed
+                              </Badge>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleInviteCandidate(evaluation.profile_id, selectedOpportunity)}
+                              className="h-7 px-2"
+                            >
+                              <UserPlus className="h-3 w-3 mr-1" />
+                              Invite
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ))}

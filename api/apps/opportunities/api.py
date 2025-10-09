@@ -95,6 +95,37 @@ async def create_opportunity(request, payload: OpportunityCreateSchema):
     )
 
 
+@opportunities_router.get("/{opportunity_id}/questions", response=List[dict], tags=["Opportunities"])
+async def get_opportunity_questions(request, opportunity_id: str):
+    """Get screening questions for an opportunity."""
+    from asgiref.sync import sync_to_async
+
+    @sync_to_async
+    def get_questions_sync():
+        try:
+            opportunity = Opportunity.objects.get(id=opportunity_id)
+            questions = opportunity.questions.all().order_by('order')
+            return list(questions)
+        except Opportunity.DoesNotExist:
+            return None
+
+    questions = await get_questions_sync()
+    if questions is None:
+        return []
+
+    return [
+        {
+            'id': str(q.id),
+            'question_text': q.question_text,
+            'question_type': q.question_type,
+            'is_required': q.is_required,
+            'order': q.order,
+            'config': q.config
+        }
+        for q in questions
+    ]
+
+
 @opportunities_router.get("/{opportunity_id}", response=OpportunitySchema, tags=["Opportunities"])
 async def get_opportunity(request, opportunity_id: str):
     """Get a specific opportunity by ID."""

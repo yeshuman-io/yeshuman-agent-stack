@@ -465,7 +465,7 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="View application status">
+                    <SidebarMenuButton tooltip="View application status" onClick={() => navigate('/candidate/applications')}>
                       <FileText className="size-4" />
                       {!isCollapsed && <span>My Applications</span>}
                     </SidebarMenuButton>

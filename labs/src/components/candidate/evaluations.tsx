@@ -7,12 +7,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
 import { PageContainer } from '../ui/page-container'
-import { Sparkles, RefreshCw, ChevronDown } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog'
+import { Label } from '../ui/label'
+import { Input } from '../ui/input'
+import { Textarea } from '../ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { Sparkles, RefreshCw, ChevronDown, Send } from 'lucide-react'
+import { toast } from 'sonner'
 
 export function CandidateEvaluations() {
   const { profile, isLoading: profileLoading, error: profileError } = useProfile()
   const { evaluations, isLoading, error, regenerate, isRegenerating } = useEvaluations(profile?.id)
   const [showCounts, setShowCounts] = useState<Record<string, number>>({})
+
+  // Apply modal state
+  const [applyModalOpen, setApplyModalOpen] = useState(false)
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<string>('')
+  const [screeningQuestions, setScreeningQuestions] = useState<any[]>([])
+  const [answers, setAnswers] = useState<Record<string, any>>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Reset show counts when evaluations data changes (e.g., after regeneration)
   useEffect(() => {
@@ -26,6 +39,74 @@ export function CandidateEvaluations() {
       ...prev,
       [evaluationSetId]: getShowCount(evaluationSetId) + 10
     }))
+  }
+
+  const handleApplyClick = async (opportunityId: string) => {
+    setSelectedOpportunityId(opportunityId)
+    setAnswers({})
+
+    // Fetch screening questions for this opportunity
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`/api/opportunities/${opportunityId}/questions`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (response.ok) {
+        const questions = await response.json()
+        setScreeningQuestions(questions)
+      } else {
+        setScreeningQuestions([])
+      }
+    } catch (error) {
+      console.error('Failed to fetch screening questions:', error)
+      setScreeningQuestions([])
+    }
+
+    setApplyModalOpen(true)
+  }
+
+  const handleAnswerChange = (questionId: string, value: any) => {
+    setAnswers(prev => ({
+      ...prev,
+      [questionId]: value
+    }))
+  }
+
+  const handleSubmitApplication = async () => {
+    if (!selectedOpportunityId) return
+
+    setIsSubmitting(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await fetch('/api/applications/apply', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          opportunity_id: selectedOpportunityId,
+          answers: screeningQuestions.length > 0 ? answers : undefined
+        }),
+      })
+
+      if (response.ok) {
+        toast.success('Application submitted successfully!')
+        setApplyModalOpen(false)
+        // Could refresh evaluations here if needed
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to submit application')
+      }
+    } catch (error) {
+      toast.error('Failed to submit application')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   // If profile is still loading, show loading
@@ -175,11 +256,21 @@ export function CandidateEvaluations() {
                               Semantic: {(evaluation.semantic_score * 100).toFixed(0)}%
                             </div>
                           </div>
-                          {evaluation.was_llm_judged && (
-                            <Badge variant="outline" className="text-xs">
-                              AI Reviewed
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {evaluation.was_llm_judged && (
+                              <Badge variant="outline" className="text-xs">
+                                AI Reviewed
+                              </Badge>
+                            )}
+                            <Button
+                              size="sm"
+                              onClick={() => handleApplyClick(evaluation.opportunity_id)}
+                              className="h-8 px-3"
+                            >
+                              <Send className="h-3 w-3 mr-1" />
+                              Apply
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -216,6 +307,124 @@ export function CandidateEvaluations() {
             </CardContent>
           </Card>
         )}
+
+        {/* Apply Modal */}
+        <Dialog open={applyModalOpen} onOpenChange={setApplyModalOpen}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Apply to Job Opportunity</DialogTitle>
+              <DialogDescription>
+                Submit your application with the required information below.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6">
+              {screeningQuestions.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Screening Questions</h3>
+                  {screeningQuestions.map((question: any) => (
+                    <div key={question.id} className="space-y-2">
+                      <Label className="text-sm font-medium">
+                        {question.question_text}
+                        {question.is_required && <span className="text-destructive ml-1">*</span>}
+                      </Label>
+
+                      {question.question_type === 'text' && (
+                        <Textarea
+                          placeholder="Enter your answer..."
+                          value={answers[question.id] || ''}
+                          onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                          className="min-h-[80px]"
+                        />
+                      )}
+
+                      {question.question_type === 'number' && (
+                        <Input
+                          type="number"
+                          placeholder="Enter a number..."
+                          value={answers[question.id] || ''}
+                          onChange={(e) => handleAnswerChange(question.id, parseInt(e.target.value) || 0)}
+                          min={question.config?.validation?.min_value}
+                          max={question.config?.validation?.max_value}
+                        />
+                      )}
+
+                      {question.question_type === 'single_choice' && question.config?.options && (
+                        <Select
+                          value={answers[question.id] || ''}
+                          onValueChange={(value) => handleAnswerChange(question.id, value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select an option..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {question.config.options.map((option: string) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+
+                      {question.question_type === 'multiple_choice' && question.config?.options && (
+                        <div className="space-y-2">
+                          {question.config.options.map((option: string) => (
+                            <div key={option} className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id={`${question.id}-${option}`}
+                                checked={(answers[question.id] || []).includes(option)}
+                                onChange={(e) => {
+                                  const currentAnswers = answers[question.id] || []
+                                  if (e.target.checked) {
+                                    handleAnswerChange(question.id, [...currentAnswers, option])
+                                  } else {
+                                    handleAnswerChange(question.id, currentAnswers.filter((a: string) => a !== option))
+                                  }
+                                }}
+                                className="rounded"
+                              />
+                              <Label htmlFor={`${question.id}-${option}`} className="text-sm">
+                                {option}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => setApplyModalOpen(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmitApplication}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Submit Application
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
     </PageContainer>
   )
 }
