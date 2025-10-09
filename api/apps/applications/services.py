@@ -146,7 +146,7 @@ class ApplicationService:
                     return CreateApplicationResult(application=existing, created=False)
 
                 # Check if screening questions exist and require answers
-                opportunity_questions = opportunity.opportunity_questions.all()
+                opportunity_questions = opportunity.questions.all()
                 if opportunity_questions.exists() and not answers:
                     raise ValueError("Screening answers are required for this opportunity")
 
