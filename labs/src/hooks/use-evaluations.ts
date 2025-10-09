@@ -13,11 +13,14 @@ export interface Evaluation {
   semantic_score: number
   opportunity_title: string
   opportunity_organisation_name: string
+  candidate_name?: string // For employer perspective
 }
 
 export interface EvaluationSet {
   id: string
   evaluator_perspective: string
+  opportunity_id?: string
+  profile_id?: string
   total_evaluated: number
   llm_judged_count: number
   is_complete: boolean
@@ -46,15 +49,15 @@ export interface MatchingResponse {
   top_matches: MatchResult[]
 }
 
-export function useEvaluations(profileId?: string) {
+export function useEvaluations(profileId?: string, opportunityId?: string) {
   const { token } = useAuth()
   const queryClient = useQueryClient()
 
-  console.log('useEvaluations hook:', { token: !!token, profileId })
+  console.log('useEvaluations hook:', { token: !!token, profileId, opportunityId })
 
   // Query for fetching evaluation sets
   const evaluationsQuery = useQuery({
-    queryKey: ['evaluations', profileId],
+    queryKey: ['evaluations', profileId || 'all', opportunityId || 'all'],
     queryFn: async (): Promise<EvaluationSet[]> => {
       console.log('useEvaluations: executing query')
       if (!token) throw new Error('Not authenticated')
@@ -72,16 +75,21 @@ export function useEvaluations(profileId?: string) {
 
       const allEvaluationSets: EvaluationSet[] = await response.json()
 
-        // Filter by profileId if provided
-        if (profileId) {
-          return allEvaluationSets.filter(set =>
-            set.evaluations.some(evaluation => evaluation.profile_id === profileId)
-          )
-        }
+      // Filter by profileId or opportunityId if provided
+      if (profileId) {
+        return allEvaluationSets.filter(set =>
+          set.evaluations.some(evaluation => evaluation.profile_id === profileId)
+        )
+      }
+      if (opportunityId) {
+        return allEvaluationSets.filter(set =>
+          set.evaluations.some(evaluation => evaluation.opportunity_id === opportunityId)
+        )
+      }
 
       return allEvaluationSets
     },
-    enabled: !!token && !!profileId,
+    enabled: !!token && (!!profileId || !!opportunityId),
   })
 
   console.log('useEvaluations query state:', {
@@ -90,7 +98,7 @@ export function useEvaluations(profileId?: string) {
     data: evaluationsQuery.data ? evaluationsQuery.data.length : 'no data'
   })
 
-  // Mutation for regenerating evaluations
+  // Mutation for regenerating evaluations (candidate perspective)
   const regenerateMutation = useMutation({
     mutationFn: async ({ profileId, threshold, limit }: {
       profileId: string,
@@ -120,7 +128,41 @@ export function useEvaluations(profileId?: string) {
     },
     onSuccess: () => {
       // Refetch evaluations after successful regeneration
-      queryClient.invalidateQueries({ queryKey: ['evaluations', profileId] })
+      queryClient.invalidateQueries({ queryKey: ['evaluations', profileId || 'all', opportunityId || 'all'] })
+    },
+  })
+
+  // Mutation for regenerating evaluations (employer perspective)
+  const regenerateForOpportunityMutation = useMutation({
+    mutationFn: async ({ opportunityId, threshold, limit }: {
+      opportunityId: string,
+      threshold?: number,
+      limit?: number
+    }): Promise<MatchingResponse> => {
+      if (!token) throw new Error('Not authenticated')
+
+      const response = await fetch(`/api/evaluations/opportunities/${opportunityId}/find-candidates`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          llm_similarity_threshold: threshold ?? 0.7,
+          limit: limit ?? 10,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to regenerate evaluations')
+      }
+
+      return response.json()
+    },
+    onSuccess: () => {
+      // Refetch evaluations after successful regeneration
+      queryClient.invalidateQueries({ queryKey: ['evaluations', profileId || 'all', opportunityId || 'all'] })
     },
   })
 
@@ -130,7 +172,8 @@ export function useEvaluations(profileId?: string) {
     error: evaluationsQuery.error,
     refetch: evaluationsQuery.refetch,
     regenerate: regenerateMutation.mutate,
-    isRegenerating: regenerateMutation.isPending,
-    regenerateError: regenerateMutation.error,
+    regenerateForOpportunity: regenerateForOpportunityMutation.mutate,
+    isRegenerating: regenerateMutation.isPending || regenerateForOpportunityMutation.isPending,
+    regenerateError: regenerateMutation.error || regenerateForOpportunityMutation.error,
   }
 }

@@ -504,6 +504,12 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
                       {!isCollapsed && <span>Candidates</span>}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Evaluate candidates for your jobs" onClick={() => navigate('/employer/evaluations')}>
+                      <Sparkles className="size-4" />
+                      {!isCollapsed && <span>Evaluate Candidates</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </>
               ) : userFocus.current_focus === 'recruiter' ? (
                 // Recruiter menu items

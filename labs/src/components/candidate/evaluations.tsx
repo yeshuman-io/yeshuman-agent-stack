@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useEvaluations } from '../../hooks/use-evaluations'
 import { useProfile } from '../../hooks/use-profile'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
