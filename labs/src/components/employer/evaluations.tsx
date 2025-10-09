@@ -67,7 +67,7 @@ export function EmployerEvaluations() {
 
   const handleInviteCandidate = async (profileId: string, opportunityId: string) => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
       const response = await fetch('/api/applications/invite', {
         method: 'POST',
         headers: {

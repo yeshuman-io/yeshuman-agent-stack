@@ -526,12 +526,14 @@ async def list_my_applications(request):
             # Build the response data synchronously
             result = []
             for app in applications:
+                # Debug the opportunity relationship
+                print(f"Application {app.id}: opportunity={app.opportunity}, opportunity.id={app.opportunity.id if app.opportunity else 'None'}")
                 result.append({
                     'id': str(app.id),
                     'profile_id': str(app.profile.id),
-                    'opportunity_id': str(app.opportunity.id),
-                    'opportunity_title': app.opportunity.title,
-                    'organisation_name': app.organisation.name,
+                    'opportunity_id': str(app.opportunity.id) if app.opportunity else None,
+                    'opportunity_title': app.opportunity.title if app.opportunity else 'Unknown',
+                    'organisation_name': app.organisation.name if app.organisation else 'Unknown',
                     'status': app.status,
                     'source': app.source,
                     'applied_at': app.applied_at.isoformat(),

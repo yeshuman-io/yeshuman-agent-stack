@@ -33,7 +33,7 @@ export function MyApplications() {
 
   const fetchApplications = async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
       if (!token) {
         setError('Not authenticated')
         setIsLoading(false)
