@@ -11,12 +11,41 @@ class Opportunity(models.Model):
     
     title = models.CharField(max_length=255)
     description = models.TextField()
-    
+    location = models.CharField(max_length=255, blank=True, help_text="Job location (city, state, remote, etc.)")
+
+    # Semantic embedding for opportunity search
+    embedding = VectorField(dimensions=1536, null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['title']),
+            models.Index(fields=['organisation']),
+            models.Index(fields=['location']),
+        ]
+
     def __str__(self):
         return f"{self.title} at {self.organisation}"
+
+    def get_embedding_text(self):
+        """Generate rich text for embedding with organisation and location context"""
+        location_text = f" in {self.location}" if self.location else ""
+        return f"{self.title} at {self.organisation.name}{location_text}. {self.description}"
+
+    def generate_embedding(self):
+        """Generate and save embedding for this instance"""
+        from apps.embeddings.services import EmbeddingService
+        service = EmbeddingService()
+        text = self.get_embedding_text()
+        self.embedding = service.generate_embedding(text)
+        self.save(update_fields=['embedding'])
+
+    def ensure_embedding(self):
+        """Generate embedding if it doesn't exist"""
+        if not self.embedding:
+            self.generate_embedding()
 
 
 class OpportunitySkill(models.Model):

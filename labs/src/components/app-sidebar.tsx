@@ -459,9 +459,9 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Browse job opportunities">
+                    <SidebarMenuButton tooltip="Browse job opportunities" onClick={() => navigate('/candidate/opportunities')}>
                       <Search className="size-4" />
-                      {!isCollapsed && <span>Find Jobs</span>}
+                      {!isCollapsed && <span>Browse Opportunities</span>}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
