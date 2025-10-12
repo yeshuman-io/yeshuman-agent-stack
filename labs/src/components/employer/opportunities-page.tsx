@@ -133,14 +133,14 @@ export function EmployerOpportunitiesPage({}: EmployerOpportunitiesPageProps) {
             <div className="space-y-2">
               <Label htmlFor="organisation">Organisation</Label>
               <Select
-                value={filters.organisation}
-                onValueChange={(value) => handleFilterChange('organisation', value)}
+                value={filters.organisation || "all"}
+                onValueChange={(value) => handleFilterChange('organisation', value === "all" ? "" : value)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All organisations" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All organisations</SelectItem>
+                  <SelectItem value="all">All organisations</SelectItem>
                   {organisations.map((org) => (
                     <SelectItem key={org.slug} value={org.slug}>
                       {org.name}
@@ -151,12 +151,12 @@ export function EmployerOpportunitiesPage({}: EmployerOpportunitiesPageProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="status">Status</Label>
-              <Select defaultValue="">
+              <Select defaultValue="all">
                 <SelectTrigger>
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All statuses</SelectItem>
+                  <SelectItem value="all">All statuses</SelectItem>
                   <SelectItem value="draft">Draft</SelectItem>
                   <SelectItem value="published">Published</SelectItem>
                   <SelectItem value="closed">Closed</SelectItem>
