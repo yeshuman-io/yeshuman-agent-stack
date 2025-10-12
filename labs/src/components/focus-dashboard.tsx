@@ -1,219 +1,287 @@
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { PageContainer } from './ui/page-container'
 import { Button } from './ui/button'
-import {
-  User,
-  Briefcase,
-  Users,
-  Shield,
-  FileText,
-  Search,
-  TrendingUp,
-  MessageSquare,
-  Calendar,
-  Settings,
-  BarChart3,
-  UserCheck,
-  Star
-} from 'lucide-react'
+import { FocusHeading } from './focus-heading'
+import { useOrganisations } from '../hooks/use-organisations'
+import { useOrganisationOpportunities } from '../hooks/use-organisation-opportunities'
+import { FileText } from 'lucide-react'
 
 interface FocusDashboardProps {
   focus: string
   onStartConversation?: (message: string) => void
 }
 
-function CandidateDashboard({ onStartConversation }: { onStartConversation?: (message: string) => void }) {
-  const quickActions = [
-    {
-      title: "Build Resume",
-      description: "Create or improve your professional resume",
-      icon: FileText,
-      action: "Help me build a professional resume"
-    },
-    {
-      title: "Job Search",
-      description: "Find jobs that match your skills",
-      icon: Search,
-      action: "Help me find jobs in my field"
-    },
-    {
-      title: "Interview Prep",
-      description: "Practice common interview questions",
-      icon: MessageSquare,
-      action: "Prepare me for job interviews"
-    },
-    {
-      title: "Skill Assessment",
-      description: "Identify areas for professional growth",
-      icon: TrendingUp,
-      action: "Assess my current skills and suggest improvements"
-    }
-  ]
+function CandidateDashboard({ onStartConversation: _onStartConversation }: { onStartConversation?: (message: string) => void }) {
+  const [applications, setApplications] = useState<any[]>([])
+  const [isLoadingApplications, setIsLoadingApplications] = useState(true)
+  const [applicationsError, setApplicationsError] = useState<string | null>(null)
 
-  const handleQuickAction = (action: string) => {
-    onStartConversation?.(action)
+  useEffect(() => {
+    fetchApplications()
+  }, [])
+
+  const fetchApplications = async () => {
+    try {
+      const token = localStorage.getItem('auth_token')
+      if (!token) {
+        setApplicationsError('Not authenticated')
+        setIsLoadingApplications(false)
+        return
+      }
+
+      const response = await fetch('/api/applications/my', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch applications')
+      }
+
+      const data = await response.json()
+      setApplications(data)
+    } catch (err) {
+      setApplicationsError(err instanceof Error ? err.message : 'Failed to load applications')
+    } finally {
+      setIsLoadingApplications(false)
+    }
+  }
+
+  const getApplicationCounts = () => {
+    const counts = {
+      applied: 0,
+      in_review: 0,
+      interview: 0,
+      offer: 0,
+      hired: 0,
+      rejected: 0,
+      total: applications.length
+    }
+
+    applications.forEach((app: any) => {
+      const status = app.status as keyof typeof counts
+      if (status in counts && status !== 'total') {
+        counts[status]++
+      }
+    })
+
+    return counts
   }
 
   return (
     <PageContainer maxWidth="6xl" padding="p-6" className="space-y-6">
-      <div className="flex items-center space-x-3">
-        <div className="p-2 bg-primary/10 rounded-lg">
-          <User className="h-6 w-6 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Job Seeker Dashboard</h1>
-          <p className="text-muted-foreground">Find your next opportunity and advance your career</p>
-        </div>
-      </div>
+      <FocusHeading
+        focus="candidate"
+        subtitle="Find your next opportunity and advance your career"
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {quickActions.map((action, index) => (
-          <Card key={index} className="cursor-pointer hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-primary/5 rounded-lg">
-                  <action.icon className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">{action.title}</CardTitle>
-                  <CardDescription>{action.description}</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => handleQuickAction(action.action)}
-              >
-                Get Started
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+        <Card>
+          <CardHeader>
+            <CardTitle>What you can do now</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm">
+              <li>• Browse job opportunities and apply to positions</li>
+              <li>• Track your application status and history</li>
+              <li>• Run AI-powered matching and evaluations</li>
+            </ul>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Coming soon</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>• Resume builder and optimization</li>
+              <li>• Interview practice and coaching</li>
+              <li>• Personalized career recommendations</li>
+            </ul>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
-            <Star className="h-5 w-5" />
-            <span>Your Career Journey</span>
+            <FileText className="h-5 w-5" />
+            <span>Application Summary</span>
           </CardTitle>
           <CardDescription>
-            Track your progress and get personalized recommendations
+            Your job application activity and status
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <p>Start a conversation to begin building your career profile</p>
-          </div>
+          {isLoadingApplications ? (
+            <div className="text-center py-4 text-muted-foreground">
+              <p>Loading applications...</p>
+            </div>
+          ) : applicationsError ? (
+            <div className="text-center py-4 text-muted-foreground">
+              <p>Unable to load application data</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-primary">{getApplicationCounts().total}</div>
+                <p className="text-sm text-muted-foreground">Total Applications</p>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">{getApplicationCounts().applied}</div>
+                <p className="text-sm text-muted-foreground">Applied</p>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-yellow-600">{getApplicationCounts().in_review}</div>
+                <p className="text-sm text-muted-foreground">In Review</p>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{getApplicationCounts().interview}</div>
+                <p className="text-sm text-muted-foreground">Interviews</p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </PageContainer>
   )
 }
 
-function EmployerDashboard({ onStartConversation }: { onStartConversation?: (message: string) => void }) {
-  const handleQuickAction = (action: string) => {
-    onStartConversation?.(action)
-  }
+function EmployerDashboard({ onStartConversation: _onStartConversation }: { onStartConversation?: (message: string) => void }) {
+  const { organisations, isLoading: orgsLoading, error: orgsError } = useOrganisations()
+  const [selectedOrganisation, setSelectedOrganisation] = useState<string>('')
+  const { opportunities, isLoading: oppsLoading } = useOrganisationOpportunities(selectedOrganisation)
 
-  const quickActions = [
-    {
-      title: "Post Job",
-      description: "Create a compelling job posting",
-      icon: Briefcase,
-      action: "Help me write a job description"
-    },
-    {
-      title: "Find Candidates",
-      description: "Search for qualified applicants",
-      icon: Search,
-      action: "Help me find candidates for my open positions"
-    },
-    {
-      title: "Interview Planning",
-      description: "Prepare for candidate interviews",
-      icon: Calendar,
-      action: "Help me plan effective interviews"
-    },
-    {
-      title: "Hiring Analytics",
-      description: "Track your recruitment metrics",
-      icon: BarChart3,
-      action: "Analyze my hiring pipeline and success rates"
+  // Auto-select first org when available
+  useEffect(() => {
+    if (organisations && organisations.length > 0 && !selectedOrganisation) {
+      setSelectedOrganisation(organisations[0].slug)
     }
-  ]
+  }, [organisations, selectedOrganisation])
 
   return (
     <PageContainer maxWidth="6xl" padding="p-6" className="space-y-6">
-      <div className="flex items-center space-x-3">
-        <div className="p-2 bg-primary/10 rounded-lg">
-          <Briefcase className="h-6 w-6 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Employer Dashboard</h1>
-          <p className="text-muted-foreground">Manage your organisations and find the best talent</p>
-        </div>
+      <FocusHeading
+        focus="employer"
+        subtitle="Manage your organisations and find the best talent"
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>What you can do now</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm">
+              <li>• Manage your organisations and teams</li>
+              <li>• Post and manage job opportunities</li>
+              <li>• Evaluate candidates with AI-powered matching</li>
+            </ul>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Coming soon</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>• Advanced hiring pipeline analytics</li>
+              <li>• Interview scheduling and coordination</li>
+              <li>• Team roles and permissions management</li>
+            </ul>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Quick Actions */}
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {quickActions.map((action, index) => (
-            <Card key={index} className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-primary/5 rounded-lg">
-                    <action.icon className="h-4 w-4 text-primary" />
+      {/* Organization and Opportunity Analytics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Organisations</CardTitle>
+            <CardDescription>
+              Manage your company profiles and teams
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {orgsLoading ? (
+              <div className="text-center py-4 text-muted-foreground">
+                <p>Loading organisations...</p>
+              </div>
+            ) : orgsError ? (
+              <div className="text-center py-4 text-muted-foreground">
+                <p>Unable to load organisations</p>
+              </div>
+            ) : organisations.length > 0 ? (
+              <div className="space-y-3">
+                <div className="text-2xl font-bold text-primary">{organisations.length}</div>
+                <p className="text-sm text-muted-foreground">
+                  {organisations.length === 1 ? 'Organisation' : 'Organisations'} managed
+                </p>
+                {organisations.length > 1 && (
+                  <div className="pt-2">
+                    <select
+                      value={selectedOrganisation}
+                      onChange={(e) => setSelectedOrganisation(e.target.value)}
+                      className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm"
+                    >
+                      {organisations.map((org) => (
+                        <option key={org.slug} value={org.slug}>
+                          {org.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <div>
-                    <CardTitle className="text-lg">{action.title}</CardTitle>
-                    <CardDescription>{action.description}</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleQuickAction(action.action)}
-                >
-                  Get Started
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-4 text-muted-foreground">
+                <p>No organisations found</p>
+                <Button variant="link" className="mt-2" size="sm">
+                  Create your first organisation
                 </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Analytics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Open Positions</CardTitle>
-            <CardDescription>Currently active job postings</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-4 text-muted-foreground">
-              <p>No active positions</p>
-              <Button variant="link" className="mt-2">
-                Create your first job posting
-              </Button>
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Recent Applications</CardTitle>
-            <CardDescription>Candidate responses to your jobs</CardDescription>
+            <CardTitle>Job Opportunities</CardTitle>
+            <CardDescription>
+              Active job postings for your organisations
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-4 text-muted-foreground">
-              <p>No recent applications</p>
-            </div>
+            {selectedOrganisation ? (
+              oppsLoading ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  <p>Loading opportunities...</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="text-2xl font-bold text-primary">{opportunities.length}</div>
+                  <p className="text-sm text-muted-foreground">
+                    {opportunities.length === 1 ? 'Opportunity' : 'Opportunities'} posted
+                  </p>
+                  {opportunities.length > 0 && (
+                    <div className="pt-2">
+                      <Button variant="outline" size="sm" className="w-full">
+                        Manage Opportunities
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )
+            ) : (
+              <div className="text-center py-4 text-muted-foreground">
+                <p>Select an organisation to view opportunities</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -221,105 +289,38 @@ function EmployerDashboard({ onStartConversation }: { onStartConversation?: (mes
   )
 }
 
-function RecruiterDashboard({ onStartConversation }: { onStartConversation?: (message: string) => void }) {
-  const handleQuickAction = (action: string) => {
-    onStartConversation?.(action)
-  }
-
-  const quickActions = [
-    {
-      title: "Talent Pipeline",
-      description: "Manage your candidate database",
-      icon: Users,
-      action: "Help me organize my talent pipeline"
-    },
-    {
-      title: "Client Briefs",
-      description: "Create job requirements for clients",
-      icon: FileText,
-      action: "Help me write a client job brief"
-    },
-    {
-      title: "Interview Scheduling",
-      description: "Coordinate interviews efficiently",
-      icon: Calendar,
-      action: "Help me schedule interviews with candidates"
-    },
-    {
-      title: "Placement Tracking",
-      description: "Monitor successful placements",
-      icon: UserCheck,
-      action: "Track my placement success metrics"
-    }
-  ]
-
+function RecruiterDashboard({ onStartConversation: _onStartConversation }: { onStartConversation?: (message: string) => void }) {
   return (
     <PageContainer maxWidth="6xl" padding="p-6" className="space-y-6">
-      <div className="flex items-center space-x-3">
-        <div className="p-2 bg-primary/10 rounded-lg">
-          <Users className="h-6 w-6 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Recruiter Dashboard</h1>
-          <p className="text-muted-foreground">Connect the right talent with the right opportunities</p>
-        </div>
-      </div>
+      <FocusHeading
+        focus="recruiter"
+        subtitle="Connect the right talent with the right opportunities"
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {quickActions.map((action, index) => (
-          <Card key={index} className="cursor-pointer hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-primary/5 rounded-lg">
-                  <action.icon className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">{action.title}</CardTitle>
-                  <CardDescription>{action.description}</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => handleQuickAction(action.action)}
-              >
-                Get Started
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Active Searches</CardTitle>
+          <CardHeader>
+            <CardTitle>What you can do now</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
-            <p className="text-sm text-muted-foreground">Current placements</p>
+            <ul className="space-y-2 text-sm">
+              <li>• Access your profile and account settings</li>
+              <li>• Use AI-powered conversation to assist with tasks</li>
+              <li>• Navigate between different focus modes</li>
+            </ul>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">This Month</CardTitle>
+          <CardHeader>
+            <CardTitle>Coming soon</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
-            <p className="text-sm text-muted-foreground">Successful placements</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Success Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">0%</div>
-            <p className="text-sm text-muted-foreground">Placement rate</p>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>• Comprehensive talent pipeline management</li>
+              <li>• Client brief creation and management</li>
+              <li>• Placement tracking and success metrics</li>
+            </ul>
           </CardContent>
         </Card>
       </div>
@@ -327,114 +328,39 @@ function RecruiterDashboard({ onStartConversation }: { onStartConversation?: (me
   )
 }
 
-function AdminDashboard({ onStartConversation }: { onStartConversation?: (message: string) => void }) {
-  const handleQuickAction = (action: string) => {
-    onStartConversation?.(action)
-  }
-
-  const quickActions = [
-    {
-      title: "System Health",
-      description: "Monitor platform performance",
-      icon: BarChart3,
-      action: "Show me system health metrics"
-    },
-    {
-      title: "User Management",
-      description: "Manage user accounts and permissions",
-      icon: Users,
-      action: "Help me manage user accounts"
-    },
-    {
-      title: "Platform Settings",
-      description: "Configure system-wide settings",
-      icon: Settings,
-      action: "Review platform configuration"
-    },
-    {
-      title: "Analytics",
-      description: "View usage statistics and reports",
-      icon: TrendingUp,
-      action: "Show me platform analytics"
-    }
-  ]
-
+function AdminDashboard({ onStartConversation: _onStartConversation }: { onStartConversation?: (message: string) => void }) {
   return (
     <PageContainer maxWidth="6xl" padding="p-6" className="space-y-6">
-      <div className="flex items-center space-x-3">
-        <div className="p-2 bg-primary/10 rounded-lg">
-          <Shield className="h-6 w-6 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Manage and monitor the platform</p>
-        </div>
-      </div>
+      <FocusHeading
+        focus="administrator"
+        subtitle="Manage and monitor the platform"
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {quickActions.map((action, index) => (
-          <Card key={index} className="cursor-pointer hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-primary/5 rounded-lg">
-                  <action.icon className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">{action.title}</CardTitle>
-                  <CardDescription>{action.description}</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => handleQuickAction(action.action)}
-              >
-                Get Started
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Total Users</CardTitle>
+          <CardHeader>
+            <CardTitle>What you can do now</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">--</div>
+            <ul className="space-y-2 text-sm">
+              <li>• Access your profile and account settings</li>
+              <li>• Use AI-powered conversation to assist with tasks</li>
+              <li>• Navigate between different focus modes</li>
+            </ul>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Active Sessions</CardTitle>
+          <CardHeader>
+            <CardTitle>Coming soon</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">--</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">API Requests</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">--</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">System Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="text-sm font-medium">Healthy</span>
-            </div>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>• Comprehensive user account management</li>
+              <li>• Active session monitoring and control</li>
+              <li>• API usage analytics and rate limiting</li>
+              <li>• Platform health monitoring and alerts</li>
+            </ul>
           </CardContent>
         </Card>
       </div>
