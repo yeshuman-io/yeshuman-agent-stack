@@ -10,9 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ArrowLeft, Building, Globe, Briefcase, Save, Loader2, Edit, X } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { API_BASE_URL } from '@/constants'
-import { OrganisationOpportunities } from './organisation-opportunities'
-import { OpportunityForm } from './opportunity-form'
-import { OrganisationOpportunity } from '@/hooks/use-organisation-opportunities'
 
 interface Organisation {
   id: string
@@ -41,10 +38,8 @@ export function OrganisationProfile() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
 
-  // Opportunity management state
+  // Tab state
   const [activeTab, setActiveTab] = useState('details')
-  const [showOpportunityForm, setShowOpportunityForm] = useState(false)
-  const [editingOpportunity, setEditingOpportunity] = useState<OrganisationOpportunity | null>(null)
 
   // Fetch organization data
   const { data: organisation, isLoading, error } = useQuery({
@@ -100,23 +95,6 @@ export function OrganisationProfile() {
     setIsEditing(false)
   }
 
-  // Opportunity management handlers
-  const handleCreateOpportunity = () => {
-    setEditingOpportunity(null)
-    setShowOpportunityForm(true)
-    setActiveTab('opportunities')
-  }
-
-  const handleEditOpportunity = (opportunity: OrganisationOpportunity) => {
-    setEditingOpportunity(opportunity)
-    setShowOpportunityForm(true)
-    setActiveTab('opportunities')
-  }
-
-  const handleCloseOpportunityForm = () => {
-    setShowOpportunityForm(false)
-    setEditingOpportunity(null)
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -188,21 +166,6 @@ export function OrganisationProfile() {
     )
   }
 
-  // Show opportunity form if requested
-  if (showOpportunityForm) {
-    return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-4xl mx-auto">
-          <OpportunityForm
-            organisationSlug={slug!}
-            organisationName={organisation.name}
-            opportunity={editingOpportunity || undefined}
-            onClose={handleCloseOpportunityForm}
-          />
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -223,9 +186,8 @@ export function OrganisationProfile() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-1">
             <TabsTrigger value="details">Organisation Details</TabsTrigger>
-            <TabsTrigger value="opportunities">Job Opportunities</TabsTrigger>
           </TabsList>
 
           <TabsContent value="details" className="space-y-6">
@@ -407,16 +369,35 @@ export function OrganisationProfile() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Job Opportunities Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Briefcase className="h-5 w-5" />
+                  Job Opportunities
+                </CardTitle>
+                <CardDescription>
+                  Manage job postings for this organisation
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold">0</p>
+                    <p className="text-sm text-muted-foreground">Active job postings</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate(`/employer/organisations/${slug}/opportunities`)}
+                  >
+                    Manage Jobs
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          <TabsContent value="opportunities">
-            <OrganisationOpportunities
-              organisationSlug={slug!}
-              organisationName={organisation.name}
-              onCreateOpportunity={handleCreateOpportunity}
-              onEditOpportunity={handleEditOpportunity}
-            />
-          </TabsContent>
         </Tabs>
       </div>
     </div>
