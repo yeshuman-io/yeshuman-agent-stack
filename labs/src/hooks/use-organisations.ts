@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './use-auth'
 import { API_BASE_URL } from '../constants'
+import { authorizedFetch } from '@/lib/api'
 
 export interface Organisation {
   id: string
@@ -35,12 +36,7 @@ export function useOrganisations() {
   const organisationsQuery = useQuery({
     queryKey: ['managed-organisations'],
     queryFn: async (): Promise<Organisation[]> => {
-      const response = await fetch(`${API_URL}/api/organisations/managed`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authorizedFetch(`${API_URL}/api/organisations/managed`)
       if (!response.ok) {
         throw new Error('Failed to fetch organisations')
       }
@@ -51,12 +47,8 @@ export function useOrganisations() {
 
   const createOrganisationMutation = useMutation({
     mutationFn: async (data: CreateOrganisationData): Promise<Organisation> => {
-      const response = await fetch(`${API_URL}/api/organisations/managed`, {
+      const response = await authorizedFetch(`${API_URL}/api/organisations/managed`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(data),
       })
       if (!response.ok) {
@@ -72,12 +64,8 @@ export function useOrganisations() {
 
   const updateOrganisationMutation = useMutation({
     mutationFn: async ({ slug, data }: { slug: string; data: UpdateOrganisationData }): Promise<Organisation> => {
-      const response = await fetch(`${API_URL}/api/organisations/managed/${slug}`, {
+      const response = await authorizedFetch(`${API_URL}/api/organisations/managed/${slug}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(data),
       })
       if (!response.ok) {
@@ -93,11 +81,8 @@ export function useOrganisations() {
 
   const deleteOrganisationMutation = useMutation({
     mutationFn: async (slug: string): Promise<void> => {
-      const response = await fetch(`${API_URL}/api/organisations/managed/${slug}`, {
+      const response = await authorizedFetch(`${API_URL}/api/organisations/managed/${slug}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
       })
       if (!response.ok) {
         const error = await response.json()

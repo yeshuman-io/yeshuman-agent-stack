@@ -18,7 +18,7 @@ auth_router = Router()
 # JWT settings
 JWT_SECRET_KEY = settings.SECRET_KEY
 JWT_ALGORITHM = 'HS256'
-JWT_EXPIRATION_DELTA = timedelta(hours=24)
+JWT_EXPIRATION_DELTA = timedelta(seconds=5)  # TEMP: 5 seconds for testing expiry functionality
 
 
 class RegisterSchema(Schema):

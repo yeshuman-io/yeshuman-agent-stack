@@ -1,5 +1,10 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { API_BASE_URL } from '@/constants';
+import { isJwtExpired } from '@/utils/jwt';
+import { initializeAuthorizedFetch } from '@/lib/api';
+
+// Helper to check if we're on the login page
+const isOnLoginPage = () => window.location.pathname.startsWith('/login');
 
 interface User {
   id: number;
@@ -34,14 +39,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (storedToken && storedUser) {
       try {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        // Check if token is expired before setting it
+        if (isJwtExpired(storedToken)) {
+          console.log('Stored token is expired, clearing auth state and redirecting to login');
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('auth_user');
+          if (!isOnLoginPage()) {
+            window.location.href = '/login';
+          }
+        } else {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+        }
       } catch (error) {
         console.error('Failed to parse stored auth data:', error);
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_user');
+        if (!isOnLoginPage()) {
+          window.location.href = '/login';
+        }
+      }
+    } else {
+      // Only redirect to login if we're not already there
+      if (!isOnLoginPage()) {
+        window.location.href = '/login';
       }
     }
+  }, []);
+
+  // Check token expiry periodically
+  useEffect(() => {
+    const checkTokenExpiry = () => {
+      if (token && isJwtExpired(token)) {
+        console.log('Token expired during session, clearing auth state and redirecting to login');
+        logout();
+        if (!isOnLoginPage()) {
+          window.location.href = '/login';
+        }
+      }
+    };
+
+    // Check every 60 seconds
+    const interval = setInterval(checkTokenExpiry, 60000);
+
+    return () => clearInterval(interval);
+  }, [token]);
+
+  // Initialize authorizedFetch with auth functions
+  useEffect(() => {
+    // Create a no-op promptLogin since we removed that functionality
+    const promptLogin = () => {
+      if (!isOnLoginPage()) {
+        window.location.href = '/login';
+      }
+    };
+    initializeAuthorizedFetch(logout, promptLogin);
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/sidebar"
 import { LoginDialog } from "@/components/login-dialog"
 import { GroupCheckboxes } from "@/components/group-checkboxes"
+import { authorizedFetch } from "@/lib/api"
 import { useAuth } from "@/hooks/use-auth"
 import { CURRENT_CLIENT } from "@/constants"
 
@@ -140,13 +141,7 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
       console.log('Making request to: /api/threads')
 
       console.log('About to make fetch request...')
-      const response = await fetch('/api/threads', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authorizedFetch('/api/threads')
       console.log('Fetch completed, response object:', response)
       console.log('Response headers:', [...response.headers.entries()])
       console.log('Response status:', response.status)
@@ -219,12 +214,8 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
     console.log('Deleting thread:', threadId)
 
     try {
-      const response = await fetch(`/api/threads/${threadId}`, {
+      const response = await authorizedFetch(`/api/threads/${threadId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
       })
 
       if (response.ok) {

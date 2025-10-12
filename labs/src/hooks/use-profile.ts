@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './use-auth'
+import { authorizedFetch } from '@/lib/api'
 
 export interface ProfileData {
   id?: string
@@ -34,12 +35,7 @@ export function useProfile() {
     queryFn: async (): Promise<ProfileData> => {
       if (!token) throw new Error('Not authenticated')
 
-      const response = await fetch('/api/profiles/my', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authorizedFetch('/api/profiles/my')
 
       if (!response.ok) {
         throw new Error('Failed to fetch profile')
@@ -55,12 +51,8 @@ export function useProfile() {
     mutationFn: async (data: Partial<ProfileData>): Promise<ProfileData> => {
       if (!token) throw new Error('Not authenticated')
 
-      const response = await fetch('/api/profiles/my', {
+      const response = await authorizedFetch('/api/profiles/my', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(data),
       })
 
@@ -82,12 +74,8 @@ export function useProfile() {
     mutationFn: async (exp: Omit<Experience, 'id'>): Promise<Experience> => {
       if (!token) throw new Error('Not authenticated')
 
-      const response = await fetch('/api/profiles/my/experiences', {
+      const response = await authorizedFetch('/api/profiles/my/experiences', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(exp),
       })
 
@@ -113,12 +101,8 @@ export function useProfile() {
     mutationFn: async ({ id, updates }: { id: string, updates: Partial<Omit<Experience, 'id'>> }): Promise<Experience> => {
       if (!token) throw new Error('Not authenticated')
 
-      const response = await fetch(`/api/profiles/my/experiences/${id}`, {
+      const response = await authorizedFetch(`/api/profiles/my/experiences/${id}`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(updates),
       })
 
@@ -143,12 +127,8 @@ export function useProfile() {
     mutationFn: async (id: string): Promise<string> => {
       if (!token) throw new Error('Not authenticated')
 
-      const response = await fetch(`/api/profiles/my/experiences/${id}`, {
+      const response = await authorizedFetch(`/api/profiles/my/experiences/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
       })
 
       if (!response.ok) {
@@ -172,12 +152,8 @@ export function useProfile() {
     mutationFn: async ({ experienceId, skillName }: { experienceId: string, skillName: string }): Promise<Experience> => {
       if (!token) throw new Error('Not authenticated')
 
-      const response = await fetch(`/api/profiles/my/experiences/${experienceId}/skills`, {
+      const response = await authorizedFetch(`/api/profiles/my/experiences/${experienceId}/skills`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ skill_names: [skillName] }),
       })
 
@@ -202,12 +178,8 @@ export function useProfile() {
     mutationFn: async ({ experienceId, skillName }: { experienceId: string, skillName: string }): Promise<Experience> => {
       if (!token) throw new Error('Not authenticated')
 
-      const response = await fetch(`/api/profiles/my/experiences/${experienceId}/skills/${encodeURIComponent(skillName)}`, {
+      const response = await authorizedFetch(`/api/profiles/my/experiences/${experienceId}/skills/${encodeURIComponent(skillName)}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
       })
 
       if (!response.ok) {
