@@ -27,7 +27,7 @@ export function BrowseOpportunities() {
     page_size: 20
   })
 
-  const { opportunities, pagination, isLoading, error, loadMore } = useOpportunities(filters)
+  const { opportunities, pagination, isLoading, error } = useOpportunities(filters)
 
   // Apply modal state
   const [applyModalOpen, setApplyModalOpen] = useState(false)

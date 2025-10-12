@@ -1,4 +1,3 @@
-import { useAuth } from '@/hooks/use-auth';
 
 // Global reference to auth functions (set when authorizedFetch is first called)
 let authLogout: (() => void) | null = null;
