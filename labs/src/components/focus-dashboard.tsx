@@ -16,7 +16,6 @@ import {
   UserCheck,
   Star
 } from 'lucide-react'
-import { OrganisationList } from './organisation-list'
 
 interface FocusDashboardProps {
   focus: string
@@ -157,9 +156,6 @@ function EmployerDashboard({ onStartConversation }: { onStartConversation?: (mes
           <p className="text-muted-foreground">Manage your organisations and find the best talent</p>
         </div>
       </div>
-
-      {/* Organisation Management */}
-      <OrganisationList onStartConversation={onStartConversation} />
 
       {/* Quick Actions */}
       <div>

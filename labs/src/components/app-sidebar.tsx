@@ -1,4 +1,4 @@
-import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, Briefcase, Shield, Search, FileText, Users, Settings, Sparkles } from "lucide-react"
+import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, Briefcase, Shield, Search, FileText, Users, Settings, Sparkles, Building2 } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 
@@ -475,6 +475,12 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
                     <SidebarMenuButton tooltip="Update your profile" onClick={() => navigate('/profile')}>
                       <User className="size-4" />
                       {!isCollapsed && <span>My Profile</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Manage your organisations" onClick={() => navigate('/employer/organisations')}>
+                      <Building2 className="size-4" />
+                      {!isCollapsed && <span>My Organisations</span>}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>

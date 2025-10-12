@@ -3,6 +3,7 @@ import { FocusDashboard } from '../focus-dashboard'
 import { Profile } from '../profile'
 import { OrganisationProfile } from '../organisation-profile'
 import { EmployerEvaluations } from '../employer/evaluations'
+import { EmployerOrganisationsPage } from '../employer/organisations-page'
 
 interface EmployerRoutesProps {
   onStartConversation?: (message: string) => void
@@ -21,6 +22,7 @@ export function EmployerRoutes({ onStartConversation }: EmployerRoutesProps) {
         }
       />
       <Route path="profile" element={<Profile />} />
+      <Route path="organisations" element={<EmployerOrganisationsPage onStartConversation={onStartConversation} />} />
       <Route path="organisation/:slug" element={<OrganisationProfile />} />
       <Route path="evaluations" element={<EmployerEvaluations />} />
       {/* Add more employer-specific routes here as needed */}
