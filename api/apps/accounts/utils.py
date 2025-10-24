@@ -9,31 +9,18 @@ from django.utils import timezone
 
 async def get_available_foci_for_user(user):
     """
-    Get list of available focus options for a user based on their groups.
+    Return all assigned group names for the user; these serve as selectable foci.
 
-    Returns:
-        List of available focus strings: ['candidate', 'employer', 'administrator']
+    If the user has no groups, fall back to ['candidate'] for basic UX.
     """
     from asgiref.sync import sync_to_async
 
-    foci = []
-
-    # Everyone can be a candidate (default - cannot be removed for UX reasons)
-    foci.append('candidate')
-
-    # Check for employer access
-    if await sync_to_async(lambda: user.groups.filter(name='employer').exists())():
-        foci.append('employer')
-
-    # Check for recruiter access
-    if await sync_to_async(lambda: user.groups.filter(name='recruiter').exists())():
-        foci.append('recruiter')
-
-    # Check for admin access
-    if await sync_to_async(lambda: user.groups.filter(name='administrator').exists())():
-        foci.append('administrator')
-
-    return foci
+    group_names = await sync_to_async(lambda: list(user.groups.values_list('name', flat=True)))()
+    if group_names:
+        # De-duplicate and preserve a stable order (alphabetical)
+        return sorted(set(group_names))
+    # Fallback for users without groups assigned
+    return ['candidate']
 
 
 async def negotiate_user_focus(request, requested_focus=None):
@@ -97,11 +84,8 @@ async def negotiate_user_focus(request, requested_focus=None):
     if session_focus and session_focus in available_foci:
         return session_focus, None
 
-    # Default based on permissions (prefer candidate)
-    if 'administrator' in available_foci:
-        default_focus = 'administrator'
-    else:
-        default_focus = 'candidate'
+    # Default: prefer 'candidate' if present, else first available group
+    default_focus = 'candidate' if 'candidate' in available_foci else (available_foci[0] if available_foci else 'candidate')
 
     # Set default in session if not already set - use lambda for async-safe session access
     if not session_focus:

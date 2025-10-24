@@ -163,6 +163,11 @@ class A2AResponse(Schema):
     response: str
     agent_id: str
     error: Optional[str] = None
+class FeaturesResponse(Schema):
+    features: Dict[str, bool]
+    groups: List[str]
+    version: str
+
 
 
 # Health check endpoint
@@ -507,6 +512,48 @@ async def get_client_config(request):
         "client": CLIENT_CONFIG,
         "config": CURRENT_CLIENT
     }
+
+# Simple feature availability endpoint (group-first)
+@api.get("/features", response=FeaturesResponse)
+async def get_features(request):
+    """Return feature availability for the current user based on their groups.
+
+    Strategy: union of features across user's groups using a server-side policy.
+    For now, provide a minimal set keyed to common features, and mark true if
+    the user has any group we know enables it. This can be customized per deployment
+    via future config.
+    """
+    from asgiref.sync import sync_to_async
+    user = await get_user_from_token(request)
+
+    # Default: unauthenticated users get no features
+    if not user or getattr(user, 'is_anonymous', True):
+        return FeaturesResponse(features={}, groups=[], version="v1")
+
+    # Gather user groups
+    group_names = await sync_to_async(lambda: list(user.groups.values_list('name', flat=True)))()
+
+    # Server policy (minimal, safe defaults)
+    # You can later move this to config-based mapping: features_per_group
+    FEATURES = {
+        'profiles': {'candidate', 'patient', 'engineer', 'client', 'traveler'},
+        'skills': {'candidate', 'engineer'},
+        'opportunities': {'employer'},
+        'applications': {'candidate'},
+        'evaluations': {'employer', 'recruiter'},
+        'organisations': {'employer', 'principal', 'client'},
+        'threads': set(group_names)  # if user has any group, allow threads
+    }
+
+    enabled = {}
+    group_set = set(group_names)
+    for feature, required_groups in FEATURES.items():
+        if isinstance(required_groups, set):
+            enabled[feature] = len(group_set.intersection(required_groups)) > 0
+        else:
+            enabled[feature] = bool(required_groups)
+
+    return FeaturesResponse(features=enabled, groups=group_names, version="v1")
 
 # Test endpoint for development
 @api.get("/test")

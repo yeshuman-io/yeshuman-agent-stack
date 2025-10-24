@@ -20,8 +20,10 @@ from corsheaders.defaults import default_headers
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables from .env file in the api directory
-load_dotenv(BASE_DIR / '.env')
+# Load environment variables from a dotenv file in the api directory
+# Default is '.env' (e.g., agency), can override per runtime with DOTENV_FILE
+dotenv_file = os.getenv('DOTENV_FILE', '.env')
+load_dotenv(BASE_DIR / dotenv_file)
 
 # Load API-specific client configuration
 CLIENT_CONFIG_PATH = BASE_DIR / 'client-config.json'
@@ -119,6 +121,7 @@ INSTALLED_APPS = [
     'apps.profiles',  # User profiles
     'apps.skills',  # Skills
     'apps.threads',  # Conversation threads
+    'apps.seed',  # Seeding utilities (management commands)
     'a2a',
 ]
 
@@ -136,15 +139,28 @@ MIDDLEWARE = [
 ]
 
 # CORS settings - configurable via environment variable
+# Explicit origins allowed in development: 3000–3004 and 8000–8004
 CORS_ALLOWED_ORIGINS_DEFAULTS = [
-    "http://localhost:3000",    # Legacy frontend port
-    "http://127.0.0.1:3000",   # Legacy frontend port
-    "http://localhost:3001",    # Current frontend port (labs pnpm)
-    "http://127.0.0.1:3001",   # Current frontend port (labs pnpm)
-    "http://localhost:8001",    # Current backend port (django)
-    "http://127.0.0.1:8001",   # Current backend port (django)
-    "http://localhost:5173",    # Vite dev server
-    "http://127.0.0.1:5173",   # Vite dev server
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "http://localhost:3002",
+    "http://127.0.0.1:3002",
+    "http://localhost:3003",
+    "http://127.0.0.1:3003",
+    "http://localhost:3004",
+    "http://127.0.0.1:3004",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:8001",
+    "http://127.0.0.1:8001",
+    "http://localhost:8002",
+    "http://127.0.0.1:8002",
+    "http://localhost:8003",
+    "http://127.0.0.1:8003",
+    "http://localhost:8004",
+    "http://127.0.0.1:8004",
 ]
 
 # Get CORS origins from environment variable or use defaults
