@@ -1,4 +1,4 @@
-import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, Briefcase, Shield, Search, FileText, Users, Settings, Sparkles, Building2 } from "lucide-react"
+import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, HeartPulse, Briefcase, Shield, Search, FileText, Users, Settings, Sparkles, Building2, Handshake, Headset, Laptop2, Stethoscope, Crown } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 
@@ -328,6 +328,12 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
   }
 
   const getFocusIcon = (focus: string) => {
+    const PatientIcon = ({ className = "size-4" }) => (
+      <span className="relative inline-flex">
+        <User className={className} />
+        <HeartPulse className="absolute right-0 bottom-0 size-2 text-red-500" />
+      </span>
+    )
     switch (focus) {
       case 'candidate':
         return <User className="size-4" />
@@ -337,6 +343,20 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
         return <Users className="size-4" />
       case 'administrator':
         return <Shield className="size-4" />
+      case 'traveler':
+        return <Plane className="size-4" />
+      case 'agent':
+        return <Headset className="size-4" />
+      case 'patient':
+        return <PatientIcon />
+      case 'practitioner':
+        return <Stethoscope className="size-4" />
+      case 'client':
+        return <Handshake className="size-4" />
+      case 'engineer':
+        return <Laptop2 className="size-4" />
+      case 'principal':
+        return <Crown className="size-4" />
       default:
         return <User className="size-4" />
     }

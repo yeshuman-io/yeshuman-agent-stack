@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useGroups, GroupInfo } from '../hooks/use-groups'
-import { Loader2, User, Briefcase, Shield, Users } from 'lucide-react'
+import { Loader2, User, Briefcase, Shield, Users, Plane, HeartPulse, Stethoscope, Handshake, Headset, Laptop2, Crown } from 'lucide-react'
 
 interface GroupCheckboxesProps {
   onGroupsUpdated?: () => void
@@ -17,6 +17,25 @@ const getGroupIcon = (groupName: string) => {
       return <Users className="size-4" />
     case 'administrator':
       return <Shield className="size-4" />
+    case 'traveler':
+      return <Plane className="size-4" />
+    case 'agent':
+      return <Headset className="size-4" />
+    case 'patient':
+      return (
+        <span className="relative inline-flex">
+          <User className="size-4" />
+          <HeartPulse className="absolute right-0 bottom-0 size-2 text-red-500" />
+        </span>
+      )
+    case 'practitioner':
+      return <Stethoscope className="size-4" />
+    case 'client':
+      return <Handshake className="size-4" />
+    case 'engineer':
+      return <Laptop2 className="size-4" />
+    case 'principal':
+      return <Crown className="size-4" />
     default:
       return <User className="size-4" />
   }

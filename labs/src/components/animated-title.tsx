@@ -87,7 +87,9 @@ export const AnimatedTitle = ({ onAnimationTrigger }: AnimatedTitleProps) => {
 
   // Sarcastic animation (for clicks and AI responses)
   const triggerSarcasticAnimation = useCallback(() => {
-    const randomSarcastic = sarcasticVariations[Math.floor(Math.random() * sarcasticVariations.length)];
+    // For Lumie, use the client-provided list as supportive/encouraging messages
+    const pool = CURRENT_CLIENT.name === 'Lumie' ? sarcasticVariations : sarcasticVariations;
+    const randomSarcastic = pool[Math.floor(Math.random() * pool.length)];
     
     console.log(`😈 Triggering sarcastic animation: "${randomSarcastic}"`);
     
@@ -104,7 +106,7 @@ export const AnimatedTitle = ({ onAnimationTrigger }: AnimatedTitleProps) => {
 
   // Handle click event
   const handleTitleClick = () => {
-    console.log('🖱️ Title clicked - triggering sarcastic response');
+    console.log('🖱️ Title clicked - triggering variation response');
     triggerSarcasticAnimation();
   };
 
@@ -158,7 +160,6 @@ export const AnimatedTitle = ({ onAnimationTrigger }: AnimatedTitleProps) => {
       }`}
       style={{ minWidth: '200px' }} // Prevent layout shift during animation
       onClick={handleTitleClick}
-      title="Click me for attitude 😈"
     >
       <MatrixTalentCoBrand text={displayText} size="lg" />
     </div>
