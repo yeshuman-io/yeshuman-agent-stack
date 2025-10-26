@@ -309,11 +309,15 @@ class DjangoMemoryBackend:
             del bucket[0: len(bucket) - max_keep]
         return False
 
-    def is_near_duplicate(self, user_id: str, text: str, threshold: float = 0.9, recent_n: int = 20) -> Tuple[bool, float]:
+    async def is_near_duplicate(self, user_id: str, text: str, threshold: float = 0.9, recent_n: int = 20) -> Tuple[bool, float]:
         """Vector near-duplicate check against user's recent memories.
 
         Returns (is_dup, max_similarity).
         """
+        return await sync_to_async(self._is_near_duplicate_impl)(user_id, text, threshold, recent_n)
+
+    def _is_near_duplicate_impl(self, user_id: str, text: str, threshold: float = 0.9, recent_n: int = 20) -> Tuple[bool, float]:
+        """Internal implementation of is_near_duplicate method."""
         try:
             emb = self._get_embedding(text)
             if not emb:

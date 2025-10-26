@@ -161,7 +161,7 @@ async def is_near_duplicate(user_id: str, text: str, threshold: float = 0.9, rec
     """
     try:
         backend = DjangoMemoryBackend()
-        # Use the backend's helper method
+        # Use the backend's async method
         return await backend.is_near_duplicate(user_id, text, threshold, recent_n)
     except Exception as e:
         logger.error(f"Near-duplicate check failed: {e}")
