@@ -34,7 +34,6 @@ def build_workflow() -> StateGraph:
     async def tools_node_with_logging(state: Any, config: Any):
         """Tools node that loads tools dynamically based on context."""
         from .services import tools
-        from .mapper import get_tool_event_config
         import logging
         logger = logging.getLogger('agent')
 
