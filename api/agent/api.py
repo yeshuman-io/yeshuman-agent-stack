@@ -97,6 +97,29 @@ async def stream(request):
         response["Access-Control-Allow-Headers"] = "Content-Type, Accept"
         return response
 
+    # Initialize variables for both request types
+    connect_only = False
+    session_id = None
+
+    # Handle authentication for both GET and POST requests
+    user = None
+    try:
+        from yeshuman.api import get_user_from_token
+        auth_header = request.headers.get('authorization', '')
+        if auth_header.startswith('Bearer '):
+            logger.info(f"🔐 Agent auth header: '{auth_header[:50]}...'")
+            user = await get_user_from_token(request)
+            logger.info(f"🔐 Agent user extracted: {user}, type: {type(user)}, is_anon: {user.is_anonymous if user else 'N/A'}")
+            if user and not user.is_anonymous:
+                logger.info(f"🔐 Authenticated user: {user.username} (id: {user.id})")
+            else:
+                logger.info(f"🔐 Anonymous or no user: {user}")
+    except Exception as e:
+        logger.error(f"🔐 Agent auth error: {str(e)}")
+        import traceback
+        logger.error(f"🔐 Auth traceback: {traceback.format_exc()}")
+        pass
+
     if request.method == "POST":
         # Handle POST request with JSON body
         try:
@@ -146,26 +169,7 @@ async def stream(request):
         current_thread = None
 
         if request.method == "POST":
-            # Try to authenticate user from JWT token
-            user = None
-            try:
-                from yeshuman.api import get_user_from_token
-                auth_header = request.headers.get('authorization', '')
-                masked_header = f"{auth_header[:50]}..." if len(auth_header) > 50 else auth_header
-                logger.info(f"🔐 Agent auth header: '{masked_header}'")
-                user = await get_user_from_token(request)
-                logger.info(f"🔐 Agent user extracted: {user}, type: {type(user)}, is_anon: {user.is_anonymous if user else 'N/A'}")
-                if user and not user.is_anonymous:
-                    logger.info(f"🔐 Authenticated user: {user.username} (id: {user.id})")
-                else:
-                    logger.info(f"🔐 Anonymous or no user: {user}")
-            except Exception as e:
-                logger.error(f"🔐 Agent auth error: {str(e)}")
-                import traceback
-                logger.error(f"🔐 Auth traceback: {traceback.format_exc()}")
-                pass
-
-            # Handle thread/session context
+        # Handle thread/session context
             if thread_id:
                 logger.info(f"📂 [THREAD CONTEXT] Loading existing thread: thread_id={thread_id}")
                 # User is referencing a specific thread
@@ -254,6 +258,7 @@ async def stream(request):
 
 
         # Determine user focus for tool selection
+        logger.info(f"🎯 Before focus negotiation: user={user}, type={type(user)}, is_anon={user.is_anonymous if user else 'N/A'}")
         user_focus = None
         if user and not user.is_anonymous:
             logger.info(f"🎯 User authenticated: {user}, username: '{user.username}', id: {user.id}")
@@ -373,6 +378,7 @@ async def stream(request):
                 async for event in _emit_thread_creation():
                     yield event
 
+            logger.info(f"🎬 [STREAM LIFECYCLE] About to call astream_agent_tokens with user={user}, user.username={getattr(user, 'username', None)}, user.id={getattr(user, 'id', None)}, user.type={type(user)}")
             async for chunk in astream_agent_tokens(message, None, user=user, focus=user_focus, thread_id=final_thread_id):
                 # Accumulate message content for thread saving
                 if chunk.get("type") == "content_block_delta":

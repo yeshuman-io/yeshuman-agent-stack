@@ -4,13 +4,22 @@ Custom Mem0 storage backend using Django models with PostgreSQL + pgvector.
 import uuid
 import logging
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from django.db import transaction
 from django.utils import timezone
 from asgiref.sync import sync_to_async
 from .models import Memory, MemorySearch
 from openai import OpenAI
 import numpy as np
+
+# Optional LangSmith tracing
+try:
+    from langsmith.run_helpers import traceable
+except Exception:  # pragma: no cover
+    def traceable(*args, **kwargs):  # type: ignore
+        def _decorator(fn):
+            return fn
+        return _decorator
 
 # Set up logger for memory operations
 logger = logging.getLogger('apps.memories')
@@ -26,6 +35,8 @@ class DjangoMemoryBackend:
         self.config = config or {}
         self.openai_client = OpenAI()
         logger.info("Initialized DjangoMemoryBackend with config: %s", self.config)
+        # Simple per-user LRU of recent hashes to limit duplicates
+        self._recent_hashes: Dict[str, List[str]] = {}
         
     def _get_embedding(self, text: str) -> List[float]:
         """Generate embedding using OpenAI's text-embedding-3-small"""
@@ -60,6 +71,7 @@ class DjangoMemoryBackend:
             logger.error("Text that caused error: %r", text)
             return None
     
+    @traceable(name="mem.add", run_type="tool")
     async def add(self, messages: List[Dict], user_id: str, metadata: Optional[Dict] = None) -> Dict:
         """
         Add a new memory to the Django backend.
@@ -139,6 +151,7 @@ class DjangoMemoryBackend:
             logger.error("Failed to add memory for user_id %s after %.2fs: %s", user_id, duration, str(e))
             return {"error": f"Failed to add memory: {e}"}
     
+    @traceable(name="mem.search", run_type="retriever")
     async def search(self, query: str, user_id: str, limit: int = 5) -> Dict:
         """
         Search memories using vector similarity.
@@ -276,6 +289,57 @@ class DjangoMemoryBackend:
             duration = time.time() - start_time
             logger.error("Search failed for user_id %s after %.2fs: %s", user_id, duration, str(e))
             return {"results": [], "error": f"Search failed: {e}"}
+
+    def _normalize_text(self, text: str) -> str:
+        if not text:
+            return ""
+        return " ".join(text.lower().strip().split())
+
+    def _hash_text(self, text: str) -> str:
+        import hashlib
+        return hashlib.sha256(self._normalize_text(text).encode("utf-8")).hexdigest()
+
+    def recent_lru_check(self, user_id: str, text_hash: str, max_keep: int = 32) -> bool:
+        """Return True if hash was seen recently; otherwise add and return False."""
+        bucket = self._recent_hashes.setdefault(user_id, [])
+        if text_hash in bucket:
+            return True
+        bucket.append(text_hash)
+        if len(bucket) > max_keep:
+            del bucket[0: len(bucket) - max_keep]
+        return False
+
+    def is_near_duplicate(self, user_id: str, text: str, threshold: float = 0.9, recent_n: int = 20) -> Tuple[bool, float]:
+        """Vector near-duplicate check against user's recent memories.
+
+        Returns (is_dup, max_similarity).
+        """
+        try:
+            emb = self._get_embedding(text)
+            if not emb:
+                return False, 0.0
+            q = np.array(emb)
+            memories = (
+                Memory.objects.filter(user_id=user_id, embedding__isnull=False, is_archived=False)
+                .order_by("-created_at")[:recent_n]
+            )
+            max_sim = 0.0
+            for m in memories:
+                try:
+                    v = np.array(m.embedding)
+                    dot = float(np.dot(q, v))
+                    qn = float(np.linalg.norm(q)) or 1.0
+                    vn = float(np.linalg.norm(v)) or 1.0
+                    sim = dot / (qn * vn)
+                    if sim > max_sim:
+                        max_sim = sim
+                        if max_sim >= threshold:
+                            return True, max_sim
+                except Exception:
+                    continue
+            return max_sim >= threshold, max_sim
+        except Exception:
+            return False, 0.0
     
     async def get_all(self, user_id: str, limit: int = 10) -> Dict:
         """

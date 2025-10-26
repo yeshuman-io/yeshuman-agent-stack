@@ -24,10 +24,13 @@ from langgraph.prebuilt import ToolNode
 from tools.compositions import get_tools_for_context, get_tools_for_user, get_tools_for_focus
 from .mapper import get_tool_event_config, create_ui_event
 from .checkpointer import DjangoCheckpointSaver
+from apps.memories.backends import DjangoMemoryBackend
 
 # Semantic voice enhancement
 from sentence_transformers import SentenceTransformer
 import numpy as np
+import asyncio
+import json
 
 # Load environment variables
 load_dotenv()
@@ -37,6 +40,17 @@ logger = logging.getLogger('agent')
 # Module-local, async-safe-ish voice state store keyed by user_id
 # Keeps minimal state across graph turns without coupling to graph state
 VOICE_STATE: Dict[str, Dict[str, Any]] = {}
+
+# Simple per-user memory store state (rate limiting)
+MEMORY_STATE: Dict[str, Dict[str, Any]] = {}
+
+def _get_memory_state(user_id: str) -> Dict[str, Any]:
+    if user_id not in MEMORY_STATE:
+        MEMORY_STATE[user_id] = {
+            "last_store_ts": 0.0,
+            "stored_this_session": 0,
+        }
+    return MEMORY_STATE[user_id]
 
 def _get_voice_state(user_id: str) -> Dict[str, Any]:
     if user_id not in VOICE_STATE:
@@ -233,15 +247,19 @@ class AgentState(TypedDict):
     """Simple state following LangGraph patterns."""
     messages: Annotated[List[BaseMessage], add_messages]
     user_id: Optional[str]
+    user: Optional[Any]  # Django User object
     tools_done: Optional[bool]
     voice_messages: Optional[List[str]]
     last_voice_sig: Optional[str]
     tool_call_count: Optional[int]  # Prevent infinite tool loops
+    context_memories: Optional[List[Dict[str, Any]]]
 
 
 async def context_preparation_node(state: AgentState) -> AgentState:
-    """Add system prompt to start conversation."""
+    """Add system prompt to start conversation and retrieve memories."""
     global SYSTEM_PROMPT
+    print("🧠 DEBUG: context_preparation_node called")
+    logger.info("🧠 Context preparation node started")
 
     # Try to refresh system prompt from Django settings if available
     try:
@@ -253,14 +271,114 @@ async def context_preparation_node(state: AgentState) -> AgentState:
         # Keep existing prompt if update fails
         pass
 
-    # Add system message if not already present
-    if not state["messages"] or not isinstance(state["messages"][0], SystemMessage):
-        system_message = SystemMessage(content=SYSTEM_PROMPT)
-        # Prepend system message to existing messages, don't replace them
-        existing_messages = state.get("messages", [])
-        return {"messages": [system_message] + existing_messages}
+    # Retrieve memories first
+    user_id = state.get("user_id")
+    last_user_text = ""
+    for _m in reversed(state.get("messages", [])):
+        if isinstance(_m, HumanMessage) and _m.content:
+            last_user_text = _m.content
+            break
 
-    return state
+    context_memories = []
+    if last_user_text and user_id:
+        logger.info(f"🧠 Memory retrieval: user_id={user_id}, query='{last_user_text[:50]}...'")
+        try:
+            from apps.memories.backends import DjangoMemoryBackend
+            mem_backend = DjangoMemoryBackend()
+            mem_res = await mem_backend.search(last_user_text, user_id, limit=5)
+            context_memories = mem_res.get("results", [])
+            logger.info(f"🧠 Memory retrieval: found {len(context_memories)} memories")
+
+            # Emit SSE memory.retrieved
+            from langgraph.config import get_stream_writer
+            writer = get_stream_writer()
+            if writer and context_memories:
+                try:
+                    from langchain_openai import ChatOpenAI
+                    mini = ChatOpenAI(model="gpt-4o-mini", temperature=0.2, api_key=os.getenv("OPENAI_API_KEY"), streaming=True)
+                    summary_prompt = SystemMessage(content=(
+                        "Generate a brief 1-line status (<=12 words) summarizing memory retrieval for the user's request. "
+                        "Example: 'Found 3 relevant memories about travel preferences.'"
+                    ))
+                    async for _chunk in mini.astream([summary_prompt]):
+                        if _chunk.content:
+                            writer({
+                                "type": "memory",
+                                "subType": "retrieved",
+                                "content": _chunk.content,
+                                "meta": {
+                                    "count": len(context_memories),
+                                    "top_similarity": context_memories[0]["metadata"].get("similarity") if context_memories else None,
+                                }
+                            })
+                except Exception as e:
+                    logger.warning(f"Memory retrieved SSE emission failed: {e}")
+        except Exception as e:
+            logger.error(f"Memory retrieval failed: {e}")
+
+    # Always enhance system prompt with memories if available
+
+    if not state["messages"]:
+        # No messages at all - create new system message
+        base_prompt = SYSTEM_PROMPT
+        if context_memories:
+            memory_section = "\n\n## Relevant Memories\n"
+            for i, mem in enumerate(context_memories[:3], 1):  # Limit to top 3
+                content = mem.get("memory", mem.get("content", ""))[:200]  # Try both keys
+                similarity = mem.get("metadata", {}).get("similarity", 0)
+                memory_section += f"{i}. {content}\n"
+
+            base_prompt += memory_section
+            logger.info(f"🧠 Enhanced system prompt with {len(context_memories)} memories: {[m.get('memory', m.get('content', ''))[:50] for m in context_memories[:3]]}")
+            print(f"🧠 DEBUG: System prompt enhanced with {len(context_memories)} memories")
+            print(f"🧠 DEBUG: Memory section: {memory_section[:200]}...")
+
+        system_message = SystemMessage(content=base_prompt)
+        return {"messages": [system_message], "context_memories": context_memories}
+
+    elif isinstance(state["messages"][0], SystemMessage):
+        # System message exists - enhance it with memories
+        existing_prompt = state["messages"][0].content
+        base_prompt = existing_prompt
+
+        if context_memories:
+            # Check if memories are already included (avoid duplication)
+            if "## Relevant Memories" not in existing_prompt:
+                memory_section = "\n\n## Relevant Memories\n"
+                for i, mem in enumerate(context_memories[:3], 1):  # Limit to top 3
+                    content = mem.get("memory", mem.get("content", ""))[:200]  # Try both keys
+                    similarity = mem.get("metadata", {}).get("similarity", 0)
+                    memory_section += f"{i}. {content}\n"
+
+                base_prompt += memory_section
+                logger.info(f"🧠 Enhanced existing system prompt with {len(context_memories)} memories")
+                print(f"🧠 DEBUG: Enhanced existing system prompt with {len(context_memories)} memories")
+                print(f"🧠 DEBUG: Memory section: {memory_section[:200]}...")
+
+        # Replace the existing system message
+        enhanced_system_message = SystemMessage(content=base_prompt)
+        updated_messages = [enhanced_system_message] + state["messages"][1:]
+        return {"messages": updated_messages, "context_memories": context_memories}
+
+    else:
+        # No system message - prepend one
+        base_prompt = SYSTEM_PROMPT
+        if context_memories:
+            memory_section = "\n\n## Relevant Memories\n"
+            for i, mem in enumerate(context_memories[:3], 1):  # Limit to top 3
+                content = mem.get("memory", mem.get("content", ""))[:200]  # Try both keys
+                similarity = mem.get("metadata", {}).get("similarity", 0)
+                memory_section += f"{i}. {content}\n"
+
+            base_prompt += memory_section
+            logger.info(f"🧠 Enhanced system prompt with {len(context_memories)} memories: {[m.get('memory', m.get('content', ''))[:50] for m in context_memories[:3]]}")
+            print(f"🧠 DEBUG: System prompt enhanced with {len(context_memories)} memories")
+            print(f"🧠 DEBUG: Memory section: {memory_section[:200]}...")
+
+        system_message = SystemMessage(content=base_prompt)
+        # Prepend system message to existing messages
+        existing_messages = state.get("messages", [])
+        return {"messages": [system_message] + existing_messages, "context_memories": context_memories}
 
 
 
@@ -342,6 +460,7 @@ async def create_agent(client: str = 'talentco', role: str = 'admin', protocol: 
             else:
                 tool_names = [tool.name for tool in tools]
                 logger.info(f"🎉 Agent ready with {len(tools)} tools: {tool_names}")
+
 
             # Check for tool results and emit UI events
             if state.get("messages"):
@@ -618,6 +737,113 @@ Return ONLY the status line, no quotes or explanation."""
                 import asyncio
                 asyncio.create_task(_thread_operations_task())
 
+            # -----------------------------------------------
+            # Ambient Memory Store (async background)
+            # -----------------------------------------------
+            try:
+                user_id = state.get("user_id")  # Get user_id from state
+                logger.info(f"🧠 Memory storage: checking user_id={user_id}")
+                if user_id:
+                    # Snapshot last human message for classification
+                    last_user_text = ""
+                    for _m in reversed(state.get("messages", [])):
+                        if isinstance(_m, HumanMessage) and _m.content:
+                            last_user_text = _m.content
+                            break
+
+                    logger.info(f"🧠 Memory storage: found user text='{last_user_text[:50]}...', scheduling async task")
+                    if last_user_text:
+                        # Capture user_id at scheduling time
+                        captured_user_id = str(user_id)
+                        async def _memory_store_task():
+                            try:
+                                logger.info("🧠 Memory storage task: started")
+                                mem_backend = DjangoMemoryBackend()
+
+                                # Rate limit
+                                if captured_user_id:
+                                    ms = _get_memory_state(captured_user_id)
+                                    now_ts = time.time()
+                                    time_since_last = now_ts - ms["last_store_ts"]
+                                    stored_count = ms["stored_this_session"]
+                                    logger.info(f"🧠 Memory storage task: rate check - time_since_last={time_since_last:.1f}s, stored_this_session={stored_count}")
+                                    if (time_since_last < 30) or (stored_count >= 3):
+                                        logger.info("🧠 Memory storage task: rate limited, skipping")
+                                        return
+                                else:
+                                    logger.warning("🧠 Memory storage task: no user_id captured, skipping rate limiting")
+
+                                # LLM classify (JSON contract)
+                                logger.info("🧠 Memory storage task: calling classifier LLM")
+                                cls_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, api_key=api_key, streaming=False)
+                                prompt = SystemMessage(content=(
+                                    "Decide if the following user message should be stored as a stable memory.\n"
+                                    "Return strict JSON: {\"store\": bool, \"reason\": string, \"type\": one of [preference,identity,constraint,fact,other]}\n"
+                                    "Criteria: store only user-specific, time-invariant facts or preferences; avoid greetings, ephemeral requests, transactional details."
+                                ))
+                                resp = await cls_llm.ainvoke([prompt, HumanMessage(content=last_user_text)])
+                                logger.info(f"🧠 Memory storage task: classifier response='{resp.content[:100]}...'")
+                                decision = {"store": False, "reason": "", "type": "other"}
+                                try:
+                                    decision = json.loads(resp.content)
+                                except Exception as e:
+                                    logger.warning(f"🧠 Memory storage task: failed to parse JSON: {e}")
+                                    pass
+
+                                logger.info(f"🧠 Memory storage task: decision={decision}")
+                                if not decision.get("store", False):
+                                    logger.info("🧠 Memory storage task: not storing (decision=false)")
+                                    return
+
+                                # Dedup checks
+                                text_hash = mem_backend._hash_text(last_user_text)
+                                if mem_backend.recent_lru_check(captured_user_id, text_hash):
+                                    return
+                                is_dup, max_sim = mem_backend.is_near_duplicate(captured_user_id, last_user_text, threshold=0.9)
+                                if is_dup:
+                                    return
+
+                                meta = {
+                                    "category": "general",
+                                    "interaction_type": "conversation",
+                                    "importance": "high" if decision.get("type") in ("preference","identity") else "medium",
+                                    "source": "agent_entry",
+                                    "type": decision.get("type", "other")
+                                }
+                                # Persist
+                                await mem_backend.add([
+                                    {"role": "user", "content": last_user_text}
+                                ], captured_user_id, metadata=meta)
+
+                                # Update rate limiter
+                                if captured_user_id:
+                                    ms["last_store_ts"] = now_ts
+                                    ms["stored_this_session"] += 1
+
+                                # Emit SSE memory.stored (short streamed)
+                                if writer:
+                                    try:
+                                        mini2 = ChatOpenAI(model="gpt-4o-mini", temperature=0.2, api_key=api_key, streaming=True)
+                                        sp = SystemMessage(content=(
+                                            "Generate a brief 1-line confirmation (<=10 words) that a useful memory was saved."
+                                        ))
+                                        async for _c in mini2.astream([sp]):
+                                            if _c.content:
+                                                writer({
+                                                    "type": "memory",
+                                                    "subType": "stored",
+                                                    "content": _c.content,
+                                                    "meta": {"stored": True}
+                                                })
+                                    except Exception as e:
+                                        logger.warning(f"Memory stored SSE emission failed: {e}")
+                            except Exception as e:
+                                logger.error(f"Ambient memory store failed: {e}")
+
+                        asyncio.create_task(_memory_store_task())
+            except Exception as e:
+                logger.error(f"Scheduling memory store task failed: {e}")
+
             return {
                 "messages": state["messages"] + [final_response],  # Preserve full conversation history
                 "writer": writer,
@@ -862,11 +1088,14 @@ async def astream_agent_tokens(message: str, messages: Optional[List[BaseMessage
 
     logger.info(f"📤 State has 1 new message (checkpointer will load conversation history)")
 
+    user_id_value = str(user.id) if user else None
     state = {
         "messages": state_messages,
-        "user_id": user.id if user else None,
+        "user_id": user_id_value,
+        "user": user,  # Pass user object for memory operations
         "tool_call_count": 0  # Initialize tool call counter
     }
+    logger.info(f"📝 Created initial state with user_id={user_id_value}, user={user.username if user else None}")
 
     # Config for checkpointer with thread_id and user/focus for dynamic tool loading
     config = {
@@ -878,6 +1107,15 @@ async def astream_agent_tokens(message: str, messages: Optional[List[BaseMessage
             "protocol": "graph"  # Default protocol
         }
     }
+
+    # Always run context_preparation_node first to retrieve memories and enhance prompt
+    logger.info("🧠 Running context_preparation_node first")
+    try:
+        prepared_state = await context_preparation_node(state)
+        state = prepared_state
+        logger.info("🧠 Context preparation completed")
+    except Exception as e:
+        logger.error(f"🧠 Context preparation failed: {e}")
 
     # Only use custom stream mode - everything flows through writer()
     async for chunk in agent.astream(state, config=config, stream_mode="custom"):
