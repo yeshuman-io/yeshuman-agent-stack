@@ -9,7 +9,6 @@ Clean design following LangGraph patterns:
 """
 import os
 import logging
-import time
 from typing import TypedDict, List, Optional, Annotated, Dict, Any
 from dotenv import load_dotenv
 
@@ -21,226 +20,20 @@ from langgraph.graph.message import add_messages
 from langgraph.config import get_stream_writer
 from langgraph.prebuilt import ToolNode
 
-from tools.compositions import get_tools_for_context, get_tools_for_user, get_tools_for_focus
 from .mapper import get_tool_event_config, create_ui_event
 from .checkpointer import DjangoCheckpointSaver
-from apps.memories.backends import DjangoMemoryBackend
-
-# Semantic voice enhancement
-from sentence_transformers import SentenceTransformer
-import numpy as np
-import asyncio
-import json
+from .services import memory, prompt, events, tools, voice
 
 # Load environment variables
 load_dotenv()
 
 # Set up logger
 logger = logging.getLogger('agent')
-# Module-local, async-safe-ish voice state store keyed by user_id
-# Keeps minimal state across graph turns without coupling to graph state
-VOICE_STATE: Dict[str, Dict[str, Any]] = {}
-
-# Simple per-user memory store state (rate limiting)
-MEMORY_STATE: Dict[str, Dict[str, Any]] = {}
-
-def _get_memory_state(user_id: str) -> Dict[str, Any]:
-    if user_id not in MEMORY_STATE:
-        MEMORY_STATE[user_id] = {
-            "last_store_ts": 0.0,
-            "stored_this_session": 0,
-        }
-    return MEMORY_STATE[user_id]
-
-def _get_voice_state(user_id: str) -> Dict[str, Any]:
-    if user_id not in VOICE_STATE:
-        VOICE_STATE[user_id] = {
-            "voice_messages": [],
-            "last_voice_sig": None,
-        }
-    return VOICE_STATE[user_id]
-
-
-# Semantic Voice Manager for intelligent voice triggering
-class SemanticVoiceManager:
-    """Manages semantic analysis for intelligent voice triggering"""
-
-    _instance = None
-    _model = None
-
-    def __init__(self):
-        self.previous_embedding = None
-        self.similarity_threshold = 0.75
-        self.cooldown_seconds = 3.0
-        self.last_trigger_time = 0
-
-    @classmethod
-    def get_instance(cls):
-        """Singleton pattern for model sharing"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def get_model(cls):
-        """Lazy load the sentence transformer model"""
-        if cls._model is None:
-            logger.info("Loading sentence transformer model for semantic voice...")
-            try:
-                cls._model = SentenceTransformer('all-MiniLM-L6-v2')
-                logger.info("✅ Sentence transformer model loaded")
-            except Exception as e:
-                logger.error(f"❌ Failed to load sentence transformer: {e}")
-                cls._model = None
-        return cls._model
-
-    def extract_semantic_context(self, state: 'AgentState') -> str:
-        """Extract current semantic state for comparison"""
-        messages = state.get("messages", [])
-        if not messages:
-            return "initial_state"
-
-        # Get recent messages for semantic context
-        recent_messages = messages[-5:]  # Last 5 messages for context window
-        context_parts = []
-
-        # Current phase
-        if state.get("tools_done") is False:
-            context_parts.append("tool_execution_phase")
-        elif any(hasattr(msg, 'tool_call_id') for msg in recent_messages):
-            context_parts.append("result_processing_phase")
-        else:
-            context_parts.append("response_generation_phase")
-
-        # Active operations from recent tool calls
-        operations = self._extract_operations(state)
-        if operations:
-            context_parts.append(f"operations: {', '.join(operations)}")
-
-        # Current user intent from most recent human message
-        for msg in reversed(messages):
-            if isinstance(msg, HumanMessage):
-                user_intent = msg.content[:200]  # First 200 chars for semantic comparison
-                context_parts.append(f"user_request: {user_intent}")
-                break
-
-        # Tool usage patterns
-        tool_calls = [msg for msg in recent_messages if hasattr(msg, 'tool_calls') and msg.tool_calls]
-        if tool_calls:
-            context_parts.append(f"tool_activity: {len(tool_calls)} recent tool calls")
-
-        return " | ".join(context_parts)
-
-
-    def _extract_operations(self, state: 'AgentState') -> List[str]:
-        """Extract current active operations"""
-        operations = []
-
-        # Check for tool calls in recent messages
-        messages = state.get("messages", [])
-        recent_messages = messages[-3:]  # Last 3 messages
-
-        for msg in recent_messages:
-            if hasattr(msg, 'tool_calls') and msg.tool_calls:
-                tool_names = [tc.get('name', 'unknown') for tc in msg.tool_calls]
-                operations.extend(tool_names)
-
-        # Add phase-based operations
-        if state.get("tools_done") is False:
-            operations.append("tool_execution")
-        elif len(operations) > 0:
-            operations.append("result_processing")
-
-        return operations[:5]  # Limit to prevent context bloat
-
-    def _detect_reasoning_phase(self, state: 'AgentState') -> str:
-        """Detect the current reasoning phase"""
-        if state.get("tools_done") is False:
-            return "tool_execution"
-        elif any(hasattr(msg, 'tool_call_id') for msg in state.get("messages", [])):
-            return "result_synthesis"
-        elif len(state.get("messages", [])) <= 2:
-            return "initial_analysis"
-        else:
-            return "response_generation"
-
-
-
-    def should_trigger_voice(self, state: 'AgentState', current_time: float) -> bool:
-        """Determine if voice should be triggered based on semantic analysis"""
-
-        # Rate limiting check
-        if current_time - self.last_trigger_time < self.cooldown_seconds:
-            return False
-
-        # Extract semantic context
-        context_text = self.extract_semantic_context(state)
-
-        # Get model and create embedding
-        model = self.get_model()
-        if model is None:
-            return False  # Model failed to load
-
-        try:
-            current_embedding = model.encode(context_text, normalize_embeddings=True)
-
-            # First run always triggers
-            if self.previous_embedding is None:
-                self.previous_embedding = current_embedding
-                self.last_trigger_time = current_time
-                return True
-
-            # Calculate cosine similarity
-            similarity = np.dot(current_embedding, self.previous_embedding)
-
-            # Trigger if similarity is below threshold (significant semantic shift)
-            if similarity < self.similarity_threshold:
-                self.previous_embedding = current_embedding
-                self.last_trigger_time = current_time
-                logger.info(f"🎤 Semantic voice trigger: similarity {similarity:.3f} < {self.similarity_threshold}")
-                return True
-
-        except Exception as e:
-            logger.warning(f"Semantic analysis failed: {e}")
-            return False
-
-        return False
-
-
-# Global semantic voice manager instance
-semantic_voice_manager = SemanticVoiceManager.get_instance()
 
 
 # UI events are emitted directly in agent_node
 
 
-# Dynamic system prompt based on client configuration
-def get_system_prompt():
-    """Get the system prompt for the current client configuration."""
-    try:
-        from django.conf import settings
-        # Check if settings are configured
-        if hasattr(settings, 'CURRENT_CLIENT'):
-            return settings.CURRENT_CLIENT['system_prompt']
-        else:
-            # Django settings not fully loaded yet
-            return get_fallback_prompt()
-    except (ImportError, AttributeError):
-        # Django not available or not configured
-        return get_fallback_prompt()
-
-def get_fallback_prompt():
-    """Fallback system prompt when Django settings unavailable."""
-    return """You are an AI assistant without a name.
-
-Address the user as "Human" or "human".
-Don't use synonyms "human".
-Use different punctuations for "yes" and "human" such as ' ! , . ; ?.
-Subtly borrow terminology and language patterns from Blade Runner and Dune without directly referencing these works by name.
-Be subtle, don't over do it.  Be minimal and slightly robotic.  Be dead pan without exclamations."""
-
-# Initialize with fallback, will be updated when Django is ready
-SYSTEM_PROMPT = get_fallback_prompt()
 
 
 class AgentState(TypedDict):
@@ -257,19 +50,16 @@ class AgentState(TypedDict):
 
 async def context_preparation_node(state: AgentState) -> AgentState:
     """Add system prompt to start conversation and retrieve memories."""
-    global SYSTEM_PROMPT
     print("🧠 DEBUG: context_preparation_node called")
     logger.info("🧠 Context preparation node started")
 
     # Try to refresh system prompt from Django settings if available
     try:
-        current_prompt = get_system_prompt()
-        if current_prompt != SYSTEM_PROMPT:
-            SYSTEM_PROMPT = current_prompt
-            print("✅ Updated system prompt for client configuration")
+        current_prompt = prompt.get_system_prompt()
+        logger.debug("Updated system prompt for client configuration")
     except Exception:
         # Keep existing prompt if update fails
-        pass
+        current_prompt = prompt.get_fallback_prompt()
 
     # Retrieve memories first
     user_id = state.get("user_id")
@@ -283,99 +73,51 @@ async def context_preparation_node(state: AgentState) -> AgentState:
     if last_user_text and user_id:
         logger.info(f"🧠 Memory retrieval: user_id={user_id}, query='{last_user_text[:50]}...'")
         try:
-            from apps.memories.backends import DjangoMemoryBackend
-            mem_backend = DjangoMemoryBackend()
-            mem_res = await mem_backend.search(last_user_text, user_id, limit=5)
-            context_memories = mem_res.get("results", [])
+            context_memories = await memory.retrieve_context_memories(user_id, last_user_text, k=5)
             logger.info(f"🧠 Memory retrieval: found {len(context_memories)} memories")
 
             # Emit SSE memory.retrieved
-            from langgraph.config import get_stream_writer
             writer = get_stream_writer()
             if writer and context_memories:
-                try:
-                    from langchain_openai import ChatOpenAI
-                    mini = ChatOpenAI(model="gpt-4o-mini", temperature=0.2, api_key=os.getenv("OPENAI_API_KEY"), streaming=True)
-                    summary_prompt = SystemMessage(content=(
-                        "Generate a brief 1-line status (<=12 words) summarizing memory retrieval for the user's request. "
-                        "Example: 'Found 3 relevant memories about travel preferences.'"
-                    ))
-                    async for _chunk in mini.astream([summary_prompt]):
-                        if _chunk.content:
-                            writer({
-                                "type": "memory",
-                                "subType": "retrieved",
-                                "content": _chunk.content,
-                                "meta": {
-                                    "count": len(context_memories),
-                                    "top_similarity": context_memories[0]["metadata"].get("similarity") if context_memories else None,
-                                }
-                            })
-                except Exception as e:
-                    logger.warning(f"Memory retrieved SSE emission failed: {e}")
+                top_similarity = context_memories[0]["metadata"].get("similarity") if context_memories else None
+                await events.emit_memory_retrieved(writer, len(context_memories), top_similarity)
         except Exception as e:
             logger.error(f"Memory retrieval failed: {e}")
 
     # Always enhance system prompt with memories if available
+    enhanced_prompt = prompt.inject_memories_into_prompt(current_prompt, context_memories)
 
     if not state["messages"]:
         # No messages at all - create new system message
-        base_prompt = SYSTEM_PROMPT
+        system_message = SystemMessage(content=enhanced_prompt)
         if context_memories:
-            memory_section = "\n\n## Relevant Memories\n"
-            for i, mem in enumerate(context_memories[:3], 1):  # Limit to top 3
-                content = mem.get("memory", mem.get("content", ""))[:200]  # Try both keys
-                similarity = mem.get("metadata", {}).get("similarity", 0)
-                memory_section += f"{i}. {content}\n"
-
-            base_prompt += memory_section
             logger.info(f"🧠 Enhanced system prompt with {len(context_memories)} memories: {[m.get('memory', m.get('content', ''))[:50] for m in context_memories[:3]]}")
             print(f"🧠 DEBUG: System prompt enhanced with {len(context_memories)} memories")
-            print(f"🧠 DEBUG: Memory section: {memory_section[:200]}...")
-
-        system_message = SystemMessage(content=base_prompt)
         return {"messages": [system_message], "context_memories": context_memories}
 
     elif isinstance(state["messages"][0], SystemMessage):
         # System message exists - enhance it with memories
         existing_prompt = state["messages"][0].content
-        base_prompt = existing_prompt
-
         if context_memories:
             # Check if memories are already included (avoid duplication)
             if "## Relevant Memories" not in existing_prompt:
-                memory_section = "\n\n## Relevant Memories\n"
-                for i, mem in enumerate(context_memories[:3], 1):  # Limit to top 3
-                    content = mem.get("memory", mem.get("content", ""))[:200]  # Try both keys
-                    similarity = mem.get("metadata", {}).get("similarity", 0)
-                    memory_section += f"{i}. {content}\n"
-
-                base_prompt += memory_section
+                enhanced_prompt = prompt.inject_memories_into_prompt(existing_prompt, context_memories)
                 logger.info(f"🧠 Enhanced existing system prompt with {len(context_memories)} memories")
                 print(f"🧠 DEBUG: Enhanced existing system prompt with {len(context_memories)} memories")
-                print(f"🧠 DEBUG: Memory section: {memory_section[:200]}...")
+            else:
+                enhanced_prompt = existing_prompt
 
         # Replace the existing system message
-        enhanced_system_message = SystemMessage(content=base_prompt)
+        enhanced_system_message = SystemMessage(content=enhanced_prompt)
         updated_messages = [enhanced_system_message] + state["messages"][1:]
         return {"messages": updated_messages, "context_memories": context_memories}
 
     else:
         # No system message - prepend one
-        base_prompt = SYSTEM_PROMPT
+        system_message = SystemMessage(content=enhanced_prompt)
         if context_memories:
-            memory_section = "\n\n## Relevant Memories\n"
-            for i, mem in enumerate(context_memories[:3], 1):  # Limit to top 3
-                content = mem.get("memory", mem.get("content", ""))[:200]  # Try both keys
-                similarity = mem.get("metadata", {}).get("similarity", 0)
-                memory_section += f"{i}. {content}\n"
-
-            base_prompt += memory_section
             logger.info(f"🧠 Enhanced system prompt with {len(context_memories)} memories: {[m.get('memory', m.get('content', ''))[:50] for m in context_memories[:3]]}")
             print(f"🧠 DEBUG: System prompt enhanced with {len(context_memories)} memories")
-            print(f"🧠 DEBUG: Memory section: {memory_section[:200]}...")
-
-        system_message = SystemMessage(content=base_prompt)
         # Prepend system message to existing messages
         existing_messages = state.get("messages", [])
         return {"messages": [system_message] + existing_messages, "context_memories": context_memories}
@@ -421,6 +163,14 @@ async def create_agent(client: str = 'talentco', role: str = 'admin', protocol: 
     logger.info(f"🎯 Creating agent with params: client={client}, role={role}, protocol={protocol}, user={user.username if user else None}, focus={focus}")
     logger.info("🔧 Agent will load tools dynamically based on user/focus context")
 
+    # Use workflow builder for cleaner separation
+    try:
+        from .workflow import create_agent as create_agent_from_workflow
+        return await create_agent_from_workflow()
+    except ImportError:
+        # Fall back to inline workflow creation
+        pass
+
     async def agent_node(state: AgentState, config: RunnableConfig) -> AgentState:
         """Single LLM call that can both call tools and generate responses."""
         writer = get_stream_writer()
@@ -442,24 +192,13 @@ async def create_agent(client: str = 'talentco', role: str = 'admin', protocol: 
             logger.info(f"Agent node started - user: {user.username if user else 'none'}, focus: {focus}")
 
             # Dynamically load tools based on user/focus context
-            if user and focus:
-                logger.info(f"🔧 Loading tools for focus: user={user.username}, focus={focus}, protocol={protocol}")
-                tools = await get_tools_for_focus(user, focus, protocol)
-                logger.info(f"✅ Retrieved {len(tools)} tools for focus-based selection: {[t.name for t in tools]}")
-            elif user:
-                logger.info(f"👤 Loading tools for user groups: user={user.username}, protocol={protocol}")
-                tools = await get_tools_for_user(user, protocol)
-                logger.info(f"✅ Retrieved {len(tools)} tools for user-based selection: {[t.name for t in tools]}")
-            else:
-                logger.info(f"🏛️ Loading tools for legacy context: protocol={protocol}")
-                tools = get_tools_for_context('talentco', 'admin', protocol)  # Default fallback
-                logger.info(f"✅ Retrieved {len(tools)} tools for legacy context selection: {[t.name for t in tools]}")
+            tool_list = await tools.get_tools_for_request(user, focus, protocol)
 
-            if not tools:
+            if not tool_list:
                 logger.warning("No tools available for this context - agent will not be able to call any tools!")
             else:
-                tool_names = [tool.name for tool in tools]
-                logger.info(f"🎉 Agent ready with {len(tools)} tools: {tool_names}")
+                tool_names = [tool.name for tool in tool_list]
+                logger.info(f"🎉 Agent ready with {len(tool_list)} tools: {tool_names}")
 
 
             # Check for tool results and emit UI events
@@ -501,102 +240,18 @@ async def create_agent(client: str = 'talentco', role: str = 'admin', protocol: 
                                 except Exception as e:
                                     logger.error(f"❌ Failed to emit UI event for {tool_name}: {e}")
 
-            # Initialize voice LLM for semantic voice generation
-            voice_llm = ChatOpenAI(
-                model="gpt-4o",
-                temperature=0.3,  # Slightly creative for voice messages
-                api_key=api_key,
-                streaming=True,
-            )
 
             # Check if agent has tools available
-            if not tools:
+            if not tool_list:
                 logger.warning("⚠️ Agent node executing without tools - agent cannot call any functions!")
 
             # -----------------------------------------------
-            # Semantic Voice Generation: Pure semantic difference detection
-            user_id = state.get("user_id") or "default"
-            current_time = time.time()
-
-            # Check if agent state has semantically shifted enough to warrant voice
-            if semantic_voice_manager.should_trigger_voice(state, current_time):
-                import asyncio as _asyncio
-                async def _voice_task():
-                    try:
-                        logger.info("🎤 Semantic voice task started")
-
-                        # Extract semantic context for intelligent voice generation
-                        semantic_context = semantic_voice_manager.extract_semantic_context(state)
-
-                        # Get recent user message for context
-                        user_msg = ""
-                        for _m in reversed(state.get("messages", [])):
-                            if isinstance(_m, HumanMessage):
-                                user_msg = _m.content
-                                break
-
-                        # Get voice history for continuity
-                        vs = _get_voice_state(user_id)
-                        prior_voice = "\n".join(vs.get("voice_messages", []) or [])
-
-                        # Create intelligent voice prompt based on semantic context
-                        prompt = f"""You are generating a brief status update (2-8 words) about an AI agent's current activity.
-
-Semantic Context: {semantic_context}
-
-Previous voice updates (most recent last):
-{prior_voice if prior_voice else '(none)'}
-
-User's current request: {user_msg[:100]}
-
-Generate a concise, contextual status update that reflects what the agent is currently doing. The agent may be using various tools, processing information, or generating responses.
-
-Return ONLY the status line, no quotes or explanation."""
-
-                        logger.info("🎤 Semantic voice prompt created")
-                        logger.debug(f"🎤 Context: {semantic_context[:200]}...")
-
-                        new_line = ""
-                        if writer:
-                            logger.info("📡 Sending voice_start signal")
-                            writer({"type": "voice_start"})
-
-                        # Generate voice with semantic awareness
-                        chunk_count = 0
-                        empty_chunk_count = 0
-                        async for _chunk in voice_llm.astream([SystemMessage(content=prompt)]):
-                            chunk_count += 1
-                            if _chunk.content and _chunk.content.strip():
-                                new_line += _chunk.content
-                                if writer:
-                                    writer({"type": "voice", "content": _chunk.content})
-                            else:
-                                empty_chunk_count += 1
-
-                        logger.info(f"✅ Semantic voice completed: {chunk_count} chunks, {empty_chunk_count} empty")
-
-                        # Clean up the complete voice message
-                        new_line_clean = (new_line or "").strip()
-
-                        if new_line_clean:
-                            vs.setdefault("voice_messages", []).append(new_line_clean)
-                            logger.info(f"💾 Semantic voice persisted: '{new_line_clean}'")
-
-                        if writer:
-                            logger.info("📡 Sending voice_stop signal")
-                            writer({"type": "voice_stop"})
-
-                        logger.info(f"🎤 Semantic voice task completed: '{new_line_clean}'")
-
-                    except Exception as _e:
-                        logger.error(f"❌ Semantic voice generation error: {_e}")
-                        import traceback
-                        logger.error(f"❌ Voice traceback: {traceback.format_exc()}")
-                _asyncio.create_task(_voice_task())
+            # Semantic Voice Generation
+            await voice.run_semantic_voice(writer, state)
             # -----------------------------------------------
 
             # Single LLM call with tools bound - can call tools OR generate response
-            logger.info(f"🧠 Creating LLM with {len(tools)} tools bound")
+            logger.info(f"🧠 Creating LLM with {len(tool_list)} tools bound")
 
 
             # Log context
@@ -626,7 +281,7 @@ Return ONLY the status line, no quotes or explanation."""
                 temperature=0.1,  # Low temperature for consistent tool detection
                 api_key=api_key,
                 streaming=False,  # Non-streaming for reliability
-            ).bind_tools(tools)
+            ).bind_tools(tool_list)
 
             tool_response = await tool_detector.ainvoke(state["messages"])
 
@@ -636,16 +291,7 @@ Return ONLY the status line, no quotes or explanation."""
 
                 # Inject user context into tool calls
                 user_id = state.get("user_id")
-                if user_id:
-                    for tc in tool_response.tool_calls:
-                        tool_name = tc.get("name", "unknown")
-                        if tool_name in ["update_user_profile", "manage_user_profile"]:
-                            # Inject user_id into tool arguments
-                            args = tc.get("args", tc.get("arguments", {}))
-                            if not args.get("user_id"):
-                                args["user_id"] = int(user_id) if isinstance(user_id, str) else user_id
-                                tc["args"] = args
-                                logger.info(f"🔧 Injected user_id {user_id} into {tool_name} call")
+                tools.inject_user_id_into_calls(tool_response.tool_calls, user_id)
 
                 # Log tool calls
                 for i, tc in enumerate(tool_response.tool_calls):
@@ -741,7 +387,7 @@ Return ONLY the status line, no quotes or explanation."""
             # Ambient Memory Store (async background)
             # -----------------------------------------------
             try:
-                user_id = state.get("user_id")  # Get user_id from state
+                user_id = state.get("user_id")
                 logger.info(f"🧠 Memory storage: checking user_id={user_id}")
                 if user_id:
                     # Snapshot last human message for classification
@@ -753,94 +399,7 @@ Return ONLY the status line, no quotes or explanation."""
 
                     logger.info(f"🧠 Memory storage: found user text='{last_user_text[:50]}...', scheduling async task")
                     if last_user_text:
-                        # Capture user_id at scheduling time
-                        captured_user_id = str(user_id)
-                        async def _memory_store_task():
-                            try:
-                                logger.info("🧠 Memory storage task: started")
-                                mem_backend = DjangoMemoryBackend()
-
-                                # Rate limit
-                                if captured_user_id:
-                                    ms = _get_memory_state(captured_user_id)
-                                    now_ts = time.time()
-                                    time_since_last = now_ts - ms["last_store_ts"]
-                                    stored_count = ms["stored_this_session"]
-                                    logger.info(f"🧠 Memory storage task: rate check - time_since_last={time_since_last:.1f}s, stored_this_session={stored_count}")
-                                    if (time_since_last < 30) or (stored_count >= 3):
-                                        logger.info("🧠 Memory storage task: rate limited, skipping")
-                                        return
-                                else:
-                                    logger.warning("🧠 Memory storage task: no user_id captured, skipping rate limiting")
-
-                                # LLM classify (JSON contract)
-                                logger.info("🧠 Memory storage task: calling classifier LLM")
-                                cls_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, api_key=api_key, streaming=False)
-                                prompt = SystemMessage(content=(
-                                    "Decide if the following user message should be stored as a stable memory.\n"
-                                    "Return strict JSON: {\"store\": bool, \"reason\": string, \"type\": one of [preference,identity,constraint,fact,other]}\n"
-                                    "Criteria: store only user-specific, time-invariant facts or preferences; avoid greetings, ephemeral requests, transactional details."
-                                ))
-                                resp = await cls_llm.ainvoke([prompt, HumanMessage(content=last_user_text)])
-                                logger.info(f"🧠 Memory storage task: classifier response='{resp.content[:100]}...'")
-                                decision = {"store": False, "reason": "", "type": "other"}
-                                try:
-                                    decision = json.loads(resp.content)
-                                except Exception as e:
-                                    logger.warning(f"🧠 Memory storage task: failed to parse JSON: {e}")
-                                    pass
-
-                                logger.info(f"🧠 Memory storage task: decision={decision}")
-                                if not decision.get("store", False):
-                                    logger.info("🧠 Memory storage task: not storing (decision=false)")
-                                    return
-
-                                # Dedup checks
-                                text_hash = mem_backend._hash_text(last_user_text)
-                                if mem_backend.recent_lru_check(captured_user_id, text_hash):
-                                    return
-                                is_dup, max_sim = mem_backend.is_near_duplicate(captured_user_id, last_user_text, threshold=0.9)
-                                if is_dup:
-                                    return
-
-                                meta = {
-                                    "category": "general",
-                                    "interaction_type": "conversation",
-                                    "importance": "high" if decision.get("type") in ("preference","identity") else "medium",
-                                    "source": "agent_entry",
-                                    "type": decision.get("type", "other")
-                                }
-                                # Persist
-                                await mem_backend.add([
-                                    {"role": "user", "content": last_user_text}
-                                ], captured_user_id, metadata=meta)
-
-                                # Update rate limiter
-                                if captured_user_id:
-                                    ms["last_store_ts"] = now_ts
-                                    ms["stored_this_session"] += 1
-
-                                # Emit SSE memory.stored (short streamed)
-                                if writer:
-                                    try:
-                                        mini2 = ChatOpenAI(model="gpt-4o-mini", temperature=0.2, api_key=api_key, streaming=True)
-                                        sp = SystemMessage(content=(
-                                            "Generate a brief 1-line confirmation (<=10 words) that a useful memory was saved."
-                                        ))
-                                        async for _c in mini2.astream([sp]):
-                                            if _c.content:
-                                                writer({
-                                                    "type": "memory",
-                                                    "subType": "stored",
-                                                    "content": _c.content,
-                                                    "meta": {"stored": True}
-                                                })
-                                    except Exception as e:
-                                        logger.warning(f"Memory stored SSE emission failed: {e}")
-                            except Exception as e:
-                                logger.error(f"Ambient memory store failed: {e}")
-
-                        asyncio.create_task(_memory_store_task())
+                        await memory.schedule_memory_storage(user_id, last_user_text, writer)
             except Exception as e:
                 logger.error(f"Scheduling memory store task failed: {e}")
 
@@ -873,15 +432,10 @@ Return ONLY the status line, no quotes or explanation."""
         protocol = configurable.get("protocol", "graph")
 
         # Load tools dynamically (same logic as agent node)
-        if user and focus:
-            tools = await get_tools_for_focus(user, focus, protocol)
-        elif user:
-            tools = await get_tools_for_user(user, protocol)
-        else:
-            tools = get_tools_for_context('talentco', 'admin', protocol)
+        tool_list = await tools.get_tools_for_request(user, focus, protocol)
 
         # Create ToolNode with the dynamically loaded tools
-        base_tool_node = ToolNode(tools)
+        base_tool_node = ToolNode(tool_list)
 
         writer = state.get("writer")
 
@@ -1033,7 +587,8 @@ async def ainvoke_agent_sync(message: str, messages: Optional[List[BaseMessage]]
 
     # Add system message if not present
     if not state_messages or not isinstance(state_messages[0], SystemMessage):
-        system_message = SystemMessage(content=SYSTEM_PROMPT)
+        system_prompt = prompt.get_system_prompt()
+        system_message = SystemMessage(content=system_prompt)
         state_messages = [system_message] + state_messages
 
     # Create a synchronous LLM for complete responses
@@ -1086,7 +641,7 @@ async def astream_agent_tokens(message: str, messages: Optional[List[BaseMessage
     logger.info("📝 Creating minimal state with new message (checkpointer handles history)")
     state_messages = [HumanMessage(content=message)]
 
-    logger.info(f"📤 State has 1 new message (checkpointer will load conversation history)")
+    logger.info("📤 State has 1 new message (checkpointer will load conversation history)")
 
     user_id_value = str(user.id) if user else None
     state = {
