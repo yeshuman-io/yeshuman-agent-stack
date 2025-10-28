@@ -39,11 +39,11 @@ class Command(BaseCommand):
                 {'name': 'practitioner', 'description': 'Health practitioner/coach'},
             ]
         else:  # agency
-            groups_data = [
+        groups_data = [
                 {'name': 'client', 'description': 'Agency client partner'},
                 {'name': 'engineer', 'description': 'Agency engineer'},
                 {'name': 'principal', 'description': 'Agency principal (admin)'},
-            ]
+        ]
 
         created_count = 0
         updated_count = 0

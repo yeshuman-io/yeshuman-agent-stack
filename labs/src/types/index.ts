@@ -14,6 +14,13 @@ export interface ChatMessage {
   id: string;
   content: string;
   isUser: boolean;
+  runId?: string;
+  feedback?: {
+    score?: number;
+    tags?: string[];
+    comment?: string;
+    at?: string;
+  };
 }
 
 // Animation types

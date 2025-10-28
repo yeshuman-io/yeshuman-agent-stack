@@ -115,6 +115,7 @@ INSTALLED_APPS = [
     'apps.applications',  # Job applications
     'apps.embeddings',  # AI/ML embeddings (provides pgvector)
     'apps.evaluations',  # Performance/candidate evaluations
+    'apps.feedback',  # LangSmith feedback
     'apps.memories',  # Memory management
     'apps.opportunities',  # Opportunities
     'apps.organisations',  # Organizations

@@ -47,7 +47,7 @@ def _hash_text(text: str) -> str:
     return hashlib.sha256(_normalize_text(text).encode("utf-8")).hexdigest()
 
 
-@traceable(name="mem.search", run_type="retriever")
+@traceable(name="memory.search", run_type="retriever")
 async def retrieve_context_memories(user_id: str, query: str, k: int = 5) -> List[Dict[str, Any]]:
     """
     Retrieve top-k relevant memories for a user query.
@@ -101,7 +101,7 @@ async def classify_should_store(text: str) -> Dict[str, Any]:
         return {"store": False, "reason": f"Classification error: {e}", "type": "other"}
 
 
-@traceable(name="mem.add", run_type="tool")
+@traceable(name="memory.store", run_type="tool")
 async def store_memory(user_id: str, text: str, meta: Dict[str, Any]) -> Dict[str, Any]:
     """
     Store a memory for a user.

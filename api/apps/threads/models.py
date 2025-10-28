@@ -1,5 +1,6 @@
 from django.db import models
 from polymorphic.models import PolymorphicModel
+import uuid
 
 
 class Thread(models.Model):
@@ -23,6 +24,12 @@ class Thread(models.Model):
         null=True,
         blank=True,
         related_name="threads",
+    )
+    langsmith_trace_id = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text="LangSmith trace ID for the conversation root run",
+        default=None
     )
     is_anonymous = models.BooleanField(
         default=False,
@@ -63,6 +70,12 @@ class Message(PolymorphicModel):
         auto_now_add=True,
     )
 
+    run_id = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text="LangSmith run ID for this specific message (child run)",
+        default=None
+    )
     # Store additional metadata for streaming content
     metadata = models.JSONField(
         default=dict,

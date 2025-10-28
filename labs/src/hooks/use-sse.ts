@@ -54,6 +54,7 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
   // SSE management
   const abortControllerRef = useRef<AbortController | null>(null);
   const contentBlocksRef = useRef<Record<number, ContentBlock>>({});
+  const currentRunIdRef = useRef<string | null>(null);
 
   // Utility function
   const generateId = (): string => {
@@ -171,7 +172,8 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
             setMessages(prev => [...prev, {
               id,
               content: '',
-              isUser: false
+              isUser: false,
+              runId: currentRunIdRef.current || undefined
             }]);
           } else if (type === 'voice') {
             setVoiceLines(prev => [...prev, '']);
@@ -292,6 +294,30 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
         if (onMessageStart) {
           console.log('🤖 AI response detected - triggering sarcastic animation');
           onMessageStart();
+        }
+        break;
+
+      case 'run_id':
+        console.log('🔗 Received runId event:', data);
+        if (data.runId) {
+          console.log('🔗 Setting runId from run_id event:', data.runId);
+          currentRunIdRef.current = data.runId;
+
+          // Patch runId onto the most recent AI message that doesn't have one
+          setMessages(prev => {
+            const next = [...prev];
+            for (let i = next.length - 1; i >= 0; i--) {
+              const m = next[i];
+              if (!m.isUser && !m.runId) {
+                console.log('🔗 Patching runId onto AI message:', { messageId: m.id, runId: data.runId });
+                next[i] = { ...m, runId: data.runId };
+                break;
+              }
+            }
+            return next;
+          });
+        } else {
+          console.log('⚠️ run_id event received but no runId:', data);
         }
         break;
         

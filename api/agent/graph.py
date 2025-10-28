@@ -298,14 +298,37 @@ async def agent_node(state: AgentState, config: RunnableConfig) -> AgentState:
             streaming=True,  # Streaming for UX
         )
 
+        # Get and emit run_id for feedback correlation
+        # CRITICAL: Use trace_id (parent LangGraph run) not id (child agent node)
+        # The trace_id is what shows up in the traces list in LangSmith UI
+        current_run_id = None
+        try:
+            from langsmith.run_helpers import get_current_run_tree
+            run_tree = get_current_run_tree()
+            if run_tree:
+                # Use trace_id (root run) instead of id (current node run)
+                # This ensures feedback appears in the main traces list
+                current_run_id = str(run_tree.trace_id if hasattr(run_tree, 'trace_id') and run_tree.trace_id else run_tree.id)
+                logger.info(f"🔗 Emitting TRACE run_id (parent): runId={current_run_id} (node_id={run_tree.id})")
+                if writer:
+                    writer({"type": "run_id", "runId": current_run_id})
+                    logger.info(f"🔗 Sent run_id event for runId: {current_run_id}")
+        except Exception as e:
+            logger.warning(f"Could not get LangSmith run_id: {e}")
+            import uuid
+            current_run_id = str(uuid.uuid4())
+            logger.info(f"🔗 Generated fallback run_id: {current_run_id}")
+            if writer:
+                writer({"type": "run_id", "runId": current_run_id})
+
         # Stream the response
         response_chunks = []
         async for chunk in response_generator.astream(state["messages"]):
             response_chunks.append(chunk)
 
-            # Stream content to UI
+            # Stream content to UI with runId
             if chunk.content and writer:
-                writer({"type": "message", "content": chunk.content})
+                writer({"type": "message", "content": chunk.content, "runId": current_run_id})
 
         # Create final response
         final_content = "".join([c.content for c in response_chunks if c.content])

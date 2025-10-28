@@ -178,9 +178,117 @@ async def generate_voice_message(
     return f"🗣️ VOICE: '{message}' (style: {style})"
 
 
+class FeedbackInput(BaseModel):
+    """Input for recording feedback."""
+    run_id: str = Field(description="LangSmith run ID to attach feedback to")
+    score: float = Field(description="Feedback score between 0.0 and 1.0")
+    tags: Optional[list[str]] = Field(default=None, description="Optional tags like 'Helpful', 'Incorrect', etc.")
+    comment: Optional[str] = Field(default=None, description="Optional comment explaining the feedback")
+    source: str = Field(default="agent-inferred", description="Source of the feedback")
+
+
+@tool
+async def record_feedback(run_id: str, score: float, tags: Optional[list[str]] = None, comment: Optional[str] = None, source: str = "agent-inferred") -> str:
+    """Record user feedback on agent responses to LangSmith for analysis and improvement.
+    
+    Use this tool when you infer the user is providing feedback about your previous response,
+    either implicitly (e.g. "that was helpful", "wrong answer") or explicitly.
+    
+    Args:
+        run_id: The LangSmith run ID of the message being evaluated
+        score: Feedback score (0.0 = negative, 0.5 = neutral, 1.0 = positive)
+        tags: Optional list of feedback tags (e.g., ['Helpful', 'Clear'] or ['Incorrect', 'Off-topic'])
+        comment: Optional detailed feedback comment
+        source: Source identifier (default: "agent-inferred")
+    
+    Returns:
+        Confirmation message
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Entry log
+    logger.info(
+        f"[FB TOOL] IN: run_id={run_id} score={score} "
+        f"tags_count={len(tags) if tags else 0} comment_len={len(comment) if comment else 0} "
+        f"source={source}"
+    )
+    
+    # Validate inputs
+    if not (0.0 <= score <= 1.0):
+        logger.warning(f"[FB TOOL] INVALID: score out of range: {score}")
+        return "Error: Score must be between 0.0 and 1.0"
+    
+    if comment and len(comment) > 1000:
+        logger.warning("[FB TOOL] INVALID: comment too long")
+        return "Error: Comment too long (max 1000 chars)"
+    
+    allowed_tags = {
+        'Helpful', 'Clear', 'Grounded', 'Actionable', 'Respectful',
+        'Incorrect', 'Off-topic', 'Unhelpful', 'Hallucinated', 'Unsafe'
+    }
+    if tags:
+        invalid_tags = set(tags) - allowed_tags
+        if invalid_tags:
+            logger.warning(f"[FB TOOL] INVALID: invalid tags: {invalid_tags}")
+            return f"Error: Invalid tags: {', '.join(invalid_tags)}"
+    
+    try:
+        from langsmith import Client
+        ls_client = Client()
+        writer = get_stream_writer()
+        
+        logger.info(f"[FB TOOL] LS CALL: run_id={run_id}")
+        
+        # Rating feedback
+        ls_client.create_feedback(
+            run_id=run_id,
+            key="user_rating",
+            score=score,
+            comment=comment or "",
+            source=source
+        )
+        logger.info("[FB TOOL] LS OK: created feedback key=user_rating")
+        
+        # Tags feedback (if provided)
+        if tags:
+            ls_client.create_feedback(
+                run_id=run_id,
+                key="user_feedback_tags",
+                value=tags,
+                source=source
+            )
+            logger.info("[FB TOOL] LS OK: created feedback key=user_feedback_tags")
+        
+        # Comment feedback (if provided)
+        if comment:
+            ls_client.create_feedback(
+                run_id=run_id,
+                key="user_feedback_comment",
+                value=comment,
+                source=source
+            )
+            logger.info("[FB TOOL] LS OK: created feedback key=user_feedback_comment")
+        
+        logger.info(f"[FB TOOL] OK: recorded feedback run_id={run_id}")
+        
+        # Emit SSE event for UI feedback
+        if writer:
+            writer({"type": "feedback", "subType": "recorded", "runId": run_id, "key": "user_rating"})
+            logger.info("[FB TOOL] SSE: emitted feedback event")
+        
+        return "Feedback recorded successfully."
+    except Exception as e:
+        logger.error(f"[FB TOOL] ERROR: {e}")
+        import traceback
+        logger.error(f"[FB TOOL] ERROR traceback: {traceback.format_exc()}")
+        return f"Failed to record feedback: {e}"
+
+
 # Export agent-specific tools
 AGENT_TOOLS = [
     AgentInteractionTool(),
     AgentCapabilitiesTool(),
     generate_voice_message,
+    record_feedback,
 ]

@@ -190,6 +190,12 @@ class AnthropicSSEGenerator:
                         yield (await self.format_sse_event(chunk_type, chunk)).encode('utf-8')
                         continue
 
+                    # Handle run_id event for feedback correlation
+                    if chunk_type == "run_id":
+                        logger.info(f"🔗 SSE forwarding run_id event: {chunk.get('runId')}")
+                        yield (await self.format_sse_event("run_id", chunk)).encode('utf-8')
+                        continue
+
                     # Log UI chunks for monitoring
                     if chunk_type == "ui":
                         logger.info(f"📦 SSE received UI chunk: keys={list(chunk.keys())}")
