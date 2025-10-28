@@ -92,7 +92,8 @@ function AppContent() {
           const converted = {
             id: msg.id || `msg-${Date.now()}-${index}`,
             content: msg.text || msg.content || '',
-            isUser: msg.message_type === 'human' || msg.role === 'user'
+            isUser: msg.message_type === 'human' || msg.role === 'user',
+            runId: msg.run_id || undefined  // Include run_id for feedback buttons
           };
           console.log(`📂 [THREAD NAVIGATION] Converted to:`, converted);
           return converted;
@@ -139,6 +140,13 @@ function AppContent() {
         queryClient.invalidateQueries({ queryKey: ['profile'] });
       } else if (data.entity === 'thread' && data.action === 'created') {
         console.log('🆕 [UI EVENT] Thread created:', data.entity_id);
+        // Update current thread ID if we don't have one (for new conversations)
+        if (!currentThreadId && data.entity_id) {
+          console.log('🆕 [UI EVENT] Setting currentThreadId to newly created thread:', data.entity_id);
+          setCurrentThreadId(data.entity_id);
+          // Also update URL to reflect the new thread
+          setSearchParams({ thread: data.entity_id });
+        }
         queryClient.invalidateQueries({ queryKey: ['threads'] });
       } else if (data.entity === 'thread' && data.action === 'updated') {
         console.log('🔄 [UI EVENT] Thread updated:', data.entity_id);
@@ -307,6 +315,35 @@ function AppContent() {
     setSearchParams({});
   }, [setSearchParams]);
 
+  // Handle feedback submission
+  const handleFeedback = useCallback(async (runId: string, score?: number, tags?: string[], comment?: string) => {
+    console.log('👍 [FEEDBACK] Submitting feedback:', { runId, score, tags_count: tags?.length, comment_len: comment?.length });
+    
+    try {
+      const response = await fetch('/api/feedback/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ run_id: runId, score, tags, comment })
+      });
+      
+      const result = await response.json();
+      console.log('👍 [FEEDBACK] Response:', { success: result.success, message: result.message, error: result.error });
+      
+      if (result.success) {
+        console.log('✅ [FEEDBACK] Submitted successfully');
+        // Show success toast (optional - could add react-hot-toast)
+      } else {
+        console.error('❌ [FEEDBACK] Failed:', result.error);
+        // Show error toast (optional)
+      }
+    } catch (error) {
+      console.error('❌ [FEEDBACK] Request failed:', error);
+    }
+  }, [token]);
+
   // If not authenticated, only show login page
   if (!isAuthenticated) {
     return (
@@ -356,7 +393,7 @@ function AppContent() {
           <div className="flex-1 flex min-h-0">
             {/* Chat: 1/4 width */}
             <div className="flex-none w-1/4 border-r flex flex-col min-h-0">
-              <ChatMessages messages={messages} />
+              <ChatMessages messages={messages} onFeedback={handleFeedback} />
               <ChatInput
                 inputText={inputText}
                 setInputText={setInputText}

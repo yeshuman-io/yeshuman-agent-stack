@@ -614,13 +614,15 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
                           )}
                         </span>
                       </SidebarMenuButton>
-                      <button
-                        onClick={(e) => handleThreadDelete(thread.id, e)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity p-1 z-10"
-                        title="Delete thread"
-                      >
-                        <Trash2 className="size-3" />
-                      </button>
+                      {!isCollapsed && (
+                        <button
+                          onClick={(e) => handleThreadDelete(thread.id, e)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity p-1 z-10"
+                          title="Delete thread"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      )}
                     </div>
                   </SidebarMenuItem>
                 ))

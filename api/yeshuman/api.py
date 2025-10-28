@@ -15,6 +15,7 @@ from apps.opportunities.api import opportunities_router
 from apps.evaluations.api import evaluations_router
 from apps.applications.api import applications_router
 from apps.memories.api import memories_router
+from apps.feedback.api import feedback_router
 from utils.sse import SSEHttpResponse
 from streaming.generators import AnthropicSSEGenerator
 from django.http import Http404
@@ -95,6 +96,9 @@ api.add_router("/applications", applications_router, tags=["Applications"])
 
 # Add memories router
 api.add_router("/memories", memories_router, tags=["Memories"])
+
+# Add feedback router
+api.add_router("/feedback", feedback_router, tags=["Feedback"])
 
 
 # Schemas
@@ -366,24 +370,98 @@ async def send_message(request, thread_id: str, payload: SendMessageRequest):
         try:
             messages = await get_thread_messages_as_langchain(thread_id)
 
-            # Create streaming generator with accumulation
+            # Ensure conversation root trace exists for proper grouping
+            from apps.threads.services import ensure_conversation_root_trace
+            from agent.services.tracing import with_conversation_parent
+
+            root_trace_id = await ensure_conversation_root_trace(thread_id, user)
+            logger.info(f"🔗 [THREAD STREAM] Using conversation root trace: {root_trace_id}")
+
+            # Create streaming generator with accumulation and post-stream persistence
             async def thread_stream_generator():
                 accumulated_response = []
+                captured_run_id = None
+                last_known_content = ""  # Fallback content if accumulation fails
 
-                async for chunk in astream_agent_tokens(payload.message, messages):
-                    # Accumulate message content for saving to thread
-                    if chunk.get("type") == "message" and chunk.get("content"):
-                        accumulated_response.append(chunk["content"])
+                try:
+                    # Wrap the agent call with conversation parent context
+                    async with with_conversation_parent(root_trace_id):
+                        async for chunk in astream_agent_tokens(payload.message, messages):
+                            # Accumulate message content for saving to thread
+                            if chunk.get("type") == "content_block_delta":
+                                delta = chunk.get("delta", {})
+                                if isinstance(delta, dict) and "text" in delta:
+                                    content = delta["text"]
+                                    if content:
+                                        accumulated_response.append(content)
+                                        last_known_content += content
+                            elif chunk.get("type") == "message" and chunk.get("content"):
+                                content = chunk["content"]
+                                accumulated_response.append(content)
+                                last_known_content += content
 
-                    yield chunk
+                            # Capture run_id when emitted
+                            if chunk.get("type") == "run_id" and chunk.get("runId"):
+                                captured_run_id = chunk.get("runId")
+                                logger.info(f"🔗 [THREAD STREAM] Captured turn run ID: {captured_run_id}")
+
+                            yield chunk
+
+                except Exception as e:
+                    logger.error(f"Error in streaming: {e}")
+                    raise
+                finally:
+                    # Persist assistant message after streaming completes
+                    # Always save an assistant message, even with minimal content
+                    try:
+                        # Use accumulated content if available, otherwise use last known content
+                        if accumulated_response:
+                            full_response = "".join(accumulated_response)
+                        elif last_known_content:
+                            full_response = last_known_content
+                        else:
+                            # Minimal fallback to ensure we always save something
+                            full_response = "[Assistant response was generated but content not captured]"
+                            logger.warning(f"💾 [THREAD STREAM] No content accumulated, using fallback")
+
+                        logger.info(f"💾 [THREAD STREAM] Persisting assistant message: {len(full_response)} chars")
+
+                        # Create the assistant message
+                        assistant_message = await create_assistant_message(thread_id, full_response)
+
+                        # Save run_id if captured
+                        if captured_run_id:
+                            from asgiref.sync import sync_to_async
+                            assistant_message.run_id = captured_run_id
+                            await sync_to_async(assistant_message.save)()
+                            logger.info(f"💾 [THREAD STREAM] Saved run_id {captured_run_id} on message {assistant_message.id}")
+
+                        logger.info(f"💾 [THREAD STREAM] Successfully saved assistant message {assistant_message.id} (type={assistant_message.__class__.__name__}, run_id={captured_run_id})")
+
+                        # Emit message saved event (this will be yielded as the final event)
+                        yield {
+                            "type": "message_saved",
+                            "thread_id": str(thread_id),
+                            "message_id": str(assistant_message.id),
+                            "message_type": "assistant",
+                            "content": full_response[:200] + "..." if len(full_response) > 200 else full_response
+                        }
+
+                        # Trigger title generation if we now have enough messages
+                        message_count = await get_all_thread_messages(thread_id, count_only=True)
+                        if message_count >= 3:
+                            logger.info(f"🎯 [THREAD TITLE] Message count {message_count} >= 3, triggering title generation")
+                            from apps.threads.services import handle_thread_title_generation
+                            # Run in background to avoid blocking
+                            import asyncio
+                            asyncio.create_task(handle_thread_title_generation(thread_id))
+
+                    except Exception as e:
+                        logger.error(f"❌ [THREAD STREAM] Failed to persist assistant message: {e}")
 
             # Use AnthropicSSEGenerator to convert to SSE events
             sse_generator = AnthropicSSEGenerator()
             response = SSEHttpResponse(sse_generator.generate_sse(thread_stream_generator()))
-
-            # Note: Saving to thread happens after streaming completes
-            # This is a limitation of SSE - we can't await after the response starts
-            # The frontend would need to call a separate endpoint to save or we use WebSockets
 
             return response
 
@@ -441,7 +519,14 @@ async def get_thread_messages(request, thread_id: str):
 
     # Get all messages for the thread
     messages = await get_all_thread_messages(thread_id)
-    logger.info(f"📝 [THREAD MESSAGES] Thread {thread_id}: found {len(messages)} messages")
+
+    # Count messages by type for verification
+    type_counts = {}
+    for msg in messages:
+        msg_type = msg.__class__.__name__
+        type_counts[msg_type] = type_counts.get(msg_type, 0) + 1
+
+    logger.info(f"📝 [THREAD MESSAGES] Thread {thread_id}: total={len(messages)} types={type_counts}")
 
     # Convert to response format
     message_list = []
@@ -463,7 +548,9 @@ async def get_thread_messages(request, thread_id: str):
             "message_type": message_type,
             "text": msg.text,
             "created_at": msg.created_at,
-            "thread_id": str(msg.thread_id)
+            "thread_id": str(msg.thread_id),
+            "run_id": getattr(msg, 'run_id', None),  # Include run_id for feedback buttons
+            "metadata": getattr(msg, 'metadata', {})  # Include metadata
         })
 
     logger.info(f"📝 [THREAD MESSAGES] Thread {thread_id}: returning {len(message_list)} formatted messages")

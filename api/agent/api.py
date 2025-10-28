@@ -169,7 +169,7 @@ async def stream(request):
         current_thread = None
 
         if request.method == "POST":
-        # Handle thread/session context
+            # Handle thread/session context
             if thread_id:
                 logger.info(f"📂 [THREAD CONTEXT] Loading existing thread: thread_id={thread_id}")
                 # User is referencing a specific thread
@@ -379,44 +379,87 @@ async def stream(request):
                     yield event
 
             logger.info(f"🎬 [STREAM LIFECYCLE] About to call astream_agent_tokens with user={user}, user.username={getattr(user, 'username', None)}, user.id={getattr(user, 'id', None)}, user.type={type(user)}")
-            async for chunk in astream_agent_tokens(message, None, user=user, focus=user_focus, thread_id=final_thread_id):
-                # Accumulate message content for thread saving
-                if chunk.get("type") == "content_block_delta":
-                    delta = chunk.get("delta", {})
-                    if isinstance(delta, dict) and "text" in delta:
-                        content = delta["text"]
-                        if content:
-                            accumulated_response.append(content)
-                elif chunk.get("type") == "message" and chunk.get("content"):
-                    accumulated_response.append(chunk["content"])
 
-                yield chunk
+            # Ensure conversation root trace exists and wrap turn in parent context
+            from apps.threads.services import ensure_conversation_root_trace
+            from agent.services.tracing import with_conversation_parent
 
-            # Save response to thread if we have one
-            if current_thread and accumulated_response:
-                logger.info(f"💾 [MESSAGE SAVE] Saving assistant response to thread {current_thread.id}, response length: {len(''.join(accumulated_response))}")
-                try:
-                    from apps.threads.services import create_assistant_message
-                    full_response = "".join(accumulated_response)
-                    assistant_message = await create_assistant_message(str(current_thread.id), full_response)
-                    logger.info(f"💾 [MESSAGE SAVE] Successfully saved assistant message {assistant_message.id}")
+            logger.info(f"🔗 [TRACE] Ensuring conversation root trace for thread {final_thread_id}")
+            root_trace_id = await ensure_conversation_root_trace(final_thread_id, user)
+            logger.info(f"🔗 [TRACE] Root trace ready: {root_trace_id}")
+            turn_run_id = None
 
-                    # Emit message saved event
-                    logger.info(f"🔄 [DJANGO THREAD DELTA] Emitting message_saved (assistant): thread_id={current_thread.id}, message_id={assistant_message.id}, content_length={len(full_response)}")
-                    yield {
-                        "type": "message_saved",
-                        "thread_id": str(current_thread.id),
-                        "message_id": str(assistant_message.id),
-                        "message_type": "assistant",
-                        "content": full_response[:200] + "..." if len(full_response) > 200 else full_response
-                    }
+            logger.info(f"🚀 [STREAM] Starting async with conversation parent context")
+            try:
+                logger.info(f"🤖 [AGENT] About to call astream_agent_tokens")
+                async with with_conversation_parent(root_trace_id):
+                    logger.info(f"🔄 [STREAM] Entering async for loop for astream_agent_tokens")
+                    async for chunk in astream_agent_tokens(message, None, user=user, focus=user_focus, thread_id=final_thread_id):
+                        logger.info(f"📦 [CHUNK] Received chunk: {chunk.get('type', 'unknown')}")
+                        # Capture turn run ID when emitted
+                        if chunk.get("type") == "run_id" and chunk.get("runId"):
+                            turn_run_id = chunk.get("runId")
+                            logger.info(f"🔗 [TURN RUN ID] Captured turn run ID: {turn_run_id}")
 
-                    # Thread update events are now emitted by graph nodes as UI deltas
+                        # Accumulate message content for thread saving
+                        if chunk.get("type") == "content_block_delta":
+                            delta = chunk.get("delta", {})
+                            if isinstance(delta, dict) and "text" in delta:
+                                content = delta["text"]
+                                if content:
+                                    accumulated_response.append(content)
+                        elif chunk.get("type") == "message" and chunk.get("content"):
+                            accumulated_response.append(chunk["content"])
 
-                    # Thread title generation is now handled by graph nodes as UI deltas
+                        yield chunk
+            except Exception as e:
+                logger.error(f"Error in streaming: {e}")
+                raise
+            finally:
+                # ALWAYS save assistant message after streaming completes (success or failure)
+                logger.info(f"🎯 [STREAM FINALLY] Executing finally block - current_thread={current_thread.id if current_thread else None}, turn_run_id={turn_run_id}, accumulated_response_len={len(accumulated_response) if accumulated_response else 0}")
+                if current_thread:
+                    try:
+                        # Use accumulated content if available, otherwise fallback
+                        if accumulated_response:
+                            full_response = "".join(accumulated_response)
+                        elif turn_run_id:
+                            # If we have a run_id but no accumulated content, the response was generated
+                            full_response = "[Assistant response was generated but content not captured]"
+                            logger.warning(f"💾 [MESSAGE SAVE] No content accumulated but run_id exists, using fallback")
+                        else:
+                            # No response at all
+                            full_response = "[Assistant response failed to generate]"
+                            logger.warning(f"💾 [MESSAGE SAVE] No response content or run_id, using error fallback")
 
-                except Exception as e:
-                    logger.warning(f"Failed to save response to thread: {str(e)}")
+                        logger.info(f"💾 [MESSAGE SAVE] Saving assistant response to thread {current_thread.id}, response length: {len(full_response)}")
+
+                        from apps.threads.services import create_assistant_message
+                        assistant_message = await create_assistant_message(str(current_thread.id), full_response)
+
+                        # Save turn run ID on the message for deep linking
+                        if turn_run_id:
+                            from asgiref.sync import sync_to_async
+                            assistant_message.run_id = turn_run_id
+                            await sync_to_async(assistant_message.save)()
+                            logger.info(f"💾 [MESSAGE SAVE] Saved turn run ID {turn_run_id} on message {assistant_message.id}")
+
+                        logger.info(f"💾 [MESSAGE SAVE] Successfully saved assistant message {assistant_message.id} (type={assistant_message.__class__.__name__})")
+
+                        # Emit message saved event
+                        logger.info(f"🔄 [DJANGO THREAD DELTA] Emitting message_saved (assistant): thread_id={current_thread.id}, message_id={assistant_message.id}, content_length={len(full_response)}")
+                        yield {
+                            "type": "message_saved",
+                            "thread_id": str(current_thread.id),
+                            "message_id": str(assistant_message.id),
+                            "message_type": "assistant",
+                            "content": full_response[:200] + "..." if len(full_response) > 200 else full_response
+                        }
+
+                    except Exception as e:
+                        logger.error(f"❌ [MESSAGE SAVE] Failed to save assistant message: {str(e)}")
+                        import traceback
+                        logger.error(f"❌ [MESSAGE SAVE] Traceback: {traceback.format_exc()}")
 
         sse_generator = AnthropicSSEGenerator()
         response = SSEHttpResponse(sse_generator.generate_sse(stream_generator()))

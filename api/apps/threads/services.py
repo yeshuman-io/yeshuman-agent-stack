@@ -94,6 +94,7 @@ async def get_all_thread_messages(thread_id: str, count_only: bool = False) -> L
             return count
 
         # Get all messages for this thread as objects, not dicts
+        # PolymorphicQuerySet automatically resolves subclasses when iterating
         messages_list = await sync_to_async(list)(
             Message.objects.filter(thread=thread_obj).order_by('created_at')
         )
@@ -457,3 +458,25 @@ async def handle_thread_title_generation(thread_id: str):
 
     except Exception as e:
         logger.error(f"Error in thread title generation process: {e}")
+
+
+async def ensure_conversation_root_trace(thread_id: str, user) -> str:
+    """
+    Ensure a thread has a LangSmith conversation root trace.
+
+    This creates or retrieves the persistent root trace that serves as the parent
+    for all turns in the conversation.
+
+    Args:
+        thread_id: The conversation thread identifier
+        user: Django user object
+
+    Returns:
+        String representation of the root trace ID
+    """
+    from agent.services.tracing import get_or_create_conversation_root
+
+    logger.info(f"🔗 Ensuring root trace for thread: {thread_id}")
+    root_trace_id = await get_or_create_conversation_root(thread_id, user)
+    logger.info(f"🔗 Root trace ready: {root_trace_id}")
+    return str(root_trace_id)
