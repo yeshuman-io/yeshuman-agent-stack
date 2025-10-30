@@ -76,14 +76,6 @@ class SetFocusRequest(Schema):
     """Schema for setting user focus."""
     focus: str
 
-    @field_validator('focus')
-    @classmethod
-    def validate_focus(cls, v):
-        valid_foci = ['candidate', 'employer', 'recruiter', 'administrator']
-        if v not in valid_foci:
-            raise ValueError(f'Focus must be one of: {", ".join(valid_foci)}')
-        return v
-
 
 class GroupInfo(Schema):
     """Schema for group information."""

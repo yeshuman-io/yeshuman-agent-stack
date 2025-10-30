@@ -48,6 +48,7 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
   // Content streaming state
   const [thinkingContent, setThinkingContent] = useState('');
   const [voiceLines, setVoiceLines] = useState<string[]>([]);
+  const [memorySummaries, setMemorySummaries] = useState<string[]>([]);
   const [toolOutput, setToolOutput] = useState(''); // Keep for debugging
   const [activeTools, setActiveTools] = useState<string[]>([]);
 
@@ -177,6 +178,8 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
             }]);
           } else if (type === 'voice') {
             setVoiceLines(prev => [...prev, '']);
+          } else if (type === 'memory') {
+            setMemorySummaries(prev => [...prev, '']);
           }
           
           console.log(`[BLOCK START] ${type} block #${index} (${id})`);
@@ -214,6 +217,15 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
               
             case 'voice_delta':
               setVoiceLines(prev => {
+                if (prev.length === 0) return [text || ''];
+                const copy = [...prev];
+                copy[copy.length - 1] += text || '';
+                return copy;
+              });
+              break;
+
+            case 'memory_delta':
+              setMemorySummaries(prev => {
                 if (prev.length === 0) return [text || ''];
                 const copy = [...prev];
                 copy[copy.length - 1] += text || '';
@@ -485,6 +497,7 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
     setMessages([]);
     setThinkingContent('');
     setVoiceLines([]);
+    setMemorySummaries([]);
     setActiveTools([]);
     console.log('[THREAD] Started new conversation (thread ID managed by parent)');
   }, []);
@@ -496,6 +509,7 @@ export const useSSE = (onMessageStart?: () => void, token?: string | null, autoC
     isLoading,
     thinkingContent,
     voiceLines,
+    memorySummaries,
     toolOutput,
     activeTools,
     currentThreadId,

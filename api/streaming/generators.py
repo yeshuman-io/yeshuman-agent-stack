@@ -300,6 +300,7 @@ class AnthropicSSEGenerator:
                         "system": "system_delta",
                         "voice": "voice_delta",
                         "ui": "ui_delta",  # NEW: UI events for real-time interface updates
+                        "memory": "memory_delta",  # NEW: Memory events for real-time memory summaries
                         "error": "error"
                     }
                     delta_type = delta_type_mapping.get(chunk_type, "message_delta")

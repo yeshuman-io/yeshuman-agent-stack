@@ -1,4 +1,4 @@
-import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, HeartPulse, Briefcase, Shield, Search, FileText, Users, Settings, Sparkles, Building2, Handshake, Headset, Laptop2, Stethoscope, Crown } from "lucide-react"
+import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, HeartPulse, Briefcase, Shield, Search, FileText, Users, Settings, Sparkles, Building2, Handshake, Headset, Laptop2, Stethoscope, Crown, Brain } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 
@@ -452,6 +452,23 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
             </div>
           )}
         </div>
+      )}
+
+      {/* Universal Actions - Available for all authenticated users */}
+      {isAuthenticated && (
+        <SidebarGroup>
+          <SidebarGroupLabel>Actions</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="View your stored memories" onClick={() => navigate('/memories')}>
+                  <Brain className="size-4" />
+                  {!isCollapsed && <span>Memories</span>}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       )}
 
       {/* Focus-Specific Navigation */}

@@ -236,14 +236,26 @@ async def schedule_memory_storage(user_id: str, text: str, writer=None) -> None:
                     sp = SystemMessage(content=(
                         "Generate a brief 1-line confirmation (<=10 words) that a useful memory was saved."
                     ))
+                    summary_content = ""
                     async for _c in mini2.astream([sp]):
                         if _c.content:
+                            summary_content = _c.content
                             writer({
                                 "type": "memory",
                                 "subType": "stored",
                                 "content": _c.content,
                                 "meta": {"stored": True}
                             })
+
+                    # Also emit UI event for Labs to invalidate memories cache
+                    if summary_content:
+                        writer({
+                            "type": "ui",
+                            "entity": "memory",
+                            "action": "stored",
+                            "summary": summary_content,
+                            "meta": {"stored": True}
+                        })
                 except Exception as e:
                     logger.warning(f"Memory stored SSE emission failed: {e}")
 

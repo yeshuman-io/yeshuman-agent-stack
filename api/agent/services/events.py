@@ -41,6 +41,17 @@ async def emit_memory_retrieved(writer, count: int, top_similarity: float = None
                         "top_similarity": top_similarity,
                     }
                 })
+
+        # Also emit UI event for Labs to invalidate memories cache
+        writer({
+            "type": "ui",
+            "entity": "memory",
+            "action": "retrieved",
+            "meta": {
+                "count": count,
+                "top_similarity": top_similarity,
+            }
+        })
     except Exception as e:
         logger.warning(f"Memory retrieved SSE emission failed: {e}")
 

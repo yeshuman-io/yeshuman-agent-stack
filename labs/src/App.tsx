@@ -5,7 +5,7 @@ import { Activity, RotateCcw } from 'lucide-react'
 import { AnimatedTitle } from './components/animated-title'
 import { ModeToggle } from './components/mode-toggle'
 import { ChatMessages, ChatInput } from './components/chat'
-import { ThinkingPanel, VoicePanel, ToolsPanel, SystemPanel } from './components/panels'
+import { MemoryPanel, VoicePanel, ToolsPanel, SystemPanel } from './components/panels'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { AppSidebar } from './components/app-sidebar'
 import { Profile } from './components/profile'
@@ -14,6 +14,7 @@ import { CandidateRoutes } from './components/routes/candidate-routes'
 import { EmployerRoutes } from './components/routes/employer-routes'
 import { RecruiterRoutes } from './components/routes/recruiter-routes'
 import { AdministratorRoutes } from './components/routes/administrator-routes'
+import { MemoriesPage } from './components/memories/memories-page'
 import { useSSE } from './hooks/use-sse'
 import { useAuth } from './hooks/use-auth'
 import { useQueryClient } from '@tanstack/react-query'
@@ -154,6 +155,9 @@ function AppContent() {
       } else if (data.entity === 'thread' && data.action === 'title_updated') {
         console.log('🎯 [UI EVENT] Thread title updated:', data.entity_id, data.subject);
         queryClient.invalidateQueries({ queryKey: ['threads'] });
+      } else if (data.entity === 'memory' && ['stored', 'retrieved'].includes(data.action)) {
+        console.log('🧠 [UI EVENT] Memory event:', data.action, 'invalidating memories cache');
+        queryClient.invalidateQueries({ queryKey: ['memories'] });
       } else {
         console.log(`🔄 [UI EVENT] Unhandled event: ${data.entity}.${data.action}`);
       }
@@ -171,6 +175,7 @@ function AppContent() {
     isLoading,
     thinkingContent,
     voiceLines,
+    memorySummaries,
     activeTools,
     sendMessage,
     startNewConversation,
@@ -406,6 +411,7 @@ function AppContent() {
             <div className="flex-1 border-r bg-background">
             <Routes>
               <Route path="/profile" element={<Profile />} />
+              <Route path="/memories" element={<MemoriesPage />} />
 
               {/* Focus-specific nested routes */}
               <Route path="/candidate/*" element={
@@ -456,7 +462,7 @@ function AppContent() {
 
             {/* Panels: 1/8 width, single column with equal height distribution */}
             <div className="flex-none w-1/8 flex flex-col h-full">
-              <ThinkingPanel content={thinkingContent} />
+              <MemoryPanel memorySummaries={memorySummaries} />
               <VoicePanel voiceLines={voiceLines} />
               <ToolsPanel activeTools={activeTools} />
               <SystemPanel systemLogs={systemLogs} />
