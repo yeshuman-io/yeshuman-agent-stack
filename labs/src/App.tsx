@@ -173,7 +173,6 @@ function AppContent() {
     messages,
     isConnected,
     isLoading,
-    thinkingContent,
     voiceLines,
     memorySummaries,
     activeTools,

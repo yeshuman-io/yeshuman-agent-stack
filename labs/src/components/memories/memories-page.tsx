@@ -4,7 +4,7 @@ import { Input } from '../ui/input'
 import { PageContainer } from '../ui/page-container'
 import { Badge } from '../ui/badge'
 import { Brain, Search, Loader2 } from 'lucide-react'
-import { useMemories, Memory } from '../../hooks/use-memories'
+import { useMemories } from '../../hooks/use-memories'
 
 export function MemoriesPage() {
   const { memories, isLoading, error } = useMemories()
