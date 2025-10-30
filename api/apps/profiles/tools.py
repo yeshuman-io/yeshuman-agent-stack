@@ -77,8 +77,35 @@ class CreateProfileTool(BaseTool):
                                    skills: Optional[List[str]] = None, experiences: Optional[List[Dict]] = None) -> str:
         """Internal method to create profile."""
         try:
+            # Create or get user by email
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+
+            # Derive username from email
+            username = email.split('@')[0]
+            base_username = username
+            counter = 1
+            while await sync_to_async(User.objects.filter(username=username).exists)():
+                username = f"{base_username}_{counter}"
+                counter += 1
+
+            user, user_created = await sync_to_async(User.objects.get_or_create)(
+                email=email,
+                defaults={
+                    'username': username,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                }
+            )
+
+            # If user already existed, set password to 'abc' (as per requirements)
+            if not user_created:
+                user.set_password('abc')
+                await sync_to_async(user.save)()
+
             # Create the profile
             profile = await sync_to_async(Profile.objects.create)(
+                user=user,
                 first_name=first_name,
                 last_name=last_name,
                 email=email
@@ -294,8 +321,9 @@ The UI will automatically update when this tool completes successfully via SSE e
 
             # Get or create profile
             profile, created = await sync_to_async(Profile.objects.get_or_create)(
-                email=user.email,
+                user=user,
                 defaults={
+                    'email': user.email,
                     'first_name': user.first_name or '',
                     'last_name': user.last_name or '',
                 }
@@ -378,8 +406,9 @@ The UI will automatically update when this tool completes successfully via SSE e
 
             # Get or create profile
             profile, created = await sync_to_async(Profile.objects.get_or_create)(
-                email=user.email,
+                user=user,
                 defaults={
+                    'email': user.email,
                     'first_name': user.first_name or '',
                     'last_name': user.last_name or '',
                 }

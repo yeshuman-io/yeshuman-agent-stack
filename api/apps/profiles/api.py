@@ -79,7 +79,7 @@ async def get_my_profile(request):
     @sync_to_async
     def get_profile_sync():
         try:
-            profile = Profile.objects.get(email=user.email)
+            profile = Profile.objects.get(user=user)
             # Get skills from ProfileSkill relationships
             skills = list(profile.profile_skills.values_list('skill__name', flat=True))
             # Get experiences (ordered by start_date desc) with skills
@@ -148,8 +148,9 @@ async def update_my_profile(request, payload: ProfileSchema):
     @sync_to_async
     def update_profile_sync():
         profile, created = Profile.objects.get_or_create(
-            email=user.email,
+            user=user,
             defaults={
+                'email': user.email,
                 'first_name': payload.first_name or user.first_name or '',
                 'last_name': payload.last_name or user.last_name or '',
                 'bio': payload.bio,
@@ -346,7 +347,7 @@ async def list_my_experiences(request):
     @sync_to_async
     def fetch_experiences():
         try:
-            profile = Profile.objects.get(email=user.email)
+            profile = Profile.objects.get(user=user)
         except Profile.DoesNotExist:
             return []
         items = []
@@ -391,8 +392,8 @@ async def create_my_experience(request, payload: ExperienceCreateSchema):
     @sync_to_async
     def create_exp_sync():
         profile, _ = Profile.objects.get_or_create(
-            email=user.email,
-            defaults={'first_name': user.first_name or '', 'last_name': user.last_name or ''}
+            user=user,
+            defaults={'email': user.email, 'first_name': user.first_name or '', 'last_name': user.last_name or ''}
         )
 
         start_date = _parse_iso_date(payload.start_date)
@@ -457,7 +458,7 @@ async def update_my_experience(request, experience_id: str, payload: ExperienceU
     @sync_to_async
     def update_exp_sync():
         try:
-            profile = Profile.objects.get(email=user.email)
+            profile = Profile.objects.get(user=user)
         except Profile.DoesNotExist:
             return None, 404, {"error": "Profile not found"}
 
@@ -540,7 +541,7 @@ async def delete_my_experience(request, experience_id: str):
     @sync_to_async
     def delete_exp_sync():
         try:
-            profile = Profile.objects.get(email=user.email)
+            profile = Profile.objects.get(user=user)
         except Profile.DoesNotExist:
             return 404, {"error": "Profile not found"}
 
@@ -590,7 +591,7 @@ async def list_experience_skills(request, experience_id: str):
     @sync_to_async
     def get_skills():
         try:
-            profile = Profile.objects.get(email=user.email)
+            profile = Profile.objects.get(user=user)
         except Profile.DoesNotExist:
             return None, 404, {"error": "Profile not found"}
 
@@ -632,7 +633,7 @@ async def add_experience_skills(request, experience_id: str, payload: Experience
     @sync_to_async
     def add_skills_sync():
         try:
-            profile = Profile.objects.get(email=user.email)
+            profile = Profile.objects.get(user=user)
         except Profile.DoesNotExist:
             return None, 404, {"error": "Profile not found"}
 
@@ -719,7 +720,7 @@ async def remove_experience_skill(request, experience_id: str, skill_name: str):
     @sync_to_async
     def remove_skill_sync():
         try:
-            profile = Profile.objects.get(email=user.email)
+            profile = Profile.objects.get(user=user)
         except Profile.DoesNotExist:
             return None, 404, {"error": "Profile not found"}
 

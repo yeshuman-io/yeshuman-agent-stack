@@ -7,10 +7,12 @@ from ninja.testing import TestClient
 from apps.profiles.api import profiles_router
 from apps.profiles.models import Profile, ProfileExperience
 from apps.organisations.models import Organisation
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 import asyncio
 import jwt
 from django.conf import settings
+
+User = get_user_model()
 
 
 class ProfilesAPITest(TestCase):
@@ -42,6 +44,7 @@ class ProfilesAPITest(TestCase):
             last_name=last_name
         )
         profile = Profile.objects.create(
+            user=user,
             email=email,
             first_name=first_name,
             last_name=last_name
@@ -87,8 +90,17 @@ class ProfilesAPITest(TestCase):
 
     def test_get_profile(self):
         """Test getting a specific profile."""
-        # Create a profile first
+        # Create a user first
+        user = User.objects.create_user(
+            username="bob.johnson@example.com",
+            email="bob.johnson@example.com",
+            password="password123",
+            first_name="Bob",
+            last_name="Johnson"
+        )
+        # Create a profile
         profile = Profile.objects.create(
+            user=user,
             first_name="Bob",
             last_name="Johnson",
             email="bob.johnson@example.com"
@@ -104,13 +116,30 @@ class ProfilesAPITest(TestCase):
 
     def test_list_profiles_with_data(self):
         """Test listing profiles when data exists."""
-        # Create some profiles
+        # Create users and profiles
+        user1 = User.objects.create_user(
+            username="alice@example.com",
+            email="alice@example.com",
+            password="password123",
+            first_name="Alice",
+            last_name="Wonder"
+        )
         Profile.objects.create(
+            user=user1,
             first_name="Alice",
             last_name="Wonder",
             email="alice@example.com"
         )
+
+        user2 = User.objects.create_user(
+            username="bob@example.com",
+            email="bob@example.com",
+            password="password123",
+            first_name="Bob",
+            last_name="Builder"
+        )
         Profile.objects.create(
+            user=user2,
             first_name="Bob",
             last_name="Builder",
             email="bob@example.com"
@@ -149,8 +178,16 @@ class ProfilesAPITest(TestCase):
 
     def test_create_profile_duplicate_email(self):
         """Test creating a profile with duplicate email."""
-        # Create first profile
+        # Create first user and profile
+        user = User.objects.create_user(
+            username="jane@example.com",
+            email="jane@example.com",
+            password="password123",
+            first_name="Jane",
+            last_name="Smith"
+        )
         Profile.objects.create(
+            user=user,
             first_name="Jane",
             last_name="Smith",
             email="jane@example.com"

@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from pgvector.django import VectorField
 from apps.organisations.models import Organisation
 from apps.skills.models import Skill
@@ -11,6 +12,9 @@ class Profile(models.Model):
     last_name = models.CharField(max_length=100)
     email = models.EmailField(unique=True)
 
+    # User relationship
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
+
     # Additional profile fields
     bio = models.TextField(blank=True, null=True)
     city = models.CharField(max_length=100, blank=True, null=True)
@@ -21,6 +25,12 @@ class Profile(models.Model):
     
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+    def save(self, *args, **kwargs):
+        # Sync email from user when user is present to prevent drift
+        if self.user:
+            self.email = self.user.email
+        super().save(*args, **kwargs)
 
 
 class ProfileExperience(models.Model):

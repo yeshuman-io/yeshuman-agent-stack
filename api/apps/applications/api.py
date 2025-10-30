@@ -459,7 +459,7 @@ async def apply_to_opportunity(request, payload: ApplicationApplySchema):
     @sync_to_async
     def get_profile():
         try:
-            return Profile.objects.get(email=user.email)
+            return Profile.objects.get(user=user)
         except Profile.DoesNotExist:
             return None
 
@@ -519,7 +519,7 @@ async def list_my_applications(request):
     @sync_to_async
     def get_applications_data():
         try:
-            profile = Profile.objects.get(email=user.email)
+            profile = Profile.objects.get(user=user)
             applications = list(profile.applications.all().prefetch_related(
                 'opportunity', 'organisation', 'current_stage_instance__stage_template'
             ))
