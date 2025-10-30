@@ -133,6 +133,9 @@ export function GroupCheckboxes({ onGroupsUpdated, isCollapsed = false }: GroupC
         const isRequired = group.name === 'candidate'
         const actuallyChecked = isRequired ? true : isChecked
 
+        const toTitle = (s: string) => (s || '').replace(/[_\-]+/g, ' ').trim().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+        const label = toTitle(group.display_name || group.name)
+
         return (
           <div key={group.name} className="flex items-center space-x-2">
             <button
@@ -148,7 +151,7 @@ export function GroupCheckboxes({ onGroupsUpdated, isCollapsed = false }: GroupC
                 }
                 ${isRequired ? 'cursor-default' : 'cursor-pointer'}
               `}
-              title={`${group.display_name}${isRequired ? ' (always active)' : ''}`}
+              title={`${label}${isRequired ? ' (always active)' : ''}`}
             >
               {getGroupIcon(group.name)}
             </button>
@@ -161,7 +164,7 @@ export function GroupCheckboxes({ onGroupsUpdated, isCollapsed = false }: GroupC
               }`}
               title={isRequired ? 'Always active - cannot be removed' : undefined}
             >
-              {group.display_name}
+              {label}
               {isRequired && <span className="text-primary ml-1">*</span>}
             </span>
           </div>

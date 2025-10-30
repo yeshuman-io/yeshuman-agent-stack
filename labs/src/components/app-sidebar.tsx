@@ -362,39 +362,8 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
   }
 
   const getFocusLabel = (focus: string) => {
-    // Use client-specific naming to match group selection
-    const clientName = CURRENT_CLIENT.name.toLowerCase()
-
-    // Map focus names to group names for consistent naming
-    const focusToGroupMapping: Record<string, string> = {
-      'candidate': 'candidate',
-      'employer': 'employer',
-      'recruiter': 'recruiter',
-      'administrator': 'administrator'  // focus uses 'administrator', groups use 'administrator'
-    }
-
-    const groupName = focusToGroupMapping[focus] || focus
-
-    // Check for client-specific naming
-    if (clientName === 'talentco') {
-      const talentCoNames: Record<string, string> = {
-        'candidate': 'Job Seeker',
-        'employer': 'Employer',
-        'recruiter': 'Talent Partner',
-        'administrator': 'System Admin'
-      }
-      return talentCoNames[groupName] || focus
-    }
-
-    // Default naming
-    const defaultNames: Record<string, string> = {
-      'candidate': 'Job Seeker',
-      'employer': 'Employer',
-      'recruiter': 'Recruiter',
-      'administrator': 'Administrator'
-    }
-
-    return defaultNames[groupName] || focus
+    const s = (focus || '').replace(/[_\-]+/g, ' ').trim()
+    return s.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') || focus
   }
 
   return (
