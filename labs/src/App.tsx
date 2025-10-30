@@ -15,9 +15,11 @@ import { EmployerRoutes } from './components/routes/employer-routes'
 import { RecruiterRoutes } from './components/routes/recruiter-routes'
 import { AdministratorRoutes } from './components/routes/administrator-routes'
 import { MemoriesPage } from './components/memories/memories-page'
+import { ActivityPage, SymptomsPage, MeasurementsPage, TherapeuticsPage, NutritionPage, RecordsPage, ConsultationsPage, PatientsPage, PractitionerConsultationsPage } from './components/health'
 import { useSSE } from './hooks/use-sse'
 import { useAuth } from './hooks/use-auth'
 import { useQueryClient } from '@tanstack/react-query'
+import { CLIENT_CONFIG } from './constants'
 import './App.css'
 
 interface UserFocus {
@@ -444,6 +446,33 @@ function AppContent() {
                   <Navigate to={`/${userFocus?.current_focus || 'candidate'}`} replace />
                 )
               } />
+
+              {/* Health/Lumie routes - only show when client config is lumie */}
+              {CLIENT_CONFIG === 'lumie' && (
+                <>
+                  {/* Patient-focused health routes */}
+                  {(userFocus?.current_focus === 'patient' || !userFocus) && (
+                    <>
+                      
+                      <Route path="/health/activity" element={<ActivityPage />} />
+                      <Route path="/health/symptoms" element={<SymptomsPage />} />
+                      <Route path="/health/measurements" element={<MeasurementsPage />} />
+                      <Route path="/health/therapeutics" element={<TherapeuticsPage />} />
+                      <Route path="/health/nutrition" element={<NutritionPage />} />
+                      <Route path="/health/records" element={<RecordsPage />} />
+                      <Route path="/health/consultations" element={<ConsultationsPage />} />
+                    </>
+                  )}
+
+                  {/* Practitioner-focused health routes */}
+                  {userFocus?.current_focus === 'practitioner' && (
+                    <>
+                      <Route path="/health/patients" element={<PatientsPage />} />
+                      <Route path="/health/consultations" element={<PractitionerConsultationsPage />} />
+                    </>
+                  )}
+                </>
+              )}
 
               {/* Root redirect to current focus */}
               <Route path="/" element={

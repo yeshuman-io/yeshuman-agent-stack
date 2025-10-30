@@ -1,4 +1,4 @@
-import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, HeartPulse, Briefcase, Shield, Search, FileText, Users, Settings, Sparkles, Building2, Handshake, Headset, Laptop2, Stethoscope, Crown, Brain } from "lucide-react"
+import { MessageSquare, Bot, LogOut, LogIn, User, Trash2, Plane, Leaf, Heart, HeartPulse, Briefcase, Shield, Search, FileText, Users, Settings, Sparkles, Building2, Handshake, Headset, Laptop2, Stethoscope, Crown, Brain, Activity, Pill, Soup, CalendarCheck, Thermometer } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 
@@ -8,7 +8,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -20,7 +19,7 @@ import { LoginDialog } from "@/components/login-dialog"
 import { GroupCheckboxes } from "@/components/group-checkboxes"
 import { authorizedFetch } from "@/lib/api"
 import { useAuth } from "@/hooks/use-auth"
-import { CURRENT_CLIENT } from "@/constants"
+import { CURRENT_CLIENT, CLIENT_CONFIG } from "@/constants"
 
 // Helper function to get the appropriate icon component
 const getBrandIcon = (iconName: string) => {
@@ -457,7 +456,7 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
       {/* Universal Actions - Available for all authenticated users */}
       {isAuthenticated && (
         <SidebarGroup>
-          <SidebarGroupLabel>Actions</SidebarGroupLabel>
+          
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -474,7 +473,7 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
       {/* Focus-Specific Navigation */}
       {isAuthenticated && userFocus && (
         <SidebarGroup>
-          <SidebarGroupLabel>Actions</SidebarGroupLabel>
+          
           <SidebarGroupContent>
             <SidebarMenu>
               {userFocus.current_focus === 'candidate' ? (
@@ -583,15 +582,80 @@ export function AppSidebar({ onThreadSelect, onRefreshThreads, currentThreadId, 
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </>
+              ) : CLIENT_CONFIG === 'lumie' && userFocus?.current_focus === 'patient' ? (
+                // Patient health menu items
+                <>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Track your activity and exercise" onClick={() => navigate('/health/activity')}>
+                      <Activity className="size-4" />
+                      {!isCollapsed && <span>Activity</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Monitor your symptoms" onClick={() => navigate('/health/symptoms')}>
+                      <Stethoscope className="size-4" />
+                      {!isCollapsed && <span>Symptoms</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Track vital signs and measurements" onClick={() => navigate('/health/measurements')}>
+                      <Thermometer className="size-4" />
+                      {!isCollapsed && <span>Measurements</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Manage medications and treatments" onClick={() => navigate('/health/therapeutics')}>
+                      <Pill className="size-4" />
+                      {!isCollapsed && <span>Therapeutics</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Track your nutrition" onClick={() => navigate('/health/nutrition')}>
+                      <Soup className="size-4" />
+                      {!isCollapsed && <span>Nutrition</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Access health records and test results" onClick={() => navigate('/health/records')}>
+                      <FileText className="size-4" />
+                      {!isCollapsed && <span>Records</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Schedule and manage consultations" onClick={() => navigate('/health/consultations')}>
+                      <CalendarCheck className="size-4" />
+                      {!isCollapsed && <span>Consultations</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </>
+              ) : CLIENT_CONFIG === 'lumie' && userFocus?.current_focus === 'practitioner' ? (
+                // Practitioner health menu items
+                <>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Manage your patients" onClick={() => navigate('/health/patients')}>
+                      <Users className="size-4" />
+                      {!isCollapsed && <span>Patients</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Manage your consultations" onClick={() => navigate('/health/consultations')}>
+                      <CalendarCheck className="size-4" />
+                      {!isCollapsed && <span>Consultations</span>}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </>
               ) : null}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       )}
 
+      {/* Divider between menu and threads */}
+      <div className="border-t mx-2 my-2" />
+
       <SidebarContent className="custom-scrollbar">
         <SidebarGroup>
-          <SidebarGroupLabel>Threads</SidebarGroupLabel>
+          
           <SidebarGroupContent>
             <SidebarMenu>
               {threadsLoading ? (

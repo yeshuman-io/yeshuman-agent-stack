@@ -1,7 +1,7 @@
 // Unified client configuration variable
 // Note: VITE_CLIENT_CONFIG is used for frontend build-time config
 // CLIENT_CONFIG is used for backend runtime config
-const CLIENT_CONFIG = import.meta.env.VITE_CLIENT_CONFIG || 'yeshuman';
+export const CLIENT_CONFIG = import.meta.env.VITE_CLIENT_CONFIG || 'yeshuman';
 
 // API configuration for backend connection
 // VITE_API_URL: Set to backend URL for cross-domain requests (optional)
